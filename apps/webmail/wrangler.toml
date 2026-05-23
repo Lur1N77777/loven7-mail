@@ -1,0 +1,13 @@
+name = "loven7-mail-webmail"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-05-11"
+
+# 分享链接功能需要 Cloudflare KV。建议在 Cloudflare Pages 控制台绑定：
+#   binding: SHARE_KV
+#   namespace: 你自己创建的 KV Namespace
+#
+# 如果使用 Wrangler 部署，可取消下面注释并替换为你自己的 Namespace ID：
+# [[kv_namespaces]]
+# binding = "SHARE_KV"
+# id = "<your-share-kv-namespace-id>"
+

@@ -1,0 +1,2 @@
+/* Cloudflare Pages SPA fallback. Functions under /api/* keep their own routes. */
+/* /index.html 200

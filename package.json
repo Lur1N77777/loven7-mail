@@ -1,0 +1,12 @@
+{
+  "name": "loven7-mail-cloudflare-suite",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Enhanced admin and webmail frontends for Cloudflare Temp Mail / cloudflare_temp_email.",
+  "scripts": {
+    "build:admin": "npm --prefix apps/admin run build",
+    "build:webmail": "npm --prefix apps/webmail run build",
+    "lint:admin": "npm --prefix apps/admin run lint",
+    "build": "npm run build:admin && npm run build:webmail"
+  }
+}

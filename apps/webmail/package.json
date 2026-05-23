@@ -1,0 +1,24 @@
+{
+  "name": "loven7-mail-webmail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name loven7-mail-webmail"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^6.4.2",
+    "typescript": "~5.9.3",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "postal-mime": "^2.7.4"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.17",
+    "@types/react-dom": "19.1.7"
+  }
+}

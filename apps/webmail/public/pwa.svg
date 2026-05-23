@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <title>Loven7 Mail</title>
+  <rect width="512" height="512" rx="116" fill="#F7F7F8"/>
+  <rect x="34" y="34" width="444" height="444" rx="96" fill="#FFFFFF" stroke="#E5E5E7" stroke-width="12"/>
+  <g transform="translate(66 58) scale(7.9)" stroke="#18181B" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.5 27.4c5.9-11.9 16.7-16.7 29-13-5.2 2.4-9.4 6.3-12.4 11.5 4.6-.8 8.9-.2 12.4 2-9.4.8-16 4.6-19.9 11.4-1.2-5-4.2-8.9-9.1-11.9Z"/>
+    <path d="M18 27.4c5.6-1.7 11.5-5 17.4-10" opacity=".62"/>
+    <path d="M12.7 15.1c2.3-2.4 5.2-3.9 8.6-4.4" opacity=".46"/>
+  </g>
+  <circle cx="340" cy="280" r="18" fill="#9A7D88"/>
+</svg>
