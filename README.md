@@ -31,30 +31,27 @@ docs/AGENT_DEPLOY_PROMPT.md
 
 下面的图片是本地运行实际前端后截取的界面截图，使用脱敏 mock 数据，不包含真实 API、邮箱、Token、密码或个人域名。
 
-### 管理后台桌面端
+### 桌面端
 
 <table>
   <tr>
-    <td width="50%" valign="top">
+    <td width="33.33%" valign="top">
       <img src="docs/screenshots/admin-dashboard.png" alt="管理后台仪表盘预览" width="100%" />
       <br />
-      <sub>仪表盘：统计卡片、快捷入口和站点能力状态。</sub>
+      <sub>管理后台仪表盘：统计卡片、快捷入口和站点能力状态。</sub>
     </td>
-    <td width="50%" valign="top">
+    <td width="33.33%" valign="top">
       <img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱预览" width="100%" />
       <br />
-      <sub>收件箱：品牌头像、验证码识别和邮件阅读区。</sub>
+      <sub>管理后台收件箱：品牌头像、验证码识别和邮件阅读区。</sub>
+    </td>
+    <td width="33.33%" valign="top">
+      <img src="docs/screenshots/webmail-share.png" alt="用户站共享收件箱预览" width="100%" />
+      <br />
+      <sub>用户站 / 分享站：自动刷新、共享收件箱和验证码快捷复制。</sub>
     </td>
   </tr>
 </table>
-
-### 用户站 / 分享站桌面端
-
-<p>
-  <img src="docs/screenshots/webmail-share.png" alt="用户站共享收件箱预览" width="100%" />
-  <br />
-  <sub>用户站 / 分享站：自动刷新、共享收件箱和验证码快捷复制。</sub>
-</p>
 
 ### 手机端
 
