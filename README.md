@@ -27,6 +27,37 @@ docs/AGENT_DEPLOY_PROMPT.md
 
 ---
 
+## 界面预览
+
+下面的截图使用脱敏示例数据制作，不包含真实 API、邮箱、Token、密码或个人域名。
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/admin-dashboard.svg" alt="管理后台仪表盘预览" />
+      <br />
+      <sub>管理后台：仪表盘、统计卡片和共享链接状态。</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/admin-inbox.svg" alt="管理后台收件箱预览" />
+      <br />
+      <sub>收件箱：品牌头像、验证码识别、邮件阅读区。</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/mobile-address-actions.svg" alt="手机端地址管理操作菜单预览" />
+      <br />
+      <sub>手机端地址管理：紧凑列表、三点菜单和批量浮动操作。</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/webmail-share.svg" alt="用户站共享收件箱预览" />
+      <br />
+      <sub>用户站 / 分享站：自动刷新、共享收件箱和验证码快捷复制。</sub>
+    </td>
+  </tr>
+</table>
+
 ## 这个项目是什么
 
 Loven7 Mail Cloudflare Suite 是一套给 Cloudflare Temp Mail / `cloudflare_temp_email` 使用的增强前端，包含两个站点：
