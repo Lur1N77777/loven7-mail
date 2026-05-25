@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/loven7-mail-logo.svg" alt="Loven7 Mail logo" width="104" height="104" />
+
 # Loven7 Mail Cloudflare Suite
 
 **一套接入 Cloudflare Temp Mail / `cloudflare_temp_email` 的现代化邮箱前端。**<br />
