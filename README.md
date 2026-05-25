@@ -31,32 +31,38 @@ docs/AGENT_DEPLOY_PROMPT.md
 
 下面的图片是本地运行实际前端后截取的界面截图，使用脱敏 mock 数据，不包含真实 API、邮箱、Token、密码或个人域名。
 
+### 管理后台桌面端
+
 <table>
   <tr>
-    <td width="50%">
-      <img src="docs/screenshots/admin-dashboard.png" alt="管理后台仪表盘预览" />
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/admin-dashboard.png" alt="管理后台仪表盘预览" width="100%" />
       <br />
-      <sub>管理后台：仪表盘、统计卡片和共享链接状态。</sub>
+      <sub>仪表盘：统计卡片、快捷入口和站点能力状态。</sub>
     </td>
-    <td width="50%">
-      <img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱预览" />
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱预览" width="100%" />
       <br />
-      <sub>收件箱：品牌头像、验证码识别、邮件阅读区。</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="docs/screenshots/mobile-address-actions.png" alt="手机端地址管理操作菜单预览" />
-      <br />
-      <sub>手机端地址管理：紧凑列表、三点菜单和批量浮动操作。</sub>
-    </td>
-    <td width="50%">
-      <img src="docs/screenshots/webmail-share.png" alt="用户站共享收件箱预览" />
-      <br />
-      <sub>用户站 / 分享站：自动刷新、共享收件箱和验证码快捷复制。</sub>
+      <sub>收件箱：品牌头像、验证码识别和邮件阅读区。</sub>
     </td>
   </tr>
 </table>
+
+### 用户站 / 分享站桌面端
+
+<p>
+  <img src="docs/screenshots/webmail-share.png" alt="用户站共享收件箱预览" width="100%" />
+  <br />
+  <sub>用户站 / 分享站：自动刷新、共享收件箱和验证码快捷复制。</sub>
+</p>
+
+### 手机端
+
+<p align="center">
+  <img src="docs/screenshots/mobile-address-actions.png" alt="手机端地址管理操作菜单预览" width="320" />
+  <br />
+  <sub>手机端地址管理：紧凑列表、三点菜单和批量浮动操作。</sub>
+</p>
 
 ## 这个项目是什么
 
