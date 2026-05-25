@@ -29,31 +29,39 @@ docs/AGENT_DEPLOY_PROMPT.md
 
 ## 界面预览
 
-下面的图片是本地运行实际前端后截取的界面截图，使用脱敏 mock 数据，不包含真实 API、邮箱、Token、密码或个人域名。
+下面的图片是本地运行实际前端后截取的界面截图，使用脱敏 mock 数据，不包含真实 API、邮箱、Token、密码或个人域名。缩略图统一按高度展示：桌面端截图保持同一高度，手机端截图也保持同一高度但宽度更窄；点击任意图片可以查看原始大图。
 
 <table>
   <tr>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/admin-dashboard.png" alt="管理后台仪表盘预览" width="100%" />
+    <td width="50%" valign="top" align="center">
+      <a href="docs/screenshots/admin-dashboard.png">
+        <img src="docs/screenshots/admin-dashboard.png" alt="管理后台仪表盘预览" height="240" />
+      </a>
       <br />
-      <sub>管理后台仪表盘：统计卡片、快捷入口和站点能力状态。</sub>
+      <sub><strong>管理后台 · 仪表盘</strong><br />统计卡片、快捷入口和站点能力状态。</sub>
     </td>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱预览" width="100%" />
+    <td width="50%" valign="top" align="center">
+      <a href="docs/screenshots/admin-inbox.png">
+        <img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱预览" height="240" />
+      </a>
       <br />
-      <sub>管理后台收件箱：品牌头像、验证码识别和邮件阅读区。</sub>
+      <sub><strong>管理后台 · 收件箱</strong><br />品牌头像、验证码识别和邮件阅读区。</sub>
     </td>
   </tr>
   <tr>
-    <td width="50%" valign="top">
-      <img src="docs/screenshots/webmail-share.png" alt="用户站共享收件箱预览" width="100%" />
+    <td width="50%" valign="top" align="center">
+      <a href="docs/screenshots/webmail-share.png">
+        <img src="docs/screenshots/webmail-share.png" alt="用户站共享收件箱预览" height="240" />
+      </a>
       <br />
-      <sub>用户站 / 分享站：自动刷新、共享收件箱和验证码快捷复制。</sub>
+      <sub><strong>用户站 / 分享站</strong><br />自动刷新、共享收件箱和验证码快捷复制。</sub>
     </td>
     <td width="50%" valign="top" align="center">
-      <img src="docs/screenshots/mobile-address-actions.png" alt="手机端地址管理操作菜单预览" width="260" />
+      <a href="docs/screenshots/mobile-address-actions.png">
+        <img src="docs/screenshots/mobile-address-actions.png" alt="手机端地址管理操作菜单预览" height="240" />
+      </a>
       <br />
-      <sub>手机端地址管理：紧凑列表、三点菜单和批量浮动操作。</sub>
+      <sub><strong>手机端 · 地址管理</strong><br />紧凑列表、三点菜单和批量浮动操作。</sub>
     </td>
   </tr>
 </table>
