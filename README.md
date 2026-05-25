@@ -1,17 +1,37 @@
+<div align="center">
+
 # Loven7 Mail Cloudflare Suite
 
-> 基于 Cloudflare Temp Mail / `cloudflare_temp_email` 上游接口的增强前端套件。
-> 本项目不包含上游 Worker 后端源码，不内置私人 API、密码、Token、KV ID 或个人域名。
+**一套接入 Cloudflare Temp Mail / `cloudflare_temp_email` 的现代化邮箱前端。**<br />
+管理后台、用户邮箱站、单邮箱分享、多邮箱聚合分享、验证码识别和品牌头像都整理在一个仓库里。
 
-仓库地址：
+<p>
+  <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/Lur1N77777/loven7-mail-cloudflare-suite?style=for-the-badge&color=6B7280&labelColor=111827" /></a>
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-6B7280?style=for-the-badge&logo=typescript&logoColor=white&labelColor=111827" />
+  <img alt="React" src="https://img.shields.io/badge/React-19-6B7280?style=for-the-badge&logo=react&logoColor=white&labelColor=111827" />
+  <img alt="Cloudflare Pages" src="https://img.shields.io/badge/Cloudflare-Pages-6B7280?style=for-the-badge&logo=cloudflarepages&logoColor=white&labelColor=111827" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-6.x-6B7280?style=for-the-badge&logo=vite&logoColor=white&labelColor=111827" />
+</p>
 
-```text
-https://github.com/Lur1N77777/loven7-mail-cloudflare-suite
-```
+<p>
+  <a href="#-1-分钟最快部署复制这一段给-ai-agent">AI Agent 部署</a>
+  ·
+  <a href="#-界面预览">界面预览</a>
+  ·
+  <a href="#-这个项目是什么">项目介绍</a>
+  ·
+  <a href="#-手动部署教程">手动部署</a>
+  ·
+  <a href="#-常见问题">常见问题</a>
+</p>
+
+</div>
+
+> 本仓库不包含上游 Worker 后端源码，不内置私人 API、密码、Token、KV ID 或个人域名。部署后在网页界面里填写你自己的 Worker API 和管理员密码即可。
 
 ---
 
-## 1 分钟最快部署：复制这一段给 AI Agent
+## 🚀 1 分钟最快部署：复制这一段给 AI Agent
 
 如果你使用 Claude Code、Codex、OpenCode、Hermes、OpenClaw 或其他 AI 编程 / 运维 Agent，直接复制下面这一段话即可。**不要把 API、密码、Token 或密钥写进 Prompt。**
 
@@ -19,17 +39,15 @@ https://github.com/Lur1N77777/loven7-mail-cloudflare-suite
 请帮我部署这个 GitHub 项目到我的 Cloudflare 账号：https://github.com/Lur1N77777/loven7-mail-cloudflare-suite 。这是基于 Cloudflare Temp Mail / cloudflare_temp_email 官方 Worker API 的增强前端套件，包含 apps/admin 管理后台和 apps/webmail 用户站/分享站。请创建两个 Cloudflare Pages 项目：管理后台使用 apps/admin，构建命令 npm ci && npm run build，输出目录 dist；用户站使用 apps/webmail，构建命令 npm ci && npm run build，输出目录 dist。不要让我在这段 Prompt 里填写任何 API、密码、Token 或密钥，也不要把这些信息写入仓库；管理后台部署完成后，我会在网页界面的“连接设置”里填写自己的 Worker API 地址和管理员密码。分享功能如果需要 KV 或运行时变量，请通过 Cloudflare 控制台/安全配置完成，并生成必要密钥，但不要在最终回复中泄露密钥原文。部署完成后请返回管理后台 URL、用户站 URL，以及我下一步需要在界面里完成的配置。
 ```
 
-更完整的 AI Agent 专用部署文档在：
-
-```text
-docs/AGENT_DEPLOY_PROMPT.md
-```
+更完整的 AI Agent 专用部署文档在：[`docs/AGENT_DEPLOY_PROMPT.md`](docs/AGENT_DEPLOY_PROMPT.md)。
 
 ---
 
-## 界面预览
+## ✨ 界面预览
 
-下面的图片是本地运行实际前端后截取的界面截图，使用脱敏 mock 数据，不包含真实 API、邮箱、Token、密码或个人域名。缩略图统一按高度展示：桌面端截图保持同一高度，手机端截图也保持同一高度但宽度更窄；点击任意图片可以查看原始大图。
+下面的图片是本地运行实际前端后截取的界面截图，使用脱敏 mock 数据，不包含真实 API、邮箱、Token、密码或个人域名。
+
+展示规则：桌面端截图统一使用同一缩略高度，手机端截图使用同高度但自然窄一些；点击任意图片可以查看原始大图。这样能保持整体版面协调，同时保证图和图注都看得清。
 
 <table>
   <tr>
@@ -66,45 +84,79 @@ docs/AGENT_DEPLOY_PROMPT.md
   </tr>
 </table>
 
-## 这个项目是什么
+---
 
-Loven7 Mail Cloudflare Suite 是一套给 Cloudflare Temp Mail / `cloudflare_temp_email` 使用的增强前端，包含两个站点：
+## 💡 这个项目是什么
 
-```text
-apps/admin    管理员后台 PWA
-apps/webmail  用户邮箱站 / 分享站，包含 Cloudflare Pages Functions
-```
+Loven7 Mail Cloudflare Suite 是一套给 Cloudflare Temp Mail / `cloudflare_temp_email` 使用的增强前端。它不替代你的上游 Worker，而是把后台管理、用户登录、邮箱分享和邮件阅读体验整理成更现代的 Cloudflare Pages 前端。
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>apps/admin · 管理员后台 PWA</strong>
+      <br /><br />
+      管理邮箱地址、用户、收件箱、未知邮件、发件箱、共享链接、系统设置和维护工具。
+    </td>
+    <td width="50%" valign="top">
+      <strong>apps/webmail · 用户邮箱站 / 分享站</strong>
+      <br /><br />
+      支持单邮箱 JWT 登录、单邮箱分享、多邮箱分享、聚合分享页和访客侧邮件隐藏。
+    </td>
+  </tr>
+</table>
 
 你可以把它接到自己已经部署好的 Cloudflare Temp Mail 官方 Worker 上，用自己的 Cloudflare 账号、自己的域名、自己的邮箱系统运行。
 
-### 管理后台 `apps/admin`
+---
 
-用于管理临时邮箱系统：
+## 🌟 核心能力
 
-- 仪表盘统计
-- 邮箱地址管理
-- 用户管理
-- 收件箱、未知邮件、发件箱
-- 邮件 HTML 渲染、验证码识别、品牌头像
-- 发件、设置、维护工具
-- 单邮箱 / 多邮箱分享入口
-- 共享链接管理、撤回、恢复、批量操作
-
-### 用户站 / 分享站 `apps/webmail`
-
-用于给普通用户访问邮箱：
-
-- 单邮箱 JWT 登录
-- 单邮箱分享链接
-- 多邮箱分享链接
-- 聚合分享页
-- 仅显示分享后新增邮件
-- 访客侧“删除邮件”只隐藏当前分享视图，不影响后台真实邮件
-- 邮件 HTML 安全渲染和自动刷新
+| 模块 | 能力 |
+| --- | --- |
+| 邮件管理 | 收件箱、未知邮件、发件箱、实时搜索、移动端无限加载、HTML 邮件渲染 |
+| 验证码 | 多语言验证码识别、候选码快捷复制、堆叠邮件内验证码复制 |
+| 地址管理 | 批量选择、按用户筛选、地址搜索、批量检测、三点菜单、移动端浮动操作 |
+| 分享链接 | 单邮箱分享、多邮箱分享、聚合分享、仅新增邮件分享、撤回与恢复 |
+| 用户站 | JWT 登录、分享访问、自动刷新圆环、访客侧“删除”隐藏邮件但不影响后台 |
+| 视觉体验 | 品牌头像、柔和浅/深色模式、PWA、移动端手势和轻量动效 |
 
 ---
 
-## 手动部署教程
+## 🧱 技术栈
+
+<table>
+  <tr>
+    <td><strong>Frontend</strong></td>
+    <td>React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons</td>
+  </tr>
+  <tr>
+    <td><strong>Runtime</strong></td>
+    <td>Cloudflare Pages, Pages Functions, KV Namespace</td>
+  </tr>
+  <tr>
+    <td><strong>Mail</strong></td>
+    <td>Cloudflare Temp Mail / <code>cloudflare_temp_email</code> compatible Worker API, Postal MIME</td>
+  </tr>
+  <tr>
+    <td><strong>App UX</strong></td>
+    <td>PWA, local credential cache, responsive layout, mobile action menus, auto refresh</td>
+  </tr>
+</table>
+
+---
+
+## 📁 项目结构
+
+```text
+apps/admin       管理员后台 PWA
+apps/webmail     用户邮箱站 / 分享站，包含 Cloudflare Pages Functions
+docs/            部署文档、AI Agent Prompt、截图和安全说明
+scripts/         发布、检查和辅助脚本
+```
+
+---
+
+## 🛠 手动部署教程
 
 ### 部署前准备
 
@@ -119,8 +171,6 @@ apps/webmail  用户邮箱站 / 分享站，包含 Cloudflare Pages Functions
 | 分享加密密钥 | 32 字符以上随机字符串 | 用户站环境变量 `SHARE_ENCRYPTION_SECRET` |
 
 如果你还没有部署上游后端，请先部署 Cloudflare Temp Mail / `cloudflare_temp_email` 官方 Worker。
-
----
 
 ### 第 1 步：部署管理后台
 
@@ -153,8 +203,6 @@ apps/webmail  用户邮箱站 / 分享站，包含 Cloudflare Pages Functions
 | `VITE_FRONTEND_LOGIN_BASE` | 否 | 用户站 URL。也可以部署后在后台“系统设置”里保存。 |
 | `VITE_APP_NAME` | 否 | 显示名称，默认 `Loven7-Mail`。 |
 
----
-
 ### 第 2 步：部署用户站 / 分享站
 
 在 Cloudflare Pages 再新建一个项目，仍然连接本 GitHub 仓库。
@@ -184,8 +232,6 @@ apps/webmail  用户邮箱站 / 分享站，包含 Cloudflare Pages Functions
 
 如果你只需要单邮箱 JWT 登录，不使用分享功能，可以暂时不绑定 KV；但管理后台里的分享创建和分享管理会不可用。
 
----
-
 ### 第 3 步：把管理后台连接到用户站
 
 两个 Pages 项目都部署好以后：
@@ -205,7 +251,7 @@ https://your-webmail.pages.dev
 
 ---
 
-## 本地开发
+## 💻 本地开发
 
 ```bash
 # 管理后台
@@ -232,7 +278,18 @@ npx wrangler pages dev dist \
 
 ---
 
-## 常见问题
+## 🧭 相关文档
+
+| 文档 | 用途 |
+| --- | --- |
+| [`docs/AGENT_DEPLOY_PROMPT.md`](docs/AGENT_DEPLOY_PROMPT.md) | 给 AI Agent 的完整部署说明 |
+| [`docs/CLOUDFLARE_PAGES.md`](docs/CLOUDFLARE_PAGES.md) | Cloudflare Pages 部署细节 |
+| [`docs/SECURITY_DESENSITIZATION.md`](docs/SECURITY_DESENSITIZATION.md) | 脱敏和安全检查说明 |
+| [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 上游项目关系说明 |
+
+---
+
+## ❓ 常见问题
 
 ### 后台刷新后又要求输入密码
 
@@ -252,7 +309,7 @@ npx wrangler pages dev dist \
 
 ---
 
-## 安全说明
+## 🔒 安全说明
 
 - 不要把 Worker API 密钥、管理员密码、站点密码、GitHub Token、Cloudflare Token 写进仓库。
 - 管理后台的连接信息默认保存在浏览器本地。
@@ -261,7 +318,7 @@ npx wrangler pages dev dist \
 
 ---
 
-## 上游与许可证
+## 📜 上游与许可证
 
 本项目是 Cloudflare Temp Mail / `cloudflare_temp_email` 的增强前端套件。后端 Worker 请遵循上游项目的许可证和部署文档。
 
