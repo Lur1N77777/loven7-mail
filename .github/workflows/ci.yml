@@ -1,0 +1,58 @@
+name: Build & Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build admin and webmail
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/admin/package-lock.json
+            apps/webmail/package-lock.json
+
+      - name: Install admin dependencies
+        working-directory: apps/admin
+        run: npm ci
+
+      - name: Check admin TypeScript
+        working-directory: apps/admin
+        run: npm run lint
+
+      - name: Build admin
+        working-directory: apps/admin
+        env:
+          VITE_API_BASE: ""
+        run: npm run build
+
+      - name: Install webmail dependencies
+        working-directory: apps/webmail
+        run: npm ci
+
+      - name: Build webmail
+        working-directory: apps/webmail
+        env:
+          VITE_API_BASE: ""
+        run: npm run build

@@ -16,6 +16,11 @@
 </p>
 
 <p>
+  <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/deploy-cloudflare-pages.yml"><img alt="Cloudflare Pages Deploy" src="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/deploy-cloudflare-pages.yml/badge.svg" /></a>
+</p>
+
+<p>
   <a href="#-1-分钟最快部署复制这一段给-ai-agent">AI Agent 部署</a>
   ·
   <a href="#-界面预览">界面预览</a>
@@ -23,6 +28,8 @@
   <a href="#-这个项目是什么">项目介绍</a>
   ·
   <a href="#-手动部署教程">手动部署</a>
+  ·
+  <a href="#-自动构建和自动部署">自动部署</a>
   ·
   <a href="#-常见问题">常见问题</a>
 </p>
@@ -253,6 +260,35 @@ https://your-webmail.pages.dev
 
 ---
 
+## ⚙️ 自动构建和自动部署
+
+仓库已经内置 GitHub Actions：
+
+| Workflow | 触发方式 | 作用 |
+| --- | --- | --- |
+| `Build & Validate` | PR、push 到 `main`、手动运行 | 安装依赖、检查管理后台 TypeScript、构建管理后台和用户站 |
+| `Deploy to Cloudflare Pages` | push 到 `main`、手动运行 | 构建两个站点；配置 Cloudflare 后自动部署到 Pages |
+
+默认不会把任何 API、密码或 Token 写进代码。要开启自动部署，只需要在 GitHub 仓库里配置：
+
+**Secrets**
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+**Variables**
+
+```text
+ADMIN_PAGES_PROJECT_NAME
+WEBMAIL_PAGES_PROJECT_NAME
+```
+
+用户站的 `MAIL_WORKER_BASE_URL`、`SITE_PASSWORD`、`SHARE_ENCRYPTION_SECRET` 和 `SHARE_KV` 仍然建议在 Cloudflare Pages 项目设置里配置。详细步骤见 [`docs/GITHUB_ACTIONS.md`](docs/GITHUB_ACTIONS.md)。
+
+---
+
 ## 💻 本地开发
 
 ```bash
@@ -286,6 +322,7 @@ npx wrangler pages dev dist \
 | --- | --- |
 | [`docs/AGENT_DEPLOY_PROMPT.md`](docs/AGENT_DEPLOY_PROMPT.md) | 给 AI Agent 的完整部署说明 |
 | [`docs/CLOUDFLARE_PAGES.md`](docs/CLOUDFLARE_PAGES.md) | Cloudflare Pages 部署细节 |
+| [`docs/GITHUB_ACTIONS.md`](docs/GITHUB_ACTIONS.md) | GitHub Actions 自动构建与自动部署 |
 | [`docs/SECURITY_DESENSITIZATION.md`](docs/SECURITY_DESENSITIZATION.md) | 脱敏和安全检查说明 |
 | [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 上游项目关系说明 |
 
