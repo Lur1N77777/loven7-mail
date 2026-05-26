@@ -287,6 +287,12 @@ WEBMAIL_PAGES_PROJECT_NAME
 
 用户站的 `MAIL_WORKER_BASE_URL`、`SITE_PASSWORD`、`SHARE_ENCRYPTION_SECRET` 和 `SHARE_KV` 仍然建议在 Cloudflare Pages 项目设置里配置。详细步骤见 [`docs/GITHUB_ACTIONS.md`](docs/GITHUB_ACTIONS.md)。
 
+如果你想让 AI Agent 代你配置这套自动部署流程，可以把下面这段话复制给 Agent。不要把 Cloudflare Token、GitHub Token、管理员密码或 Worker API 密钥写进 Prompt，让 Agent 在需要时通过安全的 secrets/variables 输入流程读取。
+
+```text
+请帮我为这个 GitHub 仓库配置 GitHub Actions 自动部署流程：https://github.com/Lur1N77777/loven7-mail-cloudflare-suite 。仓库里已经有 .github/workflows/ci.yml 和 .github/workflows/deploy-cloudflare-pages.yml。请先检查两个 workflow 是否存在并解释它们会做什么，然后在 GitHub 仓库的 Actions secrets/variables 中配置自动部署需要的 CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID、ADMIN_PAGES_PROJECT_NAME、WEBMAIL_PAGES_PROJECT_NAME。不要把任何 Token、密码、Worker API、KV ID 或个人域名写进代码、README、commit 或日志。配置完成后，请手动触发一次 Deploy to Cloudflare Pages workflow，确认管理后台 apps/admin 和用户站 apps/webmail 都构建成功；如果 Cloudflare Pages 项目不存在，请指导我先创建两个 Pages 项目或用 Cloudflare 控制台创建。最后返回 Actions 运行结果、两个 Pages 项目名、以及我还需要在 Cloudflare Pages 里配置的用户站运行时变量 MAIL_WORKER_BASE_URL、SITE_PASSWORD、SHARE_ENCRYPTION_SECRET 和 SHARE_KV。
+```
+
 ---
 
 ## 💻 本地开发
