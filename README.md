@@ -329,6 +329,7 @@ npx wrangler pages dev dist \
 | [`docs/AGENT_DEPLOY_PROMPT.md`](docs/AGENT_DEPLOY_PROMPT.md) | 给 AI Agent 的完整部署说明 |
 | [`docs/CLOUDFLARE_PAGES.md`](docs/CLOUDFLARE_PAGES.md) | Cloudflare Pages 部署细节 |
 | [`docs/GITHUB_ACTIONS.md`](docs/GITHUB_ACTIONS.md) | GitHub Actions 自动构建与自动部署 |
+| [`docs/ENGINEER_HANDOFF.md`](docs/ENGINEER_HANDOFF.md) | 给接手工程师的项目结构和模块说明 |
 | [`docs/SECURITY_DESENSITIZATION.md`](docs/SECURITY_DESENSITIZATION.md) | 脱敏和安全检查说明 |
 | [`docs/UPSTREAM.md`](docs/UPSTREAM.md) | 上游项目关系说明 |
 
