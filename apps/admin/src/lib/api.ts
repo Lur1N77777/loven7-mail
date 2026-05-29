@@ -1,3 +1,5 @@
+import { getRuntimeLocale, localeText } from './locale';
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface ApiCredentials {
@@ -157,6 +159,7 @@ export function createApiClient(getBaseUrl: () => string, getCredentials: () => 
 
     const execute = async (): Promise<T> => {
       const credentials = { ...getCredentials(), ...options };
+      const locale = credentials.lang === 'en' ? 'en-US' : getRuntimeLocale();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'x-lang': credentials.lang || 'zh',
@@ -203,7 +206,7 @@ export function createApiClient(getBaseUrl: () => string, getCredentials: () => 
           try {
             return JSON.parse(raw) as T;
           } catch {
-            throw new ApiError(response.status, normalizeErrorBody(raw), `[${response.status}] JSON 解析失败`, { url, method });
+            throw new ApiError(response.status, normalizeErrorBody(raw), `[${response.status}] ${localeText('JSON 解析失败', 'Failed to parse JSON', locale)}`, { url, method });
           }
         }
         try {
@@ -213,7 +216,7 @@ export function createApiClient(getBaseUrl: () => string, getCredentials: () => 
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
-          throw new ApiError(0, '', `请求超时或已取消：${url}`, { url, method });
+          throw new ApiError(0, '', `${localeText('请求超时或已取消', 'Request timed out or was cancelled', locale)}: ${url}`, { url, method });
         }
         throw error;
       } finally {

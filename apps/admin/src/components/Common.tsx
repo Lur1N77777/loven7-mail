@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AlertCircle, Bell, Check, ChevronDown, Inbox, Loader2, X } from 'lucide-react';
 import { PAGE_SIZE_OPTIONS, TOAST_MS } from '../lib/constants';
 import { cls } from '../lib/format';
+import { getRuntimeLocale, localeText } from '../lib/locale';
 
 export type Notice = { type: 'success' | 'error' | 'info'; message: string } | null;
 export type Notify = (type: NonNullable<Notice>['type'], message: string) => void;
@@ -22,6 +23,7 @@ export function useNotice() {
 }
 
 export function Modal({ title, children, onClose, wide = false }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+  const locale = getRuntimeLocale();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -37,7 +39,7 @@ export function Modal({ title, children, onClose, wide = false }: { title: strin
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-3.5">
           <h3 className="min-w-0 truncate text-base font-semibold text-slate-800 sm:text-lg">{title}</h3>
-          <button onClick={onClose} aria-label="关闭" className="ml-3 shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+          <button onClick={onClose} aria-label={localeText('关闭', 'Close', locale)} className="ml-3 shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
             <X size={18} />
           </button>
         </div>
@@ -72,14 +74,15 @@ export function useConfirm() {
       setBusy(false);
     }
   }, [busy, confirmState]);
+  const locale = getRuntimeLocale();
   const modal = confirmState ? (
     <Modal title={confirmState.title} onClose={close}>
-      <p className="text-sm leading-6 text-slate-500">{confirmState.body || '该操作不可撤销，请确认。'}</p>
+      <p className="text-sm leading-6 text-slate-500">{confirmState.body || localeText('该操作不可撤销，请确认。', 'This action cannot be undone. Please confirm.', locale)}</p>
       <div className="mt-6 flex justify-end gap-3">
-        <button className="btn-secondary" disabled={busy} onClick={close}>取消</button>
+        <button className="btn-secondary" disabled={busy} onClick={close}>{localeText('取消', 'Cancel', locale)}</button>
         <button className="btn-danger" disabled={busy} onClick={handleConfirm}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {confirmState.actionLabel || '确认'}
+          {confirmState.actionLabel || localeText('确认', 'Confirm', locale)}
         </button>
       </div>
     </Modal>
@@ -102,11 +105,12 @@ export function NoticeToast({ notice }: { notice: Notice }) {
   );
 }
 
-export function LoadingState({ label = '加载中...' }: { label?: string }) {
+export function LoadingState({ label }: { label?: string }) {
+  const locale = getRuntimeLocale();
   return (
     <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-slate-400 md:min-h-48">
       <Loader2 className="h-6 w-6 animate-spin text-slate-600" />
-      <span className="text-sm">{label}</span>
+      <span className="text-sm">{label || localeText('加载中...', 'Loading...', locale)}</span>
     </div>
   );
 }
@@ -146,6 +150,7 @@ export function PopoverSelect({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const locale = getRuntimeLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const active = options.find((item) => item.value === value) || options[0];
   useEffect(() => {
@@ -156,14 +161,11 @@ export function PopoverSelect({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
     };
-    const onScroll = () => setOpen(false);
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('scroll', onScroll, true);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
   useEffect(() => setOpen(false), [value]);
@@ -179,7 +181,7 @@ export function PopoverSelect({
         onClick={() => setOpen((current) => !current)}
       >
         <span className="popover-select-copy">
-          <span className="popover-select-label">{active?.label || '请选择'}</span>
+          <span className="popover-select-label">{active?.label || localeText('请选择', 'Select', locale)}</span>
           {active?.description && <span className="popover-select-description">{active.description}</span>}
         </span>
         <ChevronDown size={15} className="popover-select-chevron" />
@@ -215,21 +217,22 @@ export function PopoverSelect({
 
 export function Pagination({ page, setPage, pageSize, setPageSize, totalPages, count, variant = 'inline' }: { page: number; setPage: (page: number) => void; pageSize: number; setPageSize: (size: number) => void; totalPages: number; count: number; variant?: 'inline' | 'floating' }) {
   const [sizeOpen, setSizeOpen] = useState(false);
+  const locale = getRuntimeLocale();
   useEffect(() => setSizeOpen(false), [pageSize]);
   return (
     <div className={cls('pagination-bar flex flex-row items-center justify-between gap-2 border-t border-slate-100 px-2 py-1.5 text-xs text-slate-500 md:px-3 md:py-2', variant === 'floating' && 'pagination-floating')}>
-      <span className="pagination-summary min-w-0 truncate"><span className="hidden sm:inline">{count || 0} 条 · </span>{page}/{totalPages}</span>
+      <span className="pagination-summary min-w-0 truncate"><span className="hidden sm:inline">{locale === 'en-US' ? `${count || 0} items · ` : `${count || 0} 条 · `}</span>{page}/{totalPages}</span>
       <div className="flex shrink-0 items-center gap-1">
         <div className="pagination-size-popover">
           <button
             type="button"
-            aria-label="每页数量"
+            aria-label={localeText('每页数量', 'Items per page', locale)}
             aria-haspopup="menu"
             aria-expanded={sizeOpen}
             className={cls('form-select pagination-size pagination-size-trigger', sizeOpen && 'active')}
             onClick={() => setSizeOpen((open) => !open)}
           >
-            {pageSize}/页
+            {locale === 'en-US' ? `${pageSize}/page` : `${pageSize}/页`}
           </button>
           {sizeOpen && (
             <div className="pagination-size-menu" role="menu">
@@ -242,14 +245,14 @@ export function Pagination({ page, setPage, pageSize, setPageSize, totalPages, c
                   className={cls(pageSize === size && 'active')}
                   onClick={() => { setPageSize(size); setPage(1); setSizeOpen(false); }}
                 >
-                  {size}/页
+                  {locale === 'en-US' ? `${size}/page` : `${size}/页`}
                 </button>
               ))}
             </div>
           )}
         </div>
-        <button className="page-btn compact" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="上一页">‹</button>
-        <button className="page-btn compact" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label="下一页">›</button>
+        <button className="page-btn compact" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={localeText('上一页', 'Previous page', locale)}>‹</button>
+        <button className="page-btn compact" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={localeText('下一页', 'Next page', locale)}>›</button>
       </div>
     </div>
   );

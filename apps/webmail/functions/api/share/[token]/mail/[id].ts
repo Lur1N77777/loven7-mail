@@ -13,7 +13,7 @@ export const onRequestDelete: PagesHandler<{ token: string; id: string }> = asyn
     const mailId = Number.parseInt(String(params.id || ""), 10);
     if (!Number.isFinite(mailId) || mailId <= 0) return withCors(errorJson(400, "邮件 ID 无效", "invalid_mail_id"), request);
     const share = await updateShareRecord(env, params.token, (payload) => {
-      if (!payload.permissions.hideMail) throw new Error("此共享链接不允许删除邮件显示");
+      if (!payload.permissions.hideMail) throw new Error("此共享链接不允许删除邮件");
       return {
         ...payload,
         addresses: payload.addresses.map((mailbox, index) => {

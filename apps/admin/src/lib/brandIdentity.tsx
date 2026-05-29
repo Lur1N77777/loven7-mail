@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { getRuntimeLocale, localeText } from './locale';
 
 export type BrandIdentity = {
   domain: string;
@@ -221,13 +222,17 @@ export function BrandAvatar({
     setFailed(false);
   }, [identity.domain, size]);
 
-  const label = identity.domain ? `${identity.displayName} 图标` : `${senderName || '发件人'} 头像`;
+  const locale = getRuntimeLocale();
+  const fallbackName = senderName || localeText('发件人', 'sender', locale);
+  const label = identity.domain
+    ? localeText(`${identity.displayName} 图标`, `${identity.displayName} icon`, locale)
+    : localeText(`${fallbackName} 头像`, `${fallbackName} avatar`, locale);
 
   return (
     <span
       className={joinClassName('brand-avatar', failed && 'brand-avatar-fallback', className)}
       style={{ '--brand-avatar-size': `${size}px` } as CSSProperties}
-      title={identity.domain ? `${identity.displayName} · ${identity.domain}` : senderName || '发件人'}
+      title={identity.domain ? `${identity.displayName} · ${identity.domain}` : fallbackName}
       aria-label={label}
     >
       {iconUrl ? (

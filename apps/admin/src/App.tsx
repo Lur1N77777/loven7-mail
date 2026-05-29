@@ -5,6 +5,7 @@ import { readJwtFromQuery } from './lib/clipboard';
 import { isLikelyJwt } from './lib/crypto';
 import { readStorage, writeLocalStorage } from './lib/storage';
 import { cls } from './lib/format';
+import { applyRuntimeLocale, getBackendLang, getRuntimeLocale, localeText, readInitialLocale, writeLocale, type AppLocale } from './lib/locale';
 import type { AddressUserFilter, ComposePayload, OpenSettings, Statistics } from './types/api';
 import { AuthPanel } from './components/AuthPanel';
 import { NoticeToast, useConfirm, useNotice } from './components/Common';
@@ -61,7 +62,8 @@ function consumeAddressJwtFromUrl(): string {
 }
 
 function ViewFallback() {
-  return <div className="flex h-full items-center justify-center text-sm text-slate-400">视图加载中...</div>;
+  const locale = getRuntimeLocale();
+  return <div className="flex h-full items-center justify-center text-sm text-slate-400">{localeText('视图加载中...', 'Loading view...', locale)}</div>;
 }
 
 export default function App() {
@@ -85,6 +87,7 @@ export default function App() {
     return isLikelyJwt(stored) ? stored : '';
   });
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (readStorage(STORAGE_KEYS.uiTheme, 'light') === 'dark' ? 'dark' : 'light'));
+  const [locale, setLocale] = useState<AppLocale>(() => readInitialLocale());
   const [stats, setStats] = useState<Statistics>(emptyStats);
   const [statsLoading, setStatsLoading] = useState(false);
   const [openSettings, setOpenSettings] = useState<OpenSettings | null>(null);
@@ -95,14 +98,14 @@ export default function App() {
   const credentialFingerprintRef = useRef<string | null>(null);
   const { notice, push } = useNotice();
   const { ask, modal: confirmModal } = useConfirm();
-  const client = useMemo(() => createApiClient(() => apiBase, () => ({ adminPassword, sitePassword, userAccessToken, addressJwt, lang: 'zh' })), [addressJwt, adminPassword, apiBase, sitePassword, userAccessToken]);
+  const client = useMemo(() => createApiClient(() => apiBase, () => ({ adminPassword, sitePassword, userAccessToken, addressJwt, lang: getBackendLang(locale) })), [addressJwt, adminPassword, apiBase, locale, sitePassword, userAccessToken]);
   const request = useCallback(<T,>(path: string, options?: Parameters<typeof client.request>[1]) => client.request<T>(path, options), [client]);
   const loadStats = useCallback(async (forceRefresh = false) => {
     setStatsLoading(true);
     try { const res = await request<Statistics>('/admin/statistics', { forceRefresh, cacheTtlMs: 30_000 }); setStats({ ...emptyStats, ...res }); }
-    catch (error) { if (adminPassword || userAccessToken) push('error', error instanceof Error ? error.message : '统计加载失败'); }
+    catch (error) { if (adminPassword || userAccessToken) push('error', error instanceof Error ? error.message : localeText('统计加载失败', 'Failed to load stats', locale)); }
     finally { setStatsLoading(false); }
-  }, [adminPassword, push, request, userAccessToken]);
+  }, [adminPassword, locale, push, request, userAccessToken]);
   const loadOpenSettings = useCallback(async (forceRefresh = false) => { try { const res = await request<OpenSettings>('/open_api/settings', { forceRefresh, cacheTtlMs: 120_000 }); setOpenSettings(res); } catch { /* open settings may require site auth */ } }, [request]);
   useEffect(() => { loadOpenSettings(); }, [loadOpenSettings]);
   useEffect(() => { if (adminPassword || userAccessToken) loadStats(); }, [adminPassword, loadStats, userAccessToken]);
@@ -126,6 +129,15 @@ export default function App() {
     document.documentElement.classList.toggle('theme-dark', theme === 'dark');
     document.body.classList.toggle('theme-dark', theme === 'dark');
   }, [theme]);
+  useEffect(() => {
+    writeLocale(locale);
+    applyRuntimeLocale(locale);
+  }, [locale]);
+  const updateLocale = useCallback((nextLocale: AppLocale) => {
+    applyRuntimeLocale(nextLocale);
+    writeLocale(nextLocale);
+    setLocale(nextLocale);
+  }, []);
   const refreshCurrent = () => {
     clearApiCache();
     loadOpenSettings(true);
@@ -249,11 +261,11 @@ export default function App() {
   return (
     <div className={cls('h-[100dvh] w-full overflow-hidden bg-[var(--color-bg)] font-sans text-slate-800', theme === 'dark' && 'theme-dark')}>
       <div className="flex h-full w-full min-w-0 overflow-hidden bg-[var(--color-bg)]">
-        <Sidebar activeMenu={activeMenu} setActiveMenu={navigateMenu} stats={stats} theme={theme} setTheme={setTheme} refresh={refreshCurrent}>
+        <Sidebar activeMenu={activeMenu} setActiveMenu={navigateMenu} stats={stats} theme={theme} setTheme={setTheme} locale={locale} setLocale={updateLocale} refresh={refreshCurrent} apiBase={apiBase} connected={Boolean(adminPassword || userAccessToken || addressJwt)}>
           <AuthPanel {...authProps} initialOpen={!adminPassword && !userAccessToken} />
         </Sidebar>
         <main className="mobile-page-swipe-zone relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-surface)]">
-          <Header activeMenu={activeMenu} setActiveMenu={navigateMenu} query={globalQuery} setQuery={setGlobalQuery} refresh={refreshCurrent} apiBase={apiBase}>
+          <Header activeMenu={activeMenu} setActiveMenu={navigateMenu} query={globalQuery} setQuery={setGlobalQuery} refresh={refreshCurrent} apiBase={apiBase} locale={locale} setLocale={updateLocale}>
             <AuthPanel {...authProps} initialOpen={false} />
           </Header>
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden pb-[calc(62px+env(safe-area-inset-bottom))] md:pb-0">
@@ -270,7 +282,7 @@ export default function App() {
               </section>
             ))}
           </div>
-          <MobileNav activeMenu={activeMenu} setActiveMenu={navigateMenu} />
+          <MobileNav activeMenu={activeMenu} setActiveMenu={navigateMenu} locale={locale} />
         </main>
       </div>
       <NoticeToast notice={notice} />

@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCheck, ChevronDown, Copy, Download, MoreHorizontal, Pap
 import { buildQuery, type Requester } from '../lib/api';
 import { ADDRESS_INPUT_DEBOUNCE_MS, CACHE_TTL, COPY_HINT_MS, DEFAULT_PAGE_SIZE, MAIL_READ_HISTORY_MAX, NEW_MAIL_FLASH_MS, STORAGE_KEYS, SWIPE } from '../lib/constants';
 import { cls, formatDateTime, formatShortDate, normalizeSearch } from '../lib/format';
+import { getRuntimeLocale, localeText } from '../lib/locale';
 import { copyText } from '../lib/clipboard';
 import { readJsonStorage, readStorage, writeJsonStorage, writeLocalStorage } from '../lib/storage';
 import { buildMailHtmlDocument, getDownloadEmlUrl, looksLikeMimeSource, parseRawMail, parseRawMailListItem, parseSendbox, sanitizeMailHtml, sanitizeVerificationCode } from '../lib/mailParser';
@@ -25,6 +26,7 @@ type MailListCache = {
 };
 type MailboxAddressRequest = { address: string; requestId: number };
 type FetchOptions = { addressOverride?: string; pageOverride?: number; forceRefresh?: boolean };
+type TranslateFn = (zh: string, en: string) => string;
 
 const MAIL_LIST_CACHE_VERSION = 4;
 const isParsed = (mail: AnyMail): mail is ParsedMail => typeof (mail as ParsedMail).senderAddress === 'string';
@@ -292,7 +294,9 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const attachmentUrlsRef = useRef<Set<string>>(new Set());
   const mailSwipeRef = useRef<{ active: boolean; startX: number; startY: number; lastX: number; lastY: number }>({ active: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
   const deferredQuery = useDeferredValue(normalizeSearch(globalQuery));
-  const title = mode === 'sent' ? '发件箱' : mode === 'unknown' ? '未知邮件' : '收件箱';
+  const locale = getRuntimeLocale();
+  const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
+  const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
   const currentListCacheKey = useMemo(() => mailListCacheKey(mode, page, pageSize, address), [address, mode, page, pageSize]);
 
   useEffect(() => {
@@ -370,7 +374,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
 
       if (incremental && targetPage !== 1) {
         const addedCount = Math.max(0, nextCount - latestCountRef.current);
-        if (addedCount > 0) notify('info', `检测到 ${addedCount} 封新邮件，回到第一页可查看`);
+        if (addedCount > 0) notify('info', locale === 'en-US' ? `${addedCount} new message${addedCount === 1 ? '' : 's'} detected. Return to page 1 to view.` : `检测到 ${addedCount} 封新邮件，回到第一页可查看`);
         return;
       }
 
@@ -385,7 +389,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
           setNewIds(new Set(added.map((mail) => mail.id)));
           if (newIdsTimerRef.current !== null) window.clearTimeout(newIdsTimerRef.current);
           newIdsTimerRef.current = window.setTimeout(() => { setNewIds(new Set()); newIdsTimerRef.current = null; }, NEW_MAIL_FLASH_MS);
-          notify('success', `新增 ${added.length} 封邮件`);
+          notify('success', locale === 'en-US' ? `${added.length} new message${added.length === 1 ? '' : 's'}` : `新增 ${added.length} 封邮件`);
         }
       } else {
         setMails(parsed);
@@ -393,7 +397,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       }
     } catch (error) {
       if (abortController.signal.aborted) return;
-      if (seq === fetchSeqRef.current) notify('error', error instanceof Error ? error.message : '邮件加载失败');
+      if (seq === fetchSeqRef.current) notify('error', error instanceof Error ? error.message : t('邮件加载失败', 'Failed to load mail'));
     } finally {
       if (seq === fetchSeqRef.current) {
         setLoading(false);
@@ -403,7 +407,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
         if (fetchAbortRef.current === abortController) fetchAbortRef.current = null;
       }
     }
-  }, [address, autoSeconds, loadPage, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds]);
+  }, [address, autoSeconds, loadPage, locale, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds, t]);
 
   const closeMobileDetail = useCallback(() => {
     setIsMobileDetail(false);
@@ -559,9 +563,9 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const totalPages = Math.max(1, Math.ceil(count / pageSize));
   const unreadCount = useMemo(() => mails.filter((mail) => mail.isUnread).length, [mails]);
   const tabOptions = mode === 'sent'
-    ? [['all', '全部'], ['starred', '标注'], ['attachments', '附件']]
-    : [['all', '全部'], ['unread', '未读'], ['read', '已读'], ['starred', '标注'], ['attachments', '附件']];
-  const activeTabLabel = tabOptions.find(([key]) => key === activeTab)?.[1] || '全部';
+    ? [['all', t('全部', 'All')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]]
+    : [['all', t('全部', 'All')], ['unread', t('未读', 'Unread')], ['read', t('已读', 'Read')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]];
+  const activeTabLabel = tabOptions.find(([key]) => key === activeTab)?.[1] || t('全部', 'All');
   const mobileHasMore = mobileLoadedPages < totalPages && mails.length < count;
   const toggleMailStack = useCallback((key: string) => {
     setExpandedMailStacks((current) => {
@@ -587,11 +591,11 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       setCount(typeof totalCount === 'number' ? totalCount : Math.max(count, merged.length));
       setMobileLoadedPages(nextPage);
     } catch (error) {
-      notify('error', error instanceof Error ? error.message : '加载更多邮件失败');
+      notify('error', error instanceof Error ? error.message : t('加载更多邮件失败', 'Failed to load more mail'));
     } finally {
       if (seq === mobileLoadMoreSeqRef.current) setMobileLoadingMore(false);
     }
-  }, [address, compactViewport, count, loadPage, loading, mobileHasMore, mobileLoadedPages, mobileLoadingMore, mode, notify, pageSize, readAllBefore, readIds, refreshing, starredIds]);
+  }, [address, compactViewport, count, loadPage, loading, mobileHasMore, mobileLoadedPages, mobileLoadingMore, mode, notify, pageSize, readAllBefore, readIds, refreshing, starredIds, t]);
 
   useEffect(() => {
     if (!compactViewport || !mobileLoadMoreRef.current) return undefined;
@@ -653,8 +657,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       markRead(nextMail);
       return;
     }
-    notify('info', '已经是最后一封邮件');
-  }, [filtered, markRead, notify, selected?.id, selectedId]);
+    notify('info', t('已经是最后一封邮件', 'Already at the last message'));
+  }, [filtered, markRead, notify, selected?.id, selectedId, t]);
   const settleMobileDetailOffset = useCallback((offset: number, after?: () => void) => {
     setMobileDetailSettling(true);
     setMobileDetailDragX(offset);
@@ -681,24 +685,24 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const markVisibleRead = () => {
     const targets = filtered.filter((mail) => mail.isUnread);
     if (!targets.length) {
-      notify('info', '当前视图没有未读邮件');
+      notify('info', t('当前视图没有未读邮件', 'No unread mail in this view'));
       return;
     }
     const next = new Set(readIds);
     targets.forEach((mail) => next.add(storageId(mode, mail.id)));
     persistReadIds(next);
-    notify('success', `已标记 ${targets.length} 封为已读`);
+    notify('success', locale === 'en-US' ? `${targets.length} marked as read` : `已标记 ${targets.length} 封为已读`);
   };
   const markAllRead = () => {
     if (!mails.length) {
-      notify('info', '当前邮箱没有可标记邮件');
+      notify('info', t('当前邮箱没有可标记邮件', 'No mail to mark in this mailbox'));
       return;
     }
     const maxId = Math.max(...mails.map((mail) => mail.id), Number(readAllBefore[mode] || 0));
     persistReadAllBefore({ ...readAllBefore, [mode]: maxId });
-    notify('success', '已将当前邮箱现有邮件全部标记为已读');
+    notify('success', t('已将当前邮箱现有邮件全部标记为已读', 'All existing mail in this mailbox marked as read'));
   };
-  const copyValue = useCallback(async (value: string, label = '已复制', key?: string) => {
+  const copyValue = useCallback(async (value: string, label = t('已复制', 'Copied'), key?: string) => {
     try {
       await copyText(value);
       if (key) {
@@ -707,12 +711,12 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       }
       notify('success', label);
     } catch (error) {
-      notify('error', error instanceof Error ? error.message : '复制失败，请手动复制');
+      notify('error', error instanceof Error ? error.message : t('复制失败，请手动复制', 'Copy failed. Please copy manually.'));
     }
-  }, [notify]);
-  const deleteMail = (mail: AnyMail) => ask({ title: `删除邮件 #${mail.id}`, body: mode === 'sent' ? '将删除该发件箱记录。' : '将删除该原始邮件记录。', actionLabel: '删除', onConfirm: async () => { await request(mode === 'sent' ? `/admin/sendbox/${mail.id}` : `/admin/mails/${mail.id}`, { method: 'DELETE' }); notify('success', '邮件已删除'); setSelectedId(null); setMails((current) => current.filter((item) => item.id !== mail.id)); await fetchData(true); } });
+  }, [notify, t]);
+  const deleteMail = (mail: AnyMail) => ask({ title: t(`删除邮件 #${mail.id}`, `Delete mail #${mail.id}`), body: mode === 'sent' ? t('将删除该发件箱记录。', 'This deletes the sent-mail record.') : t('将删除该原始邮件记录。', 'This deletes the raw mail record.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(mode === 'sent' ? `/admin/sendbox/${mail.id}` : `/admin/mails/${mail.id}`, { method: 'DELETE' }); notify('success', t('邮件已删除', 'Mail deleted')); setSelectedId(null); setMails((current) => current.filter((item) => item.id !== mail.id)); await fetchData(true); } });
   const composeFromMail = (mail: AnyMail, kind: 'reply' | 'forward') => {
-    if (isParsed(mail)) setComposeSeed({ from_mail: mail.address || '', to_mail: kind === 'reply' ? mail.senderAddress : '', to_name: kind === 'reply' ? mail.senderName : '', subject: `${kind === 'reply' ? 'Re' : 'Fwd'}: ${mail.subject}`, content: `\n\n---- 原邮件 ----\n${mail.text || mail.preview}`, is_html: false });
+    if (isParsed(mail)) setComposeSeed({ from_mail: mail.address || '', to_mail: kind === 'reply' ? mail.senderAddress : '', to_name: kind === 'reply' ? mail.senderName : '', subject: `${kind === 'reply' ? 'Re' : 'Fwd'}: ${mail.subject}`, content: `\n\n---- ${t('原邮件', 'Original Message')} ----\n${mail.text || mail.preview}`, is_html: false });
     else setComposeSeed({ from_mail: mail.address, subject: `Fwd: ${mail.subject}`, content: mail.content, is_html: mail.is_html });
     setActiveMenu('compose');
   };
@@ -792,13 +796,13 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
             <div className="mr-auto min-w-0">
               <div className="mail-title-line flex items-center gap-2">
                 <h2 className="mail-title-heading truncate text-[17px] font-bold text-slate-800 md:text-2xl">{title}</h2>
-                <span className="mail-count-badge rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 md:text-sm">{count || filtered.length} 封</span>
-                {unreadCount > 0 && <span className="mail-count-badge unread rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-800">{unreadCount} 未读</span>}
+                <span className="mail-count-badge rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 md:text-sm">{locale === 'en-US' ? `${count || filtered.length} mails` : `${count || filtered.length} 封`}</span>
+                {unreadCount > 0 && <span className="mail-count-badge unread rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-800">{locale === 'en-US' ? `${unreadCount} unread` : `${unreadCount} 未读`}</span>}
               </div>
-              <div className="mt-1 text-[11px] font-medium text-slate-500">{autoRefresh ? `自动刷新开启 · ${refreshCountdown}s 后同步` : '自动刷新关闭'}</div>
+              <div className="mt-1 text-[11px] font-medium text-slate-500">{autoRefresh ? (locale === 'en-US' ? `Auto refresh on · sync in ${refreshCountdown}s` : `自动刷新开启 · ${refreshCountdown}s 后同步`) : t('自动刷新关闭', 'Auto refresh off')}</div>
             </div>
             <div className="mail-toolbar-actions" data-no-page-swipe="true">
-              {!(mode === 'inbox' || mode === 'sent') && <button className="mail-tool-btn primary" onClick={() => fetchData(true)} title="增量刷新" aria-label="增量刷新"><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">刷新</span></button>}
+              {!(mode === 'inbox' || mode === 'sent') && <button className="mail-tool-btn primary" onClick={() => fetchData(true)} title={t('增量刷新', 'Refresh incrementally')} aria-label={t('增量刷新', 'Refresh incrementally')}><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">{t('刷新', 'Refresh')}</span></button>}
               <div className="mail-filter-popover" data-no-page-swipe="true">
                 <button
                   type="button"
@@ -806,7 +810,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                   onClick={() => setFilterMenuOpen((open) => !open)}
                   aria-haspopup="menu"
                   aria-expanded={filterMenuOpen}
-                  aria-label="邮件筛选"
+                  aria-label={t('邮件筛选', 'Mail filter')}
                 >
                   <span>{activeTabLabel}</span>
                   <ChevronDown size={14} className="mail-filter-chevron" />
@@ -829,8 +833,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                   </div>
                 )}
               </div>
-              <button className="mail-tool-btn mail-read-btn" onClick={markVisibleRead} title="将当前筛选结果标记为已读" aria-label="一键已读"><CheckCheck size={15} /><span className="mail-tool-text">一键已读</span></button>
-              <button className="mail-tool-btn mail-read-btn" onClick={markAllRead} title="将当前邮箱已存在邮件全部标记为已读" aria-label="全部已读"><CheckCheck size={15} /><span className="mail-tool-text">全部已读</span></button>
+              <button className="mail-tool-btn mail-read-btn" onClick={markVisibleRead} title={t('将当前筛选结果标记为已读', 'Mark current filtered results as read')} aria-label={t('一键已读', 'Mark visible read')}><CheckCheck size={15} /><span className="mail-tool-text">{t('一键已读', 'Mark read')}</span></button>
+              <button className="mail-tool-btn mail-read-btn" onClick={markAllRead} title={t('将当前邮箱已存在邮件全部标记为已读', 'Mark all existing mail in this mailbox as read')} aria-label={t('全部已读', 'Mark all read')}><CheckCheck size={15} /><span className="mail-tool-text">{t('全部已读', 'All read')}</span></button>
             </div>
           </div>
           {(mode === 'inbox' || mode === 'sent') && <div className="mail-address-search-row mt-2" data-no-page-swipe="true">
@@ -840,7 +844,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                 onChange={(e) => { setAddressInput(e.target.value); setPage(1); setSelectedId(null); }}
                 onKeyDown={(event) => { if (event.key === 'Escape' && addressInput) clearAddressFilter(); }}
                 className="form-input address-filter-input rounded-xl py-1.5 pr-9 text-[13px] md:rounded-2xl md:py-2 md:text-sm"
-                placeholder="筛选邮箱地址"
+                placeholder={t('筛选邮箱地址', 'Filter mailbox address')}
                 inputMode="email"
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -854,18 +858,18 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                   onTouchStart={clearAddressFilterFromPress}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={clearAddressFilterFromPress}
-                  aria-label="清空邮箱地址筛选"
-                  title="清空邮箱地址筛选"
+                  aria-label={t('清空邮箱地址筛选', 'Clear mailbox address filter')}
+                  title={t('清空邮箱地址筛选', 'Clear mailbox address filter')}
                 >
                   <X size={14} />
                 </button>
               )}
             </div>
-            <button className="mail-tool-btn primary mail-search-refresh" onClick={() => fetchData(true)} title="增量刷新" aria-label="增量刷新"><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">刷新</span></button>
+            <button className="mail-tool-btn primary mail-search-refresh" onClick={() => fetchData(true)} title={t('增量刷新', 'Refresh incrementally')} aria-label={t('增量刷新', 'Refresh incrementally')}><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">{t('刷新', 'Refresh')}</span></button>
           </div>}
         </div>
         <div className="mail-list-viewport flex-1 overflow-y-auto px-2 pb-2 md:px-4 md:pb-4">
-          {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title="没有匹配的邮件" body="尝试刷新、修改地址筛选或调整当前筛选。" /> : mailListEntries.map((entry) => (
+          {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={t('没有匹配的邮件', 'No matching mail')} body={t('尝试刷新、修改地址筛选或调整当前筛选。', 'Try refreshing, changing the address filter, or adjusting the current filter.')} /> : mailListEntries.map((entry) => (
             entry.type === 'single' ? (
               <MailListItem
                 key={entry.key}
@@ -896,7 +900,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
           ))}
           {compactViewport && mails.length > 0 && (
             <div ref={mobileLoadMoreRef} className="mobile-mail-load-more" data-no-page-swipe="true">
-              {mobileLoadingMore ? '正在加载更多邮件…' : mobileHasMore ? '继续下滑加载更多' : '没有更多邮件'}
+              {mobileLoadingMore ? t('正在加载更多邮件…', 'Loading more mail...') : mobileHasMore ? t('继续下滑加载更多', 'Keep scrolling to load more') : t('没有更多邮件', 'No more mail')}
             </div>
           )}
         </div>
@@ -911,15 +915,15 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
           style={{ transform: `translate3d(${mobileDetailDragX}px, 0, 0)` }}
         >
           <div className="mobile-detail-topbar flex h-9 shrink-0 items-center border-b border-slate-100 px-2">
-            <button onClick={closeMobileDetailWithMotion} className="mobile-detail-back rounded-full p-1.5 text-slate-600 hover:bg-slate-100" aria-label="返回邮件列表"><ArrowLeft size={18} /></button>
-            <span className="mobile-detail-topbar-title min-w-0 flex-1 truncate px-2 text-sm font-semibold text-slate-800">{selected?.subject || '邮件详情'}</span>
+            <button onClick={closeMobileDetailWithMotion} className="mobile-detail-back rounded-full p-1.5 text-slate-600 hover:bg-slate-100" aria-label={t('返回邮件列表', 'Back to mail list')}><ArrowLeft size={18} /></button>
+            <span className="mobile-detail-topbar-title min-w-0 flex-1 truncate px-2 text-sm font-semibold text-slate-800">{selected?.subject || t('邮件详情', 'Mail detail')}</span>
             {selected && (
               <div className="mobile-detail-topbar-actions" data-no-page-swipe="true">
                 <button
                   onClick={() => toggleStar(selected)}
                   className={cls('mobile-detail-icon-action', selected.isStarred ? 'active' : '')}
-                  title="星星代表收藏/标记，点击后可在列表“标注”里筛选"
-                  aria-label={selected.isStarred ? '取消标注' : '标注邮件'}
+                  title={t('星星代表收藏/标记，点击后可在列表“标注”里筛选', 'Starred mail can be filtered from the Starred list')}
+                  aria-label={selected.isStarred ? t('取消标注', 'Unstar mail') : t('标注邮件', 'Star mail')}
                 >
                   <Star size={17} fill={selected.isStarred ? 'currentColor' : 'none'} />
                 </button>
@@ -930,15 +934,15 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                     onClick={() => setMobileDetailMenuOpen((open) => !open)}
                     aria-haspopup="menu"
                     aria-expanded={mobileDetailMenuOpen}
-                    aria-label="更多邮件操作"
+                    aria-label={t('更多邮件操作', 'More mail actions')}
                   >
                     <MoreHorizontal size={18} />
                   </button>
                   {mobileDetailMenuOpen && (
                     <div className="mobile-detail-action-menu" role="menu">
-                      <button type="button" role="menuitem" onClick={() => { setMobileDetailMenuOpen(false); composeFromMail(selected, 'reply'); }}><Reply size={15} />回复</button>
-                      <button type="button" role="menuitem" onClick={() => { setMobileDetailMenuOpen(false); composeFromMail(selected, 'forward'); }}><MoreHorizontal size={15} />转发</button>
-                      <button type="button" role="menuitem" className="danger" onClick={() => { setMobileDetailMenuOpen(false); deleteMail(selected); }}><Trash2 size={15} />删除</button>
+                      <button type="button" role="menuitem" onClick={() => { setMobileDetailMenuOpen(false); composeFromMail(selected, 'reply'); }}><Reply size={15} />{t('回复', 'Reply')}</button>
+                      <button type="button" role="menuitem" onClick={() => { setMobileDetailMenuOpen(false); composeFromMail(selected, 'forward'); }}><MoreHorizontal size={15} />{t('转发', 'Forward')}</button>
+                      <button type="button" role="menuitem" className="danger" onClick={() => { setMobileDetailMenuOpen(false); deleteMail(selected); }}><Trash2 size={15} />{t('删除', 'Delete')}</button>
                     </div>
                   )}
                 </div>
@@ -962,6 +966,8 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
   onCopy: (value: string, label?: string, key?: string) => void;
   onToggleStar: (mail: AnyMail) => void;
 }) {
+  const locale = getRuntimeLocale();
+  const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const recipient = getRecipient(mail);
   const primaryCode = getVerificationCodes(mail)[0];
   const senderAddress = getSenderAddress(mail);
@@ -994,17 +1000,17 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
         </div>
         <div className="mail-list-side flex shrink-0 flex-col items-end gap-1">
           <span className="mail-time text-[12px] font-semibold text-slate-600">{formatShortDate(mail.created_at)}</span>
-          {primaryCode && <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(primaryCode, '已复制验证码'); }} className="verify-pill compact">{primaryCode}</button>}
+          {primaryCode && <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(primaryCode, t('已复制验证码', 'Verification code copied')); }} className="verify-pill compact">{primaryCode}</button>}
         </div>
       </div>
       <div className="account-address-row mb-0.5">
-        <span className="hidden text-xs text-slate-500 sm:inline">收件人</span>
-        <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(recipient, '已复制收件人地址', copyKey); }} className="address-copy-button" title="点击复制邮箱地址">{recipient || '未知收件地址'}</button>
-        <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">已复制</em>
+        <span className="hidden text-xs text-slate-500 sm:inline">{t('收件人', 'To')}</span>
+        <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(recipient, t('已复制收件人地址', 'Recipient address copied'), copyKey); }} className="address-copy-button" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipient || t('未知收件地址', 'Unknown recipient')}</button>
+        <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">{t('已复制', 'Copied')}</em>
       </div>
       <div className="flex items-center gap-2 md:gap-3">
         <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-        <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title="星星代表收藏/标记，点击可固定到“标注”筛选" className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+        <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('星星代表收藏/标记，点击可固定到“标注”筛选', 'Starred mail appears in the Starred filter')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
           <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
         </span>
       </div>
@@ -1026,6 +1032,8 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
   onToggleStar: (mail: AnyMail) => void;
   onToggle: () => void;
 }) {
+  const locale = getRuntimeLocale();
+  const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const mail = entry.latest;
   const recipient = getRecipient(mail);
   const primaryCode = getVerificationCodes(mail)[0];
@@ -1055,8 +1063,8 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
               <span className="mail-sender block truncate text-[13px] font-normal text-slate-600 md:text-[14px]">{getSender(mail)}</span>
               <div className="mt-0.5 flex items-center gap-2">
                 <h4 className="mail-subject truncate text-[14px] font-semibold text-slate-900 md:text-[15px]">{mail.subject}</h4>
-                <span className="mail-stack-count-pill">{entry.mails.length} 封</span>
-                {entry.unreadCount > 0 && <span className="mail-stack-count-pill unread">{entry.unreadCount} 未读</span>}
+                <span className="mail-stack-count-pill">{locale === 'en-US' ? `${entry.mails.length} mails` : `${entry.mails.length} 封`}</span>
+                {entry.unreadCount > 0 && <span className="mail-stack-count-pill unread">{locale === 'en-US' ? `${entry.unreadCount} unread` : `${entry.unreadCount} 未读`}</span>}
                 {isParsed(mail) && mail.attachments.length > 0 && <Paperclip size={13} className="shrink-0 text-slate-400" />}
               </div>
             </div>
@@ -1073,15 +1081,15 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
             </div>
           </div>
           <div className="account-address-row mb-0.5">
-            <span className="hidden text-xs text-slate-500 sm:inline">收件人</span>
-            <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(recipient, '已复制收件人地址', copyKey); }} className="address-copy-button" title="点击复制邮箱地址">{recipient || '未知收件地址'}</button>
-            <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">已复制</em>
+            <span className="hidden text-xs text-slate-500 sm:inline">{t('收件人', 'To')}</span>
+            <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(recipient, t('已复制收件人地址', 'Recipient address copied'), copyKey); }} className="address-copy-button" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipient || t('未知收件地址', 'Unknown recipient')}</button>
+            <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">{t('已复制', 'Copied')}</em>
           </div>
           <div className="flex items-center gap-2 md:gap-3">
             <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-            {entry.codeCount > 0 && <span className="verify-pill compact mail-stack-code-pill">{entry.codeCount} 个验证码</span>}
-            {primaryCode && <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(primaryCode, '已复制验证码'); }} className="verify-pill compact">{primaryCode}</button>}
-            <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title="星星代表收藏/标记，点击可固定到“标注”筛选" className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+            {entry.codeCount > 0 && <span className="verify-pill compact mail-stack-code-pill">{locale === 'en-US' ? `${entry.codeCount} codes` : `${entry.codeCount} 个验证码`}</span>}
+            {primaryCode && <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(primaryCode, t('已复制验证码', 'Verification code copied')); }} className="verify-pill compact">{primaryCode}</button>}
+            <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('星星代表收藏/标记，点击可固定到“标注”筛选', 'Starred mail appears in the Starred filter')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
               <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
             </span>
           </div>
@@ -1106,7 +1114,7 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
                     <span className="mail-stack-child-index">{index + 1}</span>
                     <span className="mail-stack-child-main">
                       <strong>{stackMail.subject}</strong>
-                      <small>{stackMail.preview || '无内容预览'}</small>
+                      <small>{stackMail.preview || t('无内容预览', 'No preview')}</small>
                     </span>
                     {stackCodes[0] ? (
                       <button
@@ -1115,7 +1123,7 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
                         tabIndex={expanded ? 0 : -1}
                         onClick={(event) => {
                           event.stopPropagation();
-                          onCopy(stackCodes[0], '已复制验证码');
+                          onCopy(stackCodes[0], t('已复制验证码', 'Verification code copied'));
                         }}
                       >
                         {stackCodes[0]}
@@ -1134,6 +1142,8 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
 });
 
 function MailDetail({ mail, mode, onDelete, onReply, onForward, onCopy, onToggleStar, mobile: _mobile = false }: { mail: AnyMail | null; mode: MailMode; onDelete: (mail: AnyMail) => void; onReply: (mail: AnyMail) => void; onForward: (mail: AnyMail) => void; onCopy: (value: string, label?: string, key?: string) => void; onToggleStar: (mail: AnyMail) => void; mobile?: boolean }) {
+  const locale = getRuntimeLocale();
+  const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   useEffect(() => { if (mail) writeSessionMailDetail(mode, mail); }, [mail, mode]);
   const parsedForMemo = mail ? isParsed(mail) : false;
   const htmlForFrame = mail ? String(parsedForMemo ? mail.message : mail.is_html ? mail.content : '') : '';
@@ -1143,12 +1153,12 @@ function MailDetail({ mail, mode, onDelete, onReply, onForward, onCopy, onToggle
   }, [htmlForFrame, parsedForMemo]);
   const emlUrl = useMemo(() => (rawForDownload ? getDownloadEmlUrl(rawForDownload) : ''), [rawForDownload]);
   useEffect(() => () => { if (emlUrl) URL.revokeObjectURL(emlUrl); }, [emlUrl]);
-  if (!mail) return <div className="p-8"><EmptyState title="请选择一封邮件" body="左侧列表选择邮件后，会在这里显示解析后的正文、附件和原始下载入口。" /></div>;
+  if (!mail) return <div className="p-8"><EmptyState title={t('请选择一封邮件', 'Select a message')} body={t('左侧列表选择邮件后，会在这里显示解析后的正文、附件和原始下载入口。', 'Choose a message from the list to view parsed content, attachments, and raw download options here.')} /></div>;
   const parsed = isParsed(mail);
   const text = parsed ? (looksLikeMimeSource(mail.text) ? '' : mail.text) : mail.content;
   const senderAddress = getSenderAddress(mail);
   const senderName = getSenderName(mail);
-  const subtitle = parsed ? `<${mail.senderAddress}>` : '发件记录';
+  const subtitle = parsed ? `<${mail.senderAddress}>` : t('发件记录', 'Sent record');
   const recipientAddress = getRecipient(mail);
   const verificationCodes = getVerificationCodes(mail);
   return (
@@ -1162,20 +1172,20 @@ function MailDetail({ mail, mode, onDelete, onReply, onForward, onCopy, onToggle
                 <div className="mail-detail-meta-strip mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                   <span className="mail-detail-meta-pill rounded-full bg-slate-100 px-2 py-0.5">ID #{mail.id}</span>
                   <span className="mail-time mail-detail-meta-pill rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{formatDateTime(mail.created_at)}</span>
-                  {mode === 'unknown' && <span className="mail-detail-meta-pill rounded-full bg-rose-50 px-2 py-0.5 text-rose-600">未知邮件</span>}
-                  {verificationCodes.map((code) => <button key={code} onClick={() => onCopy(code, '已复制验证码')} className="verify-pill"><Copy size={12} /> {code}</button>)}
+                  {mode === 'unknown' && <span className="mail-detail-meta-pill rounded-full bg-rose-50 px-2 py-0.5 text-rose-600">{t('未知邮件', 'Unknown mail')}</span>}
+                  {verificationCodes.map((code) => <button key={code} onClick={() => onCopy(code, t('已复制验证码', 'Verification code copied'))} className="verify-pill"><Copy size={12} /> {code}</button>)}
                 </div>
               </div>
-              <button onClick={() => onToggleStar(mail)} className={cls('mail-detail-star rounded-full p-2 transition hover:bg-slate-100', mail.isStarred ? 'text-slate-800' : 'text-slate-300 hover:text-slate-600')} title="星星代表收藏/标记，点击后可在列表“标注”里筛选"><Star size={21} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
+              <button onClick={() => onToggleStar(mail)} className={cls('mail-detail-star rounded-full p-2 transition hover:bg-slate-100', mail.isStarred ? 'text-slate-800' : 'text-slate-300 hover:text-slate-600')} title={t('星星代表收藏/标记，点击后可在列表“标注”里筛选', 'Starred mail appears in the Starred filter')}><Star size={21} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
             </div>
-            <div className="mail-detail-sender-row mt-2.5 flex gap-2.5 md:mt-3"><BrandAvatar sender={senderAddress} senderName={senderName} size={40} className="mail-detail-brand-avatar" /><div className="min-w-0 flex-1"><div className="mail-detail-sender-main flex flex-wrap items-center gap-2"><span className="font-semibold text-slate-800">{parsed ? mail.senderName : mail.address}</span><span className="truncate text-sm text-slate-500">{subtitle}</span></div><div className="account-address-row mail-detail-recipient-row mt-0.5"><span className="text-sm text-slate-500">收件人：</span><button type="button" onClick={() => onCopy(recipientAddress, '已复制收件人地址', `detail-recipient-${mode}-${mail.id}`)} className="plain-copy-address" title="点击复制邮箱地址">{recipientAddress || '未知收件地址'}</button></div></div><div className="hidden shrink-0 items-center gap-1.5 lg:flex"><button onClick={() => onReply(mail)} className="detail-action" title="回复"><Reply size={16} /></button><button onClick={() => onReply(mail)} className="detail-action" title="回复全部"><ReplyAll size={16} /></button><button onClick={() => onForward(mail)} className="detail-action" title="转发"><MoreHorizontal size={16} /></button><button onClick={() => onDelete(mail)} className="detail-action text-rose-500" title="删除"><Trash2 size={16} /></button></div></div>
+            <div className="mail-detail-sender-row mt-2.5 flex gap-2.5 md:mt-3"><BrandAvatar sender={senderAddress} senderName={senderName} size={40} className="mail-detail-brand-avatar" /><div className="min-w-0 flex-1"><div className="mail-detail-sender-main flex flex-wrap items-center gap-2"><span className="font-semibold text-slate-800">{parsed ? mail.senderName : mail.address}</span><span className="truncate text-sm text-slate-500">{subtitle}</span></div><div className="account-address-row mail-detail-recipient-row mt-0.5"><span className="text-sm text-slate-500">{t('收件人：', 'To:')}</span><button type="button" onClick={() => onCopy(recipientAddress, t('已复制收件人地址', 'Recipient address copied'), `detail-recipient-${mode}-${mail.id}`)} className="plain-copy-address" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipientAddress || t('未知收件地址', 'Unknown recipient')}</button></div></div><div className="hidden shrink-0 items-center gap-1.5 lg:flex"><button onClick={() => onReply(mail)} className="detail-action" title={t('回复', 'Reply')}><Reply size={16} /></button><button onClick={() => onReply(mail)} className="detail-action" title={t('回复全部', 'Reply all')}><ReplyAll size={16} /></button><button onClick={() => onForward(mail)} className="detail-action" title={t('转发', 'Forward')}><MoreHorizontal size={16} /></button><button onClick={() => onDelete(mail)} className="detail-action text-rose-500" title={t('删除', 'Delete')}><Trash2 size={16} /></button></div></div>
           </header>
           <div className="my-2 h-px shrink-0 bg-slate-100 md:my-2.5" />
           <div className="mail-detail-body min-h-0 flex-1 overflow-hidden">
-            {iframeDocument ? <iframe title={`mail-${mail.id}`} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={iframeDocument} referrerPolicy="no-referrer" className="mail-frame" /> : <pre className="mail-text">{text || mail.preview || '邮件正文仍在后台同步，请稍后刷新。'}</pre>}
+            {iframeDocument ? <iframe title={`mail-${mail.id}`} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={iframeDocument} referrerPolicy="no-referrer" className="mail-frame" /> : <pre className="mail-text">{text || mail.preview || t('邮件正文仍在后台同步，请稍后刷新。', 'Message body is still syncing. Please refresh later.')}</pre>}
           </div>
-          {parsed && mail.attachments.length > 0 && <div className="mt-2.5 shrink-0"><h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><Paperclip size={16} /> 附件 ({mail.attachments.length})</h4><div className="grid max-h-24 gap-2 overflow-y-auto sm:grid-cols-2">{mail.attachments.map((attachment) => <a key={attachment.id} href={attachment.url} download={attachment.filename} className="flex items-center justify-between rounded-2xl border border-slate-200 p-2 transition hover:bg-slate-50"><div className="flex min-w-0 items-center gap-2"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-[10px] font-bold uppercase text-slate-700">{attachment.filename.split('.').pop() || 'file'}</div><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-700">{attachment.filename}</p><p className="text-[11px] text-slate-400">{attachment.size}</p></div></div><Download size={14} className="text-slate-400" /></a>)}</div></div>}
-          <footer className="mt-2.5 flex shrink-0 flex-wrap gap-2 border-t border-slate-100 pt-2.5"><button className="btn-secondary compact" onClick={() => onReply(mail)}><Reply size={15} /> 回复</button><button className="btn-secondary compact" onClick={() => onForward(mail)}><MoreHorizontal size={15} /> 转发</button>{parsed && mail.raw && emlUrl && <a className="btn-secondary compact" href={emlUrl} download={`${mail.id}.eml`}><Download size={15} /> 下载 EML</a>}<button className="btn-danger compact" onClick={() => onDelete(mail)}><Trash2 size={15} /> 删除</button></footer>
+          {parsed && mail.attachments.length > 0 && <div className="mt-2.5 shrink-0"><h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><Paperclip size={16} /> {t('附件', 'Attachments')} ({mail.attachments.length})</h4><div className="grid max-h-24 gap-2 overflow-y-auto sm:grid-cols-2">{mail.attachments.map((attachment) => <a key={attachment.id} href={attachment.url} download={attachment.filename} className="flex items-center justify-between rounded-2xl border border-slate-200 p-2 transition hover:bg-slate-50"><div className="flex min-w-0 items-center gap-2"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-[10px] font-bold uppercase text-slate-700">{attachment.filename.split('.').pop() || 'file'}</div><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-700">{attachment.filename}</p><p className="text-[11px] text-slate-400">{attachment.size}</p></div></div><Download size={14} className="text-slate-400" /></a>)}</div></div>}
+          <footer className="mt-2.5 flex shrink-0 flex-wrap gap-2 border-t border-slate-100 pt-2.5"><button className="btn-secondary compact" onClick={() => onReply(mail)}><Reply size={15} /> {t('回复', 'Reply')}</button><button className="btn-secondary compact" onClick={() => onForward(mail)}><MoreHorizontal size={15} /> {t('转发', 'Forward')}</button>{parsed && mail.raw && emlUrl && <a className="btn-secondary compact" href={emlUrl} download={`${mail.id}.eml`}><Download size={15} /> {t('下载 EML', 'Download EML')}</a>}<button className="btn-danger compact" onClick={() => onDelete(mail)}><Trash2 size={15} /> {t('删除', 'Delete')}</button></footer>
         </article>
       </div>
     </div>

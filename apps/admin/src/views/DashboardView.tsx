@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import { PenLine, RefreshCw, Settings } from 'lucide-react';
 import { cls } from '../lib/format';
+import { getRuntimeLocale, localeText } from '../lib/locale';
 import type { OpenSettings, Statistics } from '../types/api';
 import type { MenuKey } from '../components/Shell';
 import {
@@ -42,13 +43,13 @@ function StatCard({ icon: Icon, label, value, tone = 'neutral' }: { icon: Dashbo
   );
 }
 
-const capabilityLabels: Array<[string, keyof OpenSettings]> = [
-  ['开放注册', 'enableUserCreateEmail'],
-  ['匿名创建限制', 'disableAnonymousUserCreateEmail'],
-  ['用户删除邮件', 'enableUserDeleteEmail'],
-  ['Webhook', 'enableWebhook'],
-  ['R2/S3 附件', 'isS3Enabled'],
-  ['地址密码', 'enableAddressPassword'],
+const capabilityLabels: Array<[string, string, keyof OpenSettings]> = [
+  ['开放注册', 'Open registration', 'enableUserCreateEmail'],
+  ['匿名创建限制', 'Anonymous creation limit', 'disableAnonymousUserCreateEmail'],
+  ['用户删除邮件', 'User mail deletion', 'enableUserDeleteEmail'],
+  ['Webhook', 'Webhook', 'enableWebhook'],
+  ['R2/S3 附件', 'R2/S3 attachments', 'isS3Enabled'],
+  ['地址密码', 'Address password', 'enableAddressPassword'],
 ];
 
 const capabilityIconMap: Partial<Record<keyof OpenSettings, DashboardIcon>> = {
@@ -61,7 +62,9 @@ const capabilityIconMap: Partial<Record<keyof OpenSettings, DashboardIcon>> = {
 };
 
 export function DashboardView({ stats, loading, openSettings, refresh, setActiveMenu }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void; setActiveMenu: (menu: MenuKey) => void }) {
-  const capabilities = capabilityLabels.map(([label, key]) => ({ label, key, enabled: Boolean(openSettings?.[key]) }));
+  const locale = getRuntimeLocale();
+  const t = (zh: string, en: string) => localeText(zh, en, locale);
+  const capabilities = capabilityLabels.map(([zh, en, key]) => ({ label: t(zh, en), key, enabled: Boolean(openSettings?.[key]) }));
 
   return (
     <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6">
@@ -72,44 +75,44 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
               <div className="dashboard-hero-mark hidden shrink-0 sm:flex" aria-hidden="true"><HeroOrbitLogo className="dashboard-hero-logo" /></div>
               <div className="min-w-0">
               <p className="dashboard-hero-kicker text-sm">Cloudflare Temp Email Admin PWA</p>
-              <h2 className="dashboard-hero-title mt-2 text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">临时邮箱后台已就绪</h2>
-              <p className="dashboard-hero-copy mt-3 max-w-2xl text-sm leading-6">仪表盘用于快速判断系统是否正常、查看核心入口，并执行刷新、写邮件、进入设置等常用动作。</p>
+              <h2 className="dashboard-hero-title mt-2 text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">{t('临时邮箱后台已就绪', 'Temp mail admin is ready')}</h2>
+              <p className="dashboard-hero-copy mt-3 max-w-2xl text-sm leading-6">{t('仪表盘用于快速判断系统是否正常、查看核心入口，并执行刷新、写邮件、进入设置等常用动作。', 'Use the dashboard to check system health, jump to key areas, refresh data, compose mail, and open settings quickly.')}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button onClick={refresh} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><RefreshCw className={cls('mr-2 inline h-4 w-4', loading && 'animate-spin')} />{loading ? '同步中' : '刷新'}</button>
-              <button onClick={() => setActiveMenu('compose')} className="btn-primary rounded-2xl px-4 py-3 text-sm font-semibold"><PenLine className="mr-2 inline h-4 w-4" />写邮件</button>
-              <button onClick={() => setActiveMenu('settings')} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><Settings className="mr-2 inline h-4 w-4" />系统设置</button>
+              <button onClick={refresh} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><RefreshCw className={cls('mr-2 inline h-4 w-4', loading && 'animate-spin')} />{loading ? t('同步中', 'Syncing') : t('刷新', 'Refresh')}</button>
+              <button onClick={() => setActiveMenu('compose')} className="btn-primary rounded-2xl px-4 py-3 text-sm font-semibold"><PenLine className="mr-2 inline h-4 w-4" />{t('写邮件', 'Compose')}</button>
+              <button onClick={() => setActiveMenu('settings')} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><Settings className="mr-2 inline h-4 w-4" />{t('系统设置', 'Settings')}</button>
             </div>
           </div>
         </section>
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <StatCard icon={InboxLogo} label="收件总数" value={stats.mailCount} tone="mint" />
-          <StatCard icon={SentLogo} label="发件总数" value={stats.sendMailCount} tone="lavender" />
-          <StatCard icon={AddressLogo} label="地址数量" value={stats.addressCount} tone="sky" />
-          <StatCard icon={UserAdminLogo} label="用户数量" value={stats.userCount} tone="soft" />
-          <StatCard icon={ActivityLogo} label="7天活跃地址" value={stats.activeAddressCount7days} tone="peach" />
-          <StatCard icon={TimeLogo} label="30天活跃地址" value={stats.activeAddressCount30days} tone="neutral" />
+          <StatCard icon={InboxLogo} label={t('收件总数', 'Inbox total')} value={stats.mailCount} tone="mint" />
+          <StatCard icon={SentLogo} label={t('发件总数', 'Sent total')} value={stats.sendMailCount} tone="lavender" />
+          <StatCard icon={AddressLogo} label={t('地址数量', 'Addresses')} value={stats.addressCount} tone="sky" />
+          <StatCard icon={UserAdminLogo} label={t('用户数量', 'Users')} value={stats.userCount} tone="soft" />
+          <StatCard icon={ActivityLogo} label={t('7天活跃地址', 'Active addresses 7d')} value={stats.activeAddressCount7days} tone="peach" />
+          <StatCard icon={TimeLogo} label={t('30天活跃地址', 'Active addresses 30d')} value={stats.activeAddressCount30days} tone="neutral" />
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
           <div className="panel p-4 sm:p-5">
-            <h3 className="panel-title">快捷入口</h3>
+            <h3 className="panel-title">{t('快捷入口', 'Quick actions')}</h3>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <button onClick={() => setActiveMenu('address')} className="dashboard-quick-card rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"><span className="dashboard-quick-logo"><AddressLogo className="dashboard-logo-svg" /></span><p className="font-semibold text-slate-800">地址管理</p><p className="mt-1 text-sm text-slate-400">新建邮箱、查看 JWT、清理收发件。</p></button>
-              <button onClick={() => setActiveMenu('inbox')} className="dashboard-quick-card rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"><span className="dashboard-quick-logo"><InboxLogo className="dashboard-logo-svg" /></span><p className="font-semibold text-slate-800">收件箱</p><p className="mt-1 text-sm text-slate-400">查看、解析和复制验证码。</p></button>
+              <button onClick={() => setActiveMenu('address')} className="dashboard-quick-card rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"><span className="dashboard-quick-logo"><AddressLogo className="dashboard-logo-svg" /></span><p className="font-semibold text-slate-800">{t('地址管理', 'Address management')}</p><p className="mt-1 text-sm text-slate-400">{t('新建邮箱、查看 JWT、清理收发件。', 'Create mailboxes, inspect JWTs, and clean inbox/sent items.')}</p></button>
+              <button onClick={() => setActiveMenu('inbox')} className="dashboard-quick-card rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"><span className="dashboard-quick-logo"><InboxLogo className="dashboard-logo-svg" /></span><p className="font-semibold text-slate-800">{t('收件箱', 'Inbox')}</p><p className="mt-1 text-sm text-slate-400">{t('查看、解析和复制验证码。', 'Review, parse, and copy verification codes.')}</p></button>
             </div>
           </div>
           <div className="panel p-4 sm:p-5">
-            <h3 className="panel-title">站点能力</h3>
+            <h3 className="panel-title">{t('站点能力', 'Site capabilities')}</h3>
             <div className="mt-4 space-y-2.5">
               {capabilities.map(({ label, key, enabled }) => {
                 const CapabilityIcon = capabilityIconMap[key] || SettingsLogo;
                 return (
                   <div key={label} className="dashboard-capability-row flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2.5 text-sm">
                     <span className="flex min-w-0 items-center gap-2.5 text-slate-600"><span className="dashboard-capability-logo"><CapabilityIcon className="dashboard-logo-svg" /></span><span className="truncate">{label}</span></span>
-                    <span className={cls('status-pill', enabled && 'enabled')}>{enabled ? '已启用' : '未启用'}</span>
+                    <span className={cls('status-pill', enabled && 'enabled')}>{enabled ? t('已启用', 'Enabled') : t('未启用', 'Disabled')}</span>
                   </div>
                 );
               })}
@@ -122,30 +125,32 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
 }
 
 export function StatsView({ stats, loading, openSettings, refresh }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void }) {
+  const locale = getRuntimeLocale();
+  const t = (zh: string, en: string) => localeText(zh, en, locale);
   const total = Math.max(stats.mailCount + stats.sendMailCount + stats.addressCount + stats.userCount, 1);
   const bars: Array<[string, number, string, string]> = [
-    ['收件', stats.mailCount, 'stat-bar-mint', '平台累计收到的邮件数量'],
-    ['发件', stats.sendMailCount, 'stat-bar-lavender', '平台累计发送的邮件数量'],
-    ['地址', stats.addressCount, 'stat-bar-sky', '已创建或绑定的邮箱地址'],
-    ['用户', stats.userCount, 'stat-bar-peach', '系统用户数量'],
+    [t('收件', 'Inbox'), stats.mailCount, 'stat-bar-mint', t('平台累计收到的邮件数量', 'Total received messages')],
+    [t('发件', 'Sent'), stats.sendMailCount, 'stat-bar-lavender', t('平台累计发送的邮件数量', 'Total sent messages')],
+    [t('地址', 'Addresses'), stats.addressCount, 'stat-bar-sky', t('已创建或绑定的邮箱地址', 'Created or bound mailbox addresses')],
+    [t('用户', 'Users'), stats.userCount, 'stat-bar-peach', t('系统用户数量', 'System users')],
   ];
-  const enabledCount = capabilityLabels.filter(([, key]) => Boolean(openSettings?.[key])).length;
+  const enabledCount = capabilityLabels.filter(([, , key]) => Boolean(openSettings?.[key])).length;
 
   return (
     <div className="stats-view-shell h-full min-h-0 overflow-y-auto p-3 md:p-4 xl:p-6">
       <div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div><h2 className="text-2xl font-bold text-slate-800">统计</h2><p className="mt-1 text-sm text-slate-400">统计页专注指标占比、活跃度和站点能力状态；仪表盘更偏运营总览与快捷操作。</p></div>
-        <button className="btn-secondary" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} /> {loading ? '同步中' : '刷新统计'}</button>
+        <div><h2 className="text-2xl font-bold text-slate-800">{t('统计', 'Stats')}</h2><p className="mt-1 text-sm text-slate-400">{t('统计页专注指标占比、活跃度和站点能力状态；仪表盘更偏运营总览与快捷操作。', 'Stats focuses on ratios, activity, and capability status; the dashboard is for operational overview and quick actions.')}</p></div>
+        <button className="btn-secondary" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} /> {loading ? t('同步中', 'Syncing') : t('刷新统计', 'Refresh stats')}</button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={InboxLogo} label="收件总数" value={stats.mailCount} tone="mint" />
-        <StatCard icon={SentLogo} label="发件总数" value={stats.sendMailCount} tone="lavender" />
-        <StatCard icon={ActivityLogo} label="7天活跃地址" value={stats.activeAddressCount7days} tone="peach" />
-        <StatCard icon={SettingsLogo} label="已启用能力" value={`${enabledCount}/${capabilityLabels.length}`} tone="sky" />
+        <StatCard icon={InboxLogo} label={t('收件总数', 'Inbox total')} value={stats.mailCount} tone="mint" />
+        <StatCard icon={SentLogo} label={t('发件总数', 'Sent total')} value={stats.sendMailCount} tone="lavender" />
+        <StatCard icon={ActivityLogo} label={t('7天活跃地址', 'Active addresses 7d')} value={stats.activeAddressCount7days} tone="peach" />
+        <StatCard icon={SettingsLogo} label={t('已启用能力', 'Enabled capabilities')} value={`${enabledCount}/${capabilityLabels.length}`} tone="sky" />
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <div className="panel p-4 sm:p-5">
-          <div className="mb-4 flex items-center justify-between"><div><h3 className="panel-title">运行占比</h3><p className="panel-subtitle">按当前统计接口返回值计算。</p></div><span className="dashboard-quick-logo"><ChartLogo className="dashboard-logo-svg" /></span></div>
+          <div className="mb-4 flex items-center justify-between"><div><h3 className="panel-title">{t('运行占比', 'Operational mix')}</h3><p className="panel-subtitle">{t('按当前统计接口返回值计算。', 'Calculated from the current statistics API response.')}</p></div><span className="dashboard-quick-logo"><ChartLogo className="dashboard-logo-svg" /></span></div>
           {bars.map(([label, value, color, desc]) => (
             <div className="mb-4" key={label}>
               <div className="mb-2 flex justify-between gap-4 text-sm"><span className="text-slate-500">{label}<em className="ml-2 not-italic text-xs text-slate-400">{desc}</em></span><span className="font-medium text-slate-700">{value}</span></div>
@@ -154,10 +159,10 @@ export function StatsView({ stats, loading, openSettings, refresh }: { stats: St
           ))}
         </div>
         <div className="panel p-4 sm:p-5">
-          <h3 className="panel-title">活跃度</h3>
+          <h3 className="panel-title">{t('活跃度', 'Activity')}</h3>
           <div className="mt-4 space-y-3">
-            <div className="rounded-2xl bg-slate-50 p-3"><p className="text-sm text-slate-400">7 天 / 总地址</p><p className="mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount7days / stats.addressCount) * 100)}%` : '0%'}</p></div>
-            <div className="rounded-2xl bg-slate-50 p-3"><p className="text-sm text-slate-400">30 天 / 总地址</p><p className="mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount30days / stats.addressCount) * 100)}%` : '0%'}</p></div>
+            <div className="rounded-2xl bg-slate-50 p-3"><p className="text-sm text-slate-400">{t('7 天 / 总地址', '7d / total addresses')}</p><p className="mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount7days / stats.addressCount) * 100)}%` : '0%'}</p></div>
+            <div className="rounded-2xl bg-slate-50 p-3"><p className="text-sm text-slate-400">{t('30 天 / 总地址', '30d / total addresses')}</p><p className="mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount30days / stats.addressCount) * 100)}%` : '0%'}</p></div>
           </div>
         </div>
       </div>

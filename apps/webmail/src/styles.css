@@ -1711,3 +1711,566 @@ input {
   from { stroke-dashoffset: 43.9823; }
   to { stroke-dashoffset: 0; }
 }
+
+/* Login polish: quieter form controls and integrated password reveal affordance. */
+.login-card {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--lm-surface) 96%, #f7eef2 4%), var(--lm-surface));
+}
+
+.login-form {
+  gap: 15px;
+}
+
+.login-form label span {
+  font-size: 12.5px;
+  font-weight: 620;
+  letter-spacing: -0.006em;
+}
+
+.login-form input {
+  min-height: 50px;
+  border-radius: 17px;
+  border-color: color-mix(in srgb, var(--lm-border) 88%, var(--lm-accent) 12%);
+  background: color-mix(in srgb, var(--lm-surface) 82%, var(--lm-surface-soft) 18%);
+  font-size: 15px;
+  font-weight: 450;
+  letter-spacing: -0.012em;
+  caret-color: var(--lm-accent-strong);
+  transition:
+    background var(--lm-motion-fast),
+    border-color var(--lm-motion-fast),
+    box-shadow var(--lm-motion-fast),
+    color var(--lm-motion-fast);
+}
+
+.login-form input:hover {
+  border-color: color-mix(in srgb, var(--lm-border-strong) 72%, var(--lm-accent) 28%);
+  background: color-mix(in srgb, var(--lm-surface) 92%, var(--lm-accent-soft) 8%);
+}
+
+.login-form input:focus {
+  border-color: color-mix(in srgb, var(--lm-accent) 54%, var(--lm-border));
+  background: color-mix(in srgb, var(--lm-surface) 96%, var(--lm-accent-soft) 4%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lm-accent) 14%, transparent);
+}
+
+.login-form input:-webkit-autofill,
+.login-form input:-webkit-autofill:hover,
+.login-form input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--lm-text);
+  box-shadow: 0 0 0 1000px color-mix(in srgb, var(--lm-surface) 92%, var(--lm-accent-soft) 8%) inset,
+    0 0 0 3px color-mix(in srgb, var(--lm-accent) 10%, transparent);
+  transition: background-color 9999s ease-out 0s;
+}
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrap input {
+  padding-right: 52px !important;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 13px;
+  color: color-mix(in srgb, var(--lm-muted) 86%, var(--lm-text) 14%);
+  background: transparent;
+  box-shadow: none;
+  opacity: .72;
+  cursor: pointer;
+  transition:
+    opacity var(--lm-motion-fast),
+    background var(--lm-motion-fast),
+    color var(--lm-motion-fast),
+    transform var(--lm-motion-fast);
+}
+
+.password-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible,
+.password-toggle[aria-pressed="true"] {
+  opacity: 1;
+  color: var(--lm-accent-strong);
+  background: color-mix(in srgb, var(--lm-accent-soft) 72%, transparent);
+}
+
+.password-toggle:active {
+  transform: translateY(-50%) scale(.96);
+}
+
+.login-button {
+  min-height: 50px;
+  border-radius: 17px;
+  color: #f7f4f2;
+  background: #2f2b2d;
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.012em;
+  box-shadow: 0 14px 28px rgba(47, 43, 45, .14);
+}
+
+.login-button:hover {
+  color: #fbf8f6;
+  background: #3c3639;
+  box-shadow: 0 16px 32px rgba(47, 43, 45, .18);
+}
+
+.login-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--lm-accent) 20%, transparent),
+    0 16px 32px rgba(47, 43, 45, .16);
+}
+
+.login-button[aria-busy="true"] {
+  color: color-mix(in srgb, #f7f4f2 80%, transparent);
+  background: #3a3538;
+  cursor: wait;
+}
+
+.button-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-top-color: currentColor;
+  animation: spin .78s linear infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .login-card {
+    background: var(--lm-surface);
+  }
+
+  .login-button {
+    color: #ede7e4;
+    background: #393437;
+    box-shadow: none;
+  }
+
+  .login-button:hover {
+    color: #f5efec;
+    background: #474043;
+  }
+}
+
+/* Mail list top-edge fix: selected rows should tint, not move under the scroll clip. */
+.mail-list {
+  padding: 4px 2px 10px 0;
+  scroll-padding-top: 8px;
+}
+
+.mail-row,
+.mail-row:hover,
+.mail-row.selected {
+  transform: none;
+}
+
+.mail-row:hover {
+  border-color: color-mix(in srgb, var(--lm-border-strong) 82%, var(--lm-accent) 18%);
+  background: color-mix(in srgb, var(--lm-surface) 96%, var(--lm-accent-soft) 4%);
+}
+
+.mail-row.selected {
+  border-color: color-mix(in srgb, var(--lm-accent) 38%, var(--lm-border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-accent) 12%, transparent);
+}
+
+@media (max-width: 760px) {
+  .toolbar {
+    margin-bottom: 13px;
+  }
+
+  .mail-list {
+    padding-top: 5px;
+    padding-bottom: 14px;
+  }
+}
+
+/* Locale-aware typography: Chinese-first by default, English-optimized on demand. */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --font-brand: "Snell Roundhand", "Segoe Script", "Lucida Handwriting", "Brush Script MT", "Baskerville Italic", "Georgia", cursive;
+  --fw-body: 400;
+  --fw-subtle: 450;
+  --fw-medium: 500;
+  --fw-strong: 600;
+  --fw-emphasis: 680;
+  --lm-font-ui: var(--font-ui);
+}
+:root[data-font-mode="en"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Aptos Display", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+}
+html,
+body,
+#root,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui) !important;
+}
+.brand-wordmark {
+  font-family: var(--font-brand) !important;
+}
+.detail-header h1,
+.mail-row-top strong,
+.empty-state h1 {
+  font-family: var(--font-display) !important;
+  font-weight: var(--fw-strong) !important;
+}
+.login-form label span,
+.mail-row-from,
+.mail-row-preview,
+.detail-header p,
+.meta-grid dt,
+.end-note,
+.list-empty {
+  font-weight: var(--fw-subtle) !important;
+}
+.address-copy-button,
+.code-copy-button,
+.mail-view-tabs button,
+.primary-button,
+.ghost-button,
+.danger-button,
+.auto-refresh-button,
+.load-more {
+  font-family: var(--font-ui) !important;
+  font-weight: var(--fw-strong) !important;
+}
+.plain-body {
+  font-family: var(--font-ui) !important;
+  font-weight: var(--fw-body);
+}
+.source-body {
+  font-family: var(--font-mono) !important;
+}
+.webmail-locale-toggle {
+  display: inline-flex;
+  min-width: 2.45rem;
+  min-height: 2.45rem;
+  align-items: center;
+  justify-content: center;
+  gap: .38rem;
+  border: 1px solid var(--lm-border);
+  border-radius: 14px;
+  color: var(--lm-text-soft);
+  background: var(--lm-surface-soft);
+  font-size: 12px;
+  font-weight: var(--fw-strong);
+  cursor: pointer;
+  transition: background var(--lm-motion-fast), color var(--lm-motion-fast), border-color var(--lm-motion-fast), transform var(--lm-motion-fast);
+}
+.webmail-locale-toggle:hover {
+  color: var(--lm-text);
+  background: var(--lm-surface-muted);
+  border-color: var(--lm-border-strong);
+}
+.webmail-locale-toggle:active {
+  transform: scale(.97);
+}
+.login-language-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .55rem;
+  margin-top: 18px;
+  color: var(--lm-muted);
+  font-size: 12.5px;
+  font-weight: var(--fw-subtle);
+  letter-spacing: -0.01em;
+}
+.login-language-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .32rem;
+  color: color-mix(in srgb, var(--lm-muted) 88%, var(--lm-text) 12%);
+}
+.login-language-icon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .72;
+}
+.login-language-options {
+  display: inline-flex;
+  align-items: center;
+  gap: .34rem;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--lm-muted) 88%, var(--lm-text) 12%);
+}
+.login-language-options button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 .45rem;
+  color: inherit;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: var(--fw-medium);
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: color var(--lm-motion-fast), background var(--lm-motion-fast), transform var(--lm-motion-fast);
+}
+.login-language-options button:hover {
+  color: var(--lm-text);
+  background: color-mix(in srgb, var(--lm-surface-soft) 78%, transparent);
+}
+.login-language-options button.active {
+  color: var(--lm-text);
+  font-weight: var(--fw-strong);
+  background: color-mix(in srgb, var(--lm-accent-soft) 78%, transparent);
+}
+.login-language-options button:active {
+  transform: scale(.96);
+}
+.login-language-options span {
+  opacity: .48;
+}
+.toolbar {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  position: relative;
+  z-index: 30;
+  overflow: visible;
+  contain: layout;
+}
+.webmail-locale-menu-root {
+  position: relative;
+  z-index: 80;
+  display: inline-flex;
+  min-width: 0;
+}
+.toolbar-locale-toggle {
+  min-width: 2.75rem;
+  padding: 0 .72rem;
+  color: color-mix(in srgb, var(--lm-text-soft) 88%, var(--lm-text) 12%);
+  background: color-mix(in srgb, var(--lm-surface-soft) 78%, transparent);
+  letter-spacing: -0.012em;
+}
+.toolbar-locale-toggle[aria-expanded="true"] {
+  color: var(--lm-text);
+  border-color: color-mix(in srgb, var(--lm-accent) 28%, var(--lm-border));
+  background: color-mix(in srgb, var(--lm-accent-soft) 72%, var(--lm-surface-soft) 28%);
+}
+.locale-menu-glyph {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .78;
+}
+.locale-menu-chevron {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .54;
+  transition: transform var(--lm-motion-fast), opacity var(--lm-motion-fast);
+}
+.toolbar-locale-toggle[aria-expanded="true"] .locale-menu-chevron {
+  opacity: .78;
+  transform: rotate(180deg);
+}
+.webmail-locale-menu {
+  position: fixed;
+  z-index: 2147483000;
+  display: grid;
+  width: min(10.8rem, calc(100vw - 16px));
+  gap: .22rem;
+  border: 1px solid var(--lm-border);
+  border-radius: 16px;
+  padding: .38rem;
+  background: color-mix(in srgb, var(--lm-surface) 96%, transparent);
+  box-shadow: 0 18px 46px rgba(24, 24, 27, .14), inset 0 1px 0 rgba(255,255,255,.62);
+  transform-origin: top right;
+  animation: webmailLocaleMenuIn .16s cubic-bezier(.16, 1, .3, 1);
+  isolation: isolate;
+}
+.mail-list {
+  position: relative;
+  z-index: 1;
+}
+.webmail-locale-menu button {
+  display: flex;
+  min-height: 2.35rem;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65rem;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 .68rem;
+  color: var(--lm-text-soft);
+  background: transparent;
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--lm-motion-fast), color var(--lm-motion-fast), transform var(--lm-motion-fast);
+}
+.webmail-locale-menu button:hover,
+.webmail-locale-menu button.active {
+  color: var(--lm-text);
+  background: color-mix(in srgb, var(--lm-surface-soft) 78%, var(--lm-accent-soft) 22%);
+}
+.webmail-locale-menu button:active {
+  transform: scale(.985);
+}
+.webmail-locale-menu em {
+  display: inline-grid;
+  min-width: 1.7rem;
+  height: 1.38rem;
+  place-items: center;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--lm-text-soft) 88%, var(--lm-text) 12%);
+  background: color-mix(in srgb, var(--lm-surface-soft) 82%, transparent);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: var(--fw-strong);
+}
+.webmail-locale-menu button.active em {
+  color: var(--lm-accent-strong);
+  background: var(--lm-accent-soft);
+}
+@keyframes webmailLocaleMenuIn {
+  from { opacity: 0; transform: translateY(-4px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 380px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
+  .toolbar-locale-toggle {
+    min-width: 2.55rem;
+    padding: 0 .5rem;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  .webmail-locale-menu {
+    background: color-mix(in srgb, var(--lm-surface) 94%, transparent);
+    border-color: var(--lm-border);
+    box-shadow: 0 18px 46px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.035);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .webmail-locale-menu {
+    animation: none !important;
+  }
+}
+@media (max-width: 520px) {
+  .login-language-switch {
+    margin-top: 16px;
+    flex-wrap: wrap;
+    row-gap: .28rem;
+  }
+}
+
+/* Final detail-switch stability pass:
+   Mail content should switch like a native reader, without text fade/translate flicker. */
+.reader .mail-detail,
+.reader .detail-header,
+.reader .mail-body-shell {
+  animation: none !important;
+}
+
+.reader .mail-detail,
+.reader .detail-header h1,
+.reader .detail-header p,
+.reader .detail-title-block,
+.reader .meta-grid,
+.reader .mail-view-tabs,
+.reader .plain-body,
+.reader .source-body {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.reader .detail-header,
+.reader .mail-body-shell {
+  contain: layout paint;
+}
+
+/* Quiet mailbox empty state: mature mail apps keep this state small and calm. */
+.reader > .empty-state:not(.error-state) {
+  width: min(320px, 82%);
+  opacity: .9;
+}
+
+.reader > .empty-state:not(.error-state) h1 {
+  margin: 0;
+  color: var(--lm-text);
+  font-size: clamp(17px, 1.72vw, 21px) !important;
+  font-weight: var(--fw-strong) !important;
+  letter-spacing: -0.012em;
+  line-height: 1.35;
+}
+
+.reader > .empty-state:not(.error-state) p {
+  display: block;
+  margin-top: .42rem;
+  color: var(--lm-muted);
+  font-size: 13px;
+  font-weight: var(--fw-subtle);
+  line-height: 1.45;
+}
+
+.list-empty {
+  display: grid;
+  gap: .35rem;
+  color: var(--lm-muted);
+  text-align: center;
+}
+
+.list-empty strong {
+  color: var(--lm-text);
+  font-size: 15px;
+  font-weight: var(--fw-strong);
+  letter-spacing: -.012em;
+}
+
+.list-empty span {
+  color: var(--lm-muted);
+  font-size: 12.5px;
+  font-weight: var(--fw-medium) !important;
+}
+
+.mail-image-loading {
+  min-height: 96px;
+  gap: 0;
+  color: var(--lm-muted);
+}

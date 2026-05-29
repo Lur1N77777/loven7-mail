@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createSession, deleteMail, fetchMailPage, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail } from "./api";
 import { clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
 import { clearMailboxCache, readMailboxCache, writeMailboxCache } from "./cache";
 import { clearImageMemoryCache, resolveMailImageAssets } from "./imageMemoryCache";
 import { getMailBodyText, mergeMails, parseMailBatch, sanitizeMailHtml } from "./mailParser";
 import { BrandAvatar } from "./brandIdentity";
+import { applyRuntimeLocale, readInitialLocale, writeLocale, type AppLocale } from "./locale";
 import type { MailPage, ParsedMail, SafeSettings, ShareInfo, SharedMailbox, WebmailSession } from "./types";
 import "./styles.css";
 
@@ -15,11 +17,11 @@ type LoadingState = "boot" | "login" | "sync" | "idle";
 type MobilePane = "list" | "reader";
 type MailViewMode = "html" | "text" | "source";
 
-function formatDate(value?: string) {
+function formatDate(value: string | undefined, locale: AppLocale) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(locale, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -27,8 +29,8 @@ function formatDate(value?: string) {
   }).format(date);
 }
 
-function getSender(mail: ParsedMail) {
-  return mail.from?.name || mail.from?.address || "未知发件人";
+function getSender(mail: ParsedMail, locale: AppLocale = "zh-CN") {
+  return mail.from?.name || mail.from?.address || (locale === "en-US" ? "Unknown sender" : "未知发件人");
 }
 
 function maxMailId(mails: ParsedMail[]) {
@@ -44,8 +46,8 @@ function isShareSession(session: WebmailSession | null): session is WebmailSessi
   return Boolean(session?.shareToken && session.shareMailboxId);
 }
 
-function getMailboxLabel(mailbox: SharedMailbox) {
-  return mailbox.address || `邮箱 #${mailbox.id}`;
+function getMailboxLabel(mailbox: SharedMailbox, locale: AppLocale = "zh-CN") {
+  return mailbox.address || `${locale === "en-US" ? "Mailbox" : "邮箱"} #${mailbox.id}`;
 }
 
 async function copyText(value: string) {
@@ -77,10 +79,300 @@ function BrandLogo({ variant = "regular" }: { variant?: "hero" | "regular" | "co
   );
 }
 
+function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {visible ? (
+        <>
+          <path d="M3.7 5.2 20.3 18.8" />
+          <path d="M9.9 9.1a3 3 0 0 0 4.2 4.2" />
+          <path d="M6.5 7.4C4.8 8.5 3.4 10 2.5 12c1.8 3.7 5.3 6 9.5 6 1.6 0 3.1-.3 4.4-1" />
+          <path d="M11.1 6.1c.3 0 .6-.1.9-.1 4.2 0 7.7 2.3 9.5 6a11.1 11.1 0 0 1-2.2 3" />
+        </>
+      ) : (
+        <>
+          <path d="M2.5 12c1.8-3.7 5.3-6 9.5-6s7.7 2.3 9.5 6c-1.8 3.7-5.3 6-9.5 6s-7.7-2.3-9.5-6Z" />
+          <path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function LanguageGlyph({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="8.4" />
+      <path d="M3.8 12h16.4" />
+      <path d="M12 3.6c2.1 2.3 3.2 5.1 3.2 8.4s-1.1 6.1-3.2 8.4" />
+      <path d="M12 3.6C9.9 5.9 8.8 8.7 8.8 12s1.1 6.1 3.2 8.4" />
+    </svg>
+  );
+}
+
+function MenuChevron() {
+  return (
+    <svg className="locale-menu-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M4.2 6.4 8 10l3.8-3.6" />
+    </svg>
+  );
+}
+
+function WebmailLocaleMenu({ locale, setLocale, title, label }: {
+  locale: AppLocale;
+  setLocale: (locale: AppLocale) => void;
+  title: string;
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const options: Array<{ value: AppLocale; label: string; short: string }> = [
+    { value: "zh-CN", label: "中文", short: "中" },
+    { value: "en-US", label: "English", short: "EN" },
+  ];
+
+  const updateMenuPosition = useCallback(() => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect || typeof window === "undefined") return;
+    const width = Math.min(180, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const top = Math.min(rect.bottom + 8, window.innerHeight - 96);
+    setMenuPosition({ top, left });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open) updateMenuPosition();
+  }, [open, updateMenuPosition]);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const onReposition = () => updateMenuPosition();
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onReposition, { passive: true });
+    window.addEventListener("orientationchange", onReposition, { passive: true });
+    window.addEventListener("scroll", onReposition, { passive: true, capture: true });
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("orientationchange", onReposition);
+      window.removeEventListener("scroll", onReposition, { capture: true });
+    };
+  }, [open, updateMenuPosition]);
+
+  const current = options.find((option) => option.value === locale) || options[0];
+
+  return (
+    <div className="webmail-locale-menu-root" ref={rootRef}>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="webmail-locale-toggle toolbar-locale-toggle"
+        title={title}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <LanguageGlyph className="locale-menu-glyph" />
+        <span>{current.short}</span>
+        <MenuChevron />
+      </button>
+      {open && typeof document !== "undefined" ? createPortal(
+        <div
+          ref={menuRef}
+          className="webmail-locale-menu"
+          role="menu"
+          aria-label={label}
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+        >
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={locale === option.value}
+              className={locale === option.value ? "active" : ""}
+              onClick={() => {
+                setLocale(option.value);
+                setOpen(false);
+              }}
+            >
+              <span>{option.label}</span>
+              <em>{option.short}</em>
+            </button>
+          ))}
+        </div>
+      , document.body) : null}
+    </div>
+  );
+}
+
+const UI_COPY = {
+  "zh-CN": {
+    bootLogin: "正在验证访问凭证",
+    boot: "正在启动邮箱",
+    loginIntro: "请输入管理员提供的邮箱与密码",
+    emailLabel: "邮箱地址",
+    passwordLabel: "密码",
+    passwordPlaceholder: "请输入密码",
+    showPassword: "显示密码",
+    hidePassword: "隐藏密码",
+    loginButton: "登录邮箱",
+    loggingIn: "正在登录…",
+    localeTitle: "切换到 English",
+    languageLabel: "界面语言",
+    currentMailbox: "当前邮箱",
+    sharedMailbox: "共享邮箱",
+    selectMailbox: "选择邮箱",
+    copied: "已复制",
+    copyAddressTitle: "点击复制邮箱地址",
+    autoRefreshTitleOn: "已开启：每 10 秒自动刷新",
+    autoRefreshTitleOff: "开启每 10 秒自动刷新",
+    refreshTitleOn: "圆环显示距离下次自动刷新约 10 秒",
+    refreshTitleOff: "手动刷新",
+    refresh: "刷新",
+    auto: "自动",
+    logout: "退出",
+    noContent: "(无内容)",
+    verificationCode: "验证码",
+    emptyList: "暂无邮件",
+    loadMore: "加载更多历史",
+    allLoaded: "已加载全部邮件",
+    sidebarLabel: "邮箱侧栏",
+    readerLabel: "邮件内容",
+    loadFailed: "加载失败",
+    retry: "重试",
+    backToList: "返回列表",
+    copyCode: "复制验证码",
+    copyBody: "复制正文",
+    bodyCopied: "正文已复制",
+    hideMail: "删除邮件",
+    delete: "删除",
+    sender: "发件人",
+    recipient: "收件人",
+    attachments: "附件",
+    none: "无",
+    mailFormat: "邮件显示格式",
+    htmlFormat: "HTML 格式",
+    textFormat: "显示文本格式",
+    sourceFormat: "显示源码格式",
+    optimizingImages: "加载中…",
+    noSource: "(无源码)",
+    emptyTitle: "暂无邮件",
+    emptyBody: "等待刷新新邮件",
+    credentialsRequired: "请输入邮箱和密码",
+    wrongPassword: "邮箱或密码错误",
+    loginFailed: "登录失败",
+    syncFailed: "同步失败",
+    currentAddress: "当前邮箱",
+    noSharedMailbox: "共享链接内没有可用邮箱",
+    refreshed: "已刷新",
+    refreshFailed: "刷新失败",
+    loadFailedToast: "加载失败",
+    switchFailed: "切换邮箱失败",
+    autoOn: "自动刷新已开启",
+    autoOff: "自动刷新已关闭",
+    codeCopied: "验证码已复制",
+    newMails: (count: number) => `新增 ${count} 封邮件`,
+    newShort: (count: number) => `新增 ${count}`,
+    hideNotAllowed: "该共享链接不允许删除邮件",
+    hideConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？删除后此链接将不再显示这封邮件。`,
+    hidden: "邮件已删除",
+    deleteConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？`,
+    deleted: "邮件已删除",
+  },
+  "en-US": {
+    bootLogin: "Verifying access",
+    boot: "Starting mailbox",
+    loginIntro: "Enter the mailbox and password from your administrator",
+    emailLabel: "Email address",
+    passwordLabel: "Password",
+    passwordPlaceholder: "Enter password",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
+    loginButton: "Open mailbox",
+    loggingIn: "Signing in…",
+    localeTitle: "切换到中文",
+    languageLabel: "Language",
+    currentMailbox: "Current mailbox",
+    sharedMailbox: "Shared mailbox",
+    selectMailbox: "Choose mailbox",
+    copied: "Copied",
+    copyAddressTitle: "Copy mailbox address",
+    autoRefreshTitleOn: "On: auto refresh every 10 seconds",
+    autoRefreshTitleOff: "Turn on 10-second auto refresh",
+    refreshTitleOn: "Ring shows about 10 seconds until the next refresh",
+    refreshTitleOff: "Refresh now",
+    refresh: "Refresh",
+    auto: "Auto",
+    logout: "Exit",
+    noContent: "(No content)",
+    verificationCode: "Code",
+    emptyList: "No mail",
+    loadMore: "Load older mail",
+    allLoaded: "All mail loaded",
+    sidebarLabel: "Mailbox sidebar",
+    readerLabel: "Message content",
+    loadFailed: "Load failed",
+    retry: "Retry",
+    backToList: "Back to list",
+    copyCode: "Copy code",
+    copyBody: "Copy body",
+    bodyCopied: "Body copied",
+    hideMail: "Delete mail",
+    delete: "Delete",
+    sender: "From",
+    recipient: "To",
+    attachments: "Attachments",
+    none: "None",
+    mailFormat: "Message format",
+    htmlFormat: "HTML",
+    textFormat: "Text",
+    sourceFormat: "Source",
+    optimizingImages: "Loading…",
+    noSource: "(No source)",
+    emptyTitle: "No mail",
+    emptyBody: "Waiting for new mail",
+    credentialsRequired: "Enter email and password",
+    wrongPassword: "Incorrect email or password",
+    loginFailed: "Login failed",
+    syncFailed: "Sync failed",
+    currentAddress: "Current mailbox",
+    noSharedMailbox: "No available mailbox in this shared link",
+    refreshed: "Refreshed",
+    refreshFailed: "Refresh failed",
+    loadFailedToast: "Load failed",
+    switchFailed: "Mailbox switch failed",
+    autoOn: "Auto refresh on",
+    autoOff: "Auto refresh off",
+    codeCopied: "Verification code copied",
+    newMails: (count: number) => `${count} new message${count === 1 ? "" : "s"}`,
+    newShort: (count: number) => `+${count} new`,
+    hideNotAllowed: "This shared link does not allow deleting mail",
+    hideConfirm: (subject: string) => `Delete “${subject || "this message"}”? It will no longer appear in this shared link.`,
+    hidden: "Mail deleted",
+    deleteConfirm: (subject: string) => `Delete “${subject || "this message"}”?`,
+    deleted: "Mail deleted",
+  },
+} as const;
+
 function MailHtmlView({ html }: { html: string }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     const root = host.shadowRoot || host.attachShadow({ mode: "open" });
@@ -143,6 +435,8 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [locale, setLocale] = useState<AppLocale>(() => readInitialLocale());
   const [loginError, setLoginError] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -160,11 +454,23 @@ export default function App() {
   const isRefreshingRef = useRef(false);
   const addressCopyTimerRef = useRef<number | null>(null);
   const codeCopyTimerRef = useRef<number | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const copy = UI_COPY[locale];
+  const copyRef = useRef(copy);
+  const localeRef = useRef(locale);
 
   const selectedMail = useMemo(
     () => mails.find((mail) => mail.id === selectedId) || mails[0] || null,
     [mails, selectedId]
   );
+
+  useEffect(() => {
+    writeLocale(locale);
+    applyRuntimeLocale(locale);
+    copyRef.current = UI_COPY[locale];
+    localeRef.current = locale;
+  }, [locale]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -312,14 +618,14 @@ export default function App() {
           }
 
           const added = await syncIncremental(activeSession, cachedMails);
-          if (added > 0) showToast(`新增 ${added} 封邮件`);
+          if (added > 0) showToast(copyRef.current.newMails(added));
         } else {
           await loadFirstPage(activeSession);
         }
         setLoading("idle");
       })()
         .catch((err: Error) => {
-          setError(err.message || "同步失败");
+          setError(err.message || copyRef.current.syncFailed);
           setLoading("idle");
         })
         .finally(() => {
@@ -335,7 +641,7 @@ export default function App() {
     async (jwt: string, address: string, settings?: SafeSettings) => {
       const activeSession: WebmailSession = {
         jwt,
-        address: address || "当前邮箱",
+        address: address || copyRef.current.currentAddress,
         settings,
         cacheKey: await hashToken(`${address || "current"}:${jwt}`),
       };
@@ -352,7 +658,7 @@ export default function App() {
   const activateShareMailbox = useCallback(
     async (token: string, info: ShareInfo, mailboxId: string) => {
       const mailbox = info.addresses.find((item) => item.id === mailboxId) || info.addresses[0];
-      if (!mailbox) throw new Error("共享链接内没有可用邮箱");
+      if (!mailbox) throw new Error(copyRef.current.noSharedMailbox);
       setLoading("login");
       setError(null);
       setLoginError(null);
@@ -366,7 +672,7 @@ export default function App() {
       const settings = await fetchShareSettings(token, mailbox.id).catch(() => undefined);
       const activeSession: WebmailSession = {
         jwt: `share:${token}:${mailbox.id}`,
-        address: settings?.address || mailbox.address || getMailboxLabel(mailbox),
+        address: settings?.address || mailbox.address || getMailboxLabel(mailbox, localeRef.current),
         settings,
         cacheKey: await hashToken(`share:${token}:${mailbox.id}`),
         shareToken: token,
@@ -390,7 +696,7 @@ export default function App() {
       setLoginError(null);
       const result = await createSession(jwt);
       const activeJwt = result.jwt || jwt;
-      const address = result.address || result.settings?.address || "当前邮箱";
+      const address = result.address || result.settings?.address || copyRef.current.currentAddress;
       await activateSession(activeJwt, address, result.settings);
     },
     [activateSession]
@@ -401,7 +707,11 @@ export default function App() {
       event.preventDefault();
       const cleanEmail = email.trim();
       if (!cleanEmail || !password) {
-        setLoginError("请输入邮箱和密码");
+        setLoginError(copy.credentialsRequired);
+        window.setTimeout(() => {
+          if (!cleanEmail) emailInputRef.current?.focus();
+          else passwordInputRef.current?.focus();
+        }, 0);
         return;
       }
       setLoading("login");
@@ -409,16 +719,17 @@ export default function App() {
       setLoginError(null);
       try {
         const result = await createSession({ email: cleanEmail, password });
-        if (!result.jwt) throw new Error("邮箱或密码错误");
+        if (!result.jwt) throw new Error(copy.wrongPassword);
         const address = result.address || result.settings?.address || cleanEmail;
         await activateSession(result.jwt, address, result.settings);
         setPassword("");
       } catch (err) {
-        setLoginError(err instanceof Error ? err.message : "邮箱或密码错误");
+        setLoginError(err instanceof Error ? err.message : copy.wrongPassword);
         setLoading("idle");
+        window.setTimeout(() => passwordInputRef.current?.focus(), 0);
       }
     },
-    [activateSession, email, password]
+    [activateSession, copy.credentialsRequired, copy.wrongPassword, email, password]
   );
 
   useEffect(() => {
@@ -456,8 +767,8 @@ export default function App() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "登录失败");
-          setLoginError(err instanceof Error ? err.message : "登录失败");
+          setError(err instanceof Error ? err.message : copyRef.current.loginFailed);
+          setLoginError(err instanceof Error ? err.message : copyRef.current.loginFailed);
           setLoading("idle");
         }
       }
@@ -496,17 +807,17 @@ export default function App() {
     if (!options.silent) setRefreshFeedback(null);
     try {
       const added = await syncIncremental(session, mails);
-      if (!options.silent) showRefreshFeedback(added > 0 ? `新增 ${added}` : "已刷新");
+      if (!options.silent) showRefreshFeedback(added > 0 ? copy.newShort(added) : copy.refreshed);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "刷新失败";
+      const message = err instanceof Error ? err.message : copy.refreshFailed;
       setError(message);
-      if (!options.silent) showRefreshFeedback("刷新失败");
+      if (!options.silent) showRefreshFeedback(copy.refreshFailed);
       showToast(message);
     } finally {
       isRefreshingRef.current = false;
       setIsRefreshing(false);
     }
-  }, [mails, session, showRefreshFeedback, showToast, syncIncremental]);
+  }, [copy, mails, session, showRefreshFeedback, showToast, syncIncremental]);
 
   useEffect(() => {
     if (autoRefreshTimerRef.current) {
@@ -539,40 +850,40 @@ export default function App() {
       setMails(next);
       await persist(next, next.length, page.results.length === PAGE_SIZE && next.length < page.count);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : copy.loadFailedToast);
     } finally {
       setLoading("idle");
     }
-  }, [fetchSessionMailPage, loading, mails, nextOffset, persist, session]);
+  }, [copy.loadFailedToast, fetchSessionMailPage, loading, mails, nextOffset, persist, session]);
 
   const removeMail = useCallback(
     async (mail: ParsedMail) => {
       if (!session) return;
       if (isShareSession(session)) {
         if (!shareInfo?.permissions?.hideMail) {
-          showToast("该共享链接不允许删除邮件显示");
+          showToast(copy.hideNotAllowed);
           return;
         }
-        if (!window.confirm(`从此共享链接删除「${mail.subject || "这封邮件"}」的显示？后台真实邮件不会被删除。`)) return;
+        if (!window.confirm(copy.hideConfirm(mail.subject))) return;
         await hideSharedMail(session.shareToken, session.shareMailboxId, mail.id);
         const next = mails.filter((item) => item.id !== mail.id);
         setMails(next);
         setSelectedId(next[0]?.id ?? null);
         if (!next.length) setMobilePane("list");
         await persist(next, Math.max(0, nextOffset - 1), hasMoreHistory);
-        showToast("已从此共享链接删除显示");
+        showToast(copy.hidden);
         return;
       }
-      if (!window.confirm(`删除「${mail.subject || "这封邮件"}」？`)) return;
+      if (!window.confirm(copy.deleteConfirm(mail.subject))) return;
       await deleteMail(session.jwt, mail.id);
       const next = mails.filter((item) => item.id !== mail.id);
       setMails(next);
       setSelectedId(next[0]?.id ?? null);
       if (!next.length) setMobilePane("list");
       await persist(next, Math.max(0, nextOffset - 1), hasMoreHistory);
-      showToast("邮件已删除");
+      showToast(copy.deleted);
     },
-    [hasMoreHistory, mails, nextOffset, persist, session, shareInfo?.permissions?.hideMail, showToast]
+    [copy, hasMoreHistory, mails, nextOffset, persist, session, shareInfo?.permissions?.hideMail, showToast]
   );
 
   const logout = useCallback(async () => {
@@ -599,13 +910,13 @@ export default function App() {
       try {
         await activateShareMailbox(session.shareToken, shareInfo, mailboxId);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "切换邮箱失败";
+        const message = err instanceof Error ? err.message : copy.switchFailed;
         setError(message);
         showToast(message);
         setLoading("idle");
       }
     },
-    [activateShareMailbox, session?.shareMailboxId, session?.shareToken, shareInfo, showToast]
+    [activateShareMailbox, copy.switchFailed, session?.shareMailboxId, session?.shareToken, shareInfo, showToast]
   );
 
   const selectMail = useCallback((mail: ParsedMail) => {
@@ -628,14 +939,16 @@ export default function App() {
     if (!mail.verificationCode) return;
     await copyText(mail.verificationCode);
     setCopiedCodeMailId(mail.id);
-    showToast("验证码已复制");
+    showToast(copy.codeCopied);
     if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
     codeCopyTimerRef.current = window.setTimeout(() => setCopiedCodeMailId(null), 1500);
-  }, [showToast]);
+  }, [copy.codeCopied, showToast]);
 
   const bodyText = selectedMail ? getMailBodyText(selectedMail) : "";
   const activeViewMode: MailViewMode = selectedMail?.html ? mailViewMode : mailViewMode === "source" ? "source" : "text";
-  const selectedResolvedHtml = selectedMail && resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : "";
+  const selectedResolvedHtml = selectedMail?.html
+    ? (resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : selectedMail.html)
+    : "";
 
   useEffect(() => {
     let cancelled = false;
@@ -665,7 +978,7 @@ export default function App() {
         <section className="login-card boot-card">
           <BrandLogo variant="hero" />
           <div className="spinner" />
-          <p>{loading === "login" ? "正在验证访问凭证" : "正在启动邮箱"}</p>
+          <p>{loading === "login" ? copy.bootLogin : copy.boot}</p>
         </section>
       </div>
     );
@@ -678,13 +991,14 @@ export default function App() {
         <section className="login-card">
           <div className="login-brand">
             <BrandLogo variant="regular" />
-            <p>请输入管理员提供的邮箱与密码</p>
+            <p>{copy.loginIntro}</p>
           </div>
 
           <form className="login-form" onSubmit={loginWithPassword}>
             <label>
-              <span>邮箱地址</span>
+              <span>{copy.emailLabel}</span>
               <input
+                ref={emailInputRef}
                 type="email"
                 inputMode="email"
                 autoCapitalize="none"
@@ -695,20 +1009,55 @@ export default function App() {
               />
             </label>
             <label>
-              <span>密码</span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                placeholder="请输入密码"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
+              <span>{copy.passwordLabel}</span>
+              <div className="password-input-wrap">
+                <input
+                  ref={passwordInputRef}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder={copy.passwordPlaceholder}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? copy.hidePassword : copy.showPassword}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                >
+                  <PasswordVisibilityIcon visible={showPassword} />
+                </button>
+              </div>
             </label>
             {loginError || error ? <div className="login-error">{loginError || error}</div> : null}
-            <button className="primary-button login-button" disabled={loading === "login"} type="submit">
-              {loading === "login" ? "正在登录…" : "登录邮箱"}
+            <button className="primary-button login-button" disabled={loading === "login"} type="submit" aria-busy={loading === "login"}>
+              {loading === "login" ? <span className="button-spinner" aria-hidden="true" /> : null}
+              <span>{loading === "login" ? copy.loggingIn : copy.loginButton}</span>
             </button>
           </form>
+          <div className="login-language-switch" aria-label={copy.languageLabel}>
+            <span className="login-language-label"><LanguageGlyph className="login-language-icon" />{copy.languageLabel}</span>
+            <div className="login-language-options" role="group" aria-label={copy.languageLabel}>
+              <button
+                type="button"
+                className={locale === "zh-CN" ? "active" : ""}
+                aria-pressed={locale === "zh-CN"}
+                onClick={() => setLocale("zh-CN")}
+              >
+                中文
+              </button>
+              <span aria-hidden="true">/</span>
+              <button
+                type="button"
+                className={locale === "en-US" ? "active" : ""}
+                aria-pressed={locale === "en-US"}
+                onClick={() => setLocale("en-US")}
+              >
+                English
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     );
@@ -721,46 +1070,47 @@ export default function App() {
   return (
     <div className={`app-shell pane-${mobilePane} ${isShareSession(session) ? "share-mode" : ""}`}>
       {toast ? <div className="toast">{toast}</div> : null}
-      <aside className="sidebar" aria-label="邮箱侧栏">
+      <aside className="sidebar" aria-label={copy.sidebarLabel}>
         <div className="brand-row">
           <BrandLogo variant="compact" />
         </div>
 
         <div className="account-card">
-          <span>{isShareSession(session) ? "共享邮箱" : "当前邮箱"}</span>
+          <span>{isShareSession(session) ? copy.sharedMailbox : copy.currentMailbox}</span>
           {isShareSession(session) && (shareInfo?.addresses.length || 0) > 1 ? (
             <label className="mailbox-switcher">
-              <span>选择邮箱</span>
+              <span>{copy.selectMailbox}</span>
               <select
                 value={session.shareMailboxId}
                 onChange={(event) => void switchSharedMailbox(event.target.value)}
                 disabled={loading === "login" || loading === "sync"}
-                aria-label="选择共享邮箱"
+                aria-label={copy.selectMailbox}
               >
                 {shareInfo?.addresses.map((mailbox) => (
-                  <option key={mailbox.id} value={mailbox.id}>{getMailboxLabel(mailbox)}</option>
+                  <option key={mailbox.id} value={mailbox.id}>{getMailboxLabel(mailbox, locale)}</option>
                 ))}
               </select>
             </label>
           ) : null}
           <div className="account-address-row">
-            <button className="address-copy-button" type="button" onClick={copyCurrentAddress} title="点击复制邮箱地址">
+            <button className="address-copy-button" type="button" onClick={copyCurrentAddress} title={copy.copyAddressTitle}>
               {session.address}
             </button>
-            <em className={`copy-hint ${addressCopied ? "visible" : ""}`} aria-live="polite">已复制</em>
+            <em className={`copy-hint ${addressCopied ? "visible" : ""}`} aria-live="polite">{copy.copied}</em>
           </div>
         </div>
 
         <div className="toolbar">
           <button
             className={`primary-button refresh-button ${autoRefreshEnabled ? "auto-refresh-active" : ""}`}
-            disabled={loading === "sync"}
+            disabled={loading === "sync" || isRefreshing}
+            aria-busy={isRefreshing}
             onClick={() => {
               setRefreshCycleKey((key) => key + 1);
               void refresh();
             }}
             style={refreshButtonStyle}
-            title={autoRefreshEnabled ? "圆环显示距离下次自动刷新约 10 秒" : "手动刷新"}
+            title={autoRefreshEnabled ? copy.refreshTitleOn : copy.refreshTitleOff}
           >
             <span key={refreshCycleKey} className="refresh-icon" aria-hidden="true">
               <svg className="refresh-ring" viewBox="0 0 20 20" focusable="false">
@@ -768,28 +1118,29 @@ export default function App() {
                 <circle className="refresh-ring-progress" cx="10" cy="10" r="7" />
               </svg>
             </span>
-            <span>{refreshFeedback || "刷新"}</span>
+            <span>{refreshFeedback || copy.refresh}</span>
           </button>
           <button
             className={`auto-refresh-button ${autoRefreshEnabled ? "active" : ""}`}
             type="button"
             aria-pressed={autoRefreshEnabled}
-            title={autoRefreshEnabled ? "已开启：每 10 秒自动刷新" : "开启每 10 秒自动刷新"}
+            title={autoRefreshEnabled ? copy.autoRefreshTitleOn : copy.autoRefreshTitleOff}
             onClick={() => {
               setAutoRefreshEnabled((enabled) => {
                 const next = !enabled;
-                showToast(next ? "自动刷新已开启" : "自动刷新已关闭");
+                showToast(next ? copy.autoOn : copy.autoOff);
                 return next;
               });
             }}
           >
             <span className="auto-dot" aria-hidden="true" />
-            <span>自动</span>
+            <span>{copy.auto}</span>
           </button>
-          <button className="ghost-button" onClick={logout}>退出</button>
+          <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
+          <button className="ghost-button" onClick={logout}>{copy.logout}</button>
         </div>
 
-        <div className="mail-list" aria-label="邮件列表">
+        <div className="mail-list" aria-label={copy.sidebarLabel}>
           {mails.map((mail) => (
             <div
               key={mail.id}
@@ -805,14 +1156,14 @@ export default function App() {
               }}
             >
               <div className="mail-row-inner">
-                <BrandAvatar sender={mail.from?.address || getSender(mail)} senderName={mail.from?.name || getSender(mail)} size={32} className="mail-list-brand-avatar" />
+                <BrandAvatar sender={mail.from?.address || getSender(mail, locale)} senderName={mail.from?.name || getSender(mail, locale)} size={32} className="mail-list-brand-avatar" />
                 <div className="mail-row-content">
                   <span className="mail-row-top">
                     <strong>{mail.subject}</strong>
-                    <time>{formatDate(mail.date || mail.createdAt)}</time>
+                    <time>{formatDate(mail.date || mail.createdAt, locale)}</time>
                   </span>
-                  <span className="mail-row-from">{getSender(mail)}</span>
-                  <span className="mail-row-preview">{mail.preview || "(无内容)"}</span>
+                  <span className="mail-row-from">{getSender(mail, locale)}</span>
+                  <span className="mail-row-preview">{mail.preview || copy.noContent}</span>
                   {mail.verificationCode ? (
                     <span className="code-row">
                       <button
@@ -823,106 +1174,110 @@ export default function App() {
                           void copyVerificationCode(mail);
                         }}
                       >
-                        验证码 {mail.verificationCode}
+                        {copy.verificationCode} {mail.verificationCode}
                       </button>
-                      <em className={`code-copy-hint ${copiedCodeMailId === mail.id ? "visible" : ""}`} aria-live="polite">已复制</em>
+                      <em className={`code-copy-hint ${copiedCodeMailId === mail.id ? "visible" : ""}`} aria-live="polite">{copy.copied}</em>
                     </span>
                   ) : null}
                 </div>
               </div>
             </div>
           ))}
-          {!mails.length && loading !== "sync" ? <div className="list-empty">暂无邮件</div> : null}
+          {!mails.length && loading !== "sync" ? (
+            <div className="list-empty">
+              <strong>{copy.emptyList}</strong>
+              <span>{copy.emptyBody}</span>
+            </div>
+          ) : null}
         </div>
 
         {hasMoreHistory ? (
           <button className="load-more" disabled={loading === "sync"} onClick={loadMore}>
-            加载更多历史
+            {copy.loadMore}
           </button>
         ) : mails.length ? (
-          <div className="end-note">已显示已加载历史</div>
+          <div className="end-note">{copy.allLoaded}</div>
         ) : null}
       </aside>
 
-      <main className="reader" aria-label="邮件内容">
+      <main className="reader" aria-label={copy.readerLabel}>
         {error && !mails.length ? (
           <section className="empty-state error-state">
-            <h1>加载失败</h1>
+            <h1>{copy.loadFailed}</h1>
             <p>{error}</p>
-            <button className="primary-button" onClick={() => hydrateAndSync(session)}>重试</button>
+            <button className="primary-button" onClick={() => hydrateAndSync(session)}>{copy.retry}</button>
           </section>
         ) : selectedMail ? (
-          <article key={selectedMail.id} className="mail-detail">
-            <button className="mobile-back" onClick={() => setMobilePane("list")}>返回列表</button>
+          <article className="mail-detail">
+            <button className="mobile-back" onClick={() => setMobilePane("list")}>{copy.backToList}</button>
             <header className="detail-header">
-              <BrandAvatar sender={selectedMail.from?.address || getSender(selectedMail)} senderName={selectedMail.from?.name || getSender(selectedMail)} size={42} className="mail-detail-brand-avatar" />
+              <BrandAvatar sender={selectedMail.from?.address || getSender(selectedMail, locale)} senderName={selectedMail.from?.name || getSender(selectedMail, locale)} size={42} className="mail-detail-brand-avatar" />
               <div className="detail-title-block">
                 <h1>{selectedMail.subject}</h1>
-                <p>{getSender(selectedMail)} · {formatDate(selectedMail.date || selectedMail.createdAt)}</p>
+                <p>{getSender(selectedMail, locale)} · {formatDate(selectedMail.date || selectedMail.createdAt, locale)}</p>
               </div>
               <div className="detail-actions">
                 {selectedMail.verificationCode ? (
                   <button className="primary-button" onClick={() => copyVerificationCode(selectedMail)}>
-                    复制验证码
+                    {copy.copyCode}
                   </button>
                 ) : null}
-                <button className="ghost-button" onClick={() => copyText(bodyText).then(() => showToast("正文已复制"))}>复制正文</button>
-                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button className="danger-button" onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? "删除邮件" : "删除"}</button> : null}
+                <button className="ghost-button" onClick={() => copyText(bodyText).then(() => showToast(copy.bodyCopied))}>{copy.copyBody}</button>
+                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button className="danger-button" onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
               </div>
             </header>
 
             {error ? <div className="inline-error">{error}</div> : null}
 
             <dl className="meta-grid">
-              <div><dt>发件人</dt><dd>{selectedMail.from?.address || getSender(selectedMail)}</dd></div>
-              <div><dt>收件人</dt><dd>{selectedMail.to?.map((item) => item.address || item.name).join(", ") || session.address}</dd></div>
-              <div><dt>附件</dt><dd>{selectedMail.attachments?.length ? `${selectedMail.attachments.length} 个` : "无"}</dd></div>
+              <div><dt>{copy.sender}</dt><dd>{selectedMail.from?.address || getSender(selectedMail, locale)}</dd></div>
+              <div><dt>{copy.recipient}</dt><dd>{selectedMail.to?.map((item) => item.address || item.name).join(", ") || session.address}</dd></div>
+              <div><dt>{copy.attachments}</dt><dd>{selectedMail.attachments?.length ? (locale === "en-US" ? `${selectedMail.attachments.length}` : `${selectedMail.attachments.length} 个`) : copy.none}</dd></div>
             </dl>
 
-            <div className="mail-view-tabs" role="tablist" aria-label="邮件显示格式">
+            <div className="mail-view-tabs" role="tablist" aria-label={copy.mailFormat}>
               <button
                 className={activeViewMode === "html" ? "active" : ""}
                 disabled={!selectedMail.html}
                 onClick={() => setMailViewMode("html")}
                 type="button"
               >
-                HTML 格式
+                {copy.htmlFormat}
               </button>
               <button
                 className={activeViewMode === "text" ? "active" : ""}
                 onClick={() => setMailViewMode("text")}
                 type="button"
               >
-                显示文本格式
+                {copy.textFormat}
               </button>
               <button
                 className={activeViewMode === "source" ? "active" : ""}
                 onClick={() => setMailViewMode("source")}
                 type="button"
               >
-                显示源码格式
+                {copy.sourceFormat}
               </button>
             </div>
 
-            <div key={`${selectedMail.id}:${activeViewMode}`} className={`mail-body-shell mode-${activeViewMode}`}>
+            <div className={`mail-body-shell mode-${activeViewMode}`}>
               {activeViewMode === "html" && selectedMail.html ? (
                 selectedResolvedHtml ? (
                   <MailHtmlView html={selectedResolvedHtml} />
                 ) : (
-                  <div className="mail-image-loading">
+                  <div className="mail-image-loading" aria-label={copy.optimizingImages}>
                     <div className="spinner compact-spinner" />
-                    <span>正在优化加载邮件图片…</span>
                   </div>
                 )
               ) : (
-                <pre className={`plain-body ${activeViewMode === "source" ? "source-body" : ""}`}>{activeViewMode === "source" ? selectedMail.raw || "(无源码)" : bodyText || "(无内容)"}</pre>
+                <pre className={`plain-body ${activeViewMode === "source" ? "source-body" : ""}`}>{activeViewMode === "source" ? selectedMail.raw || copy.noSource : bodyText || copy.noContent}</pre>
               )}
             </div>
           </article>
         ) : (
           <section className="empty-state">
-            <h1>暂无邮件</h1>
-            <p>有新邮件时点击刷新即可显示。</p>
+            <h1>{copy.emptyTitle}</h1>
+            {copy.emptyBody ? <p>{copy.emptyBody}</p> : null}
           </section>
         )}
       </main>

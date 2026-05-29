@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2, Lock } from 'lucide-react';
 import type { Requester } from '../lib/api';
 import { isAllowedApiBase, STORAGE_KEYS } from '../lib/constants';
 import { sha256Hex } from '../lib/crypto';
+import { getRuntimeLocale, localeText } from '../lib/locale';
 import { writeAuthCookieMirror, writeLocalStorage, writeSessionStorage } from '../lib/storage';
 import { Modal, type Notify } from './Common';
 import { CredentialButton } from './Shell';
@@ -62,6 +63,8 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
   const [loading, setLoading] = useState(false);
   const turnstileRef = useRef<HTMLDivElement | null>(null);
   const widgetRef = useRef<string | null>(null);
+  const locale = getRuntimeLocale();
+  const t = (zh: string, en: string) => localeText(zh, en, locale);
 
   useEffect(() => {
     if (open) return;
@@ -111,13 +114,13 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
     setLoading(true);
     try {
       const normalizedBase = tmpBase.trim().replace(/\/$/, '');
-      if (!baseAllowed) throw new Error(baseCheck.reason || 'Worker API 地址不受信任');
+      if (!baseAllowed) throw new Error(baseCheck.reason || t('Worker API 地址不受信任', 'Worker API address is not trusted'));
       const withBase = (path: string) => (normalizedBase ? `${normalizedBase}${path}` : path);
       const trimmedAdmin = tmpAdmin.trim();
       const trimmedSite = tmpSite.trim();
       const trimmedAccessToken = tmpAccessToken.trim();
-      if (!trimmedAdmin && !trimmedAccessToken) throw new Error('请填写管理员密码，或填写具备管理员角色的用户 access token');
-      if (turnstileRequired && !cfToken && !trimmedAccessToken) throw new Error('当前 Worker 开启 Turnstile，请先完成校验或填写有效用户管理员 access token');
+      if (!trimmedAdmin && !trimmedAccessToken) throw new Error(t('请填写管理员密码，或填写具备管理员角色的用户 access token', 'Enter an admin password, or provide a user access token with an admin role'));
+      if (turnstileRequired && !cfToken && !trimmedAccessToken) throw new Error(t('当前 Worker 开启 Turnstile，请先完成校验或填写有效用户管理员 access token', 'Turnstile is enabled on this Worker. Complete verification or provide a valid admin user access token'));
       if (trimmedSite) await request(withBase('/open_api/site_login'), { method: 'POST', sitePassword: trimmedSite, body: { password: await sha256Hex(trimmedSite), cf_token: cfToken || undefined } });
       if (trimmedAdmin) await request(withBase('/open_api/admin_login'), { method: 'POST', sitePassword: trimmedSite, body: { password: await sha256Hex(trimmedAdmin), cf_token: cfToken || undefined } });
       setApiBase(normalizedBase);
@@ -139,12 +142,12 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
         userAccessToken: trimmedAccessToken,
         rememberedAt: Date.now(),
       });
-      notify('success', trimmedAdmin ? '管理员认证成功' : '已保存用户管理员 access token');
+      notify('success', trimmedAdmin ? t('管理员认证成功', 'Admin verified') : t('已保存用户管理员 access token', 'Admin user access token saved'));
       setOpen(false);
     } catch (error) {
       setCfToken('');
       resetTurnstile();
-      notify('error', error instanceof Error ? error.message : '认证失败');
+      notify('error', error instanceof Error ? error.message : t('认证失败', 'Authentication failed'));
     } finally {
       setLoading(false);
     }
@@ -152,13 +155,13 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
 
   return <>
     <CredentialButton onClick={() => setOpen(true)} />
-    {open && <Modal title="连接设置" onClose={() => setOpen(false)}>
+    {open && <Modal title={t('连接设置', 'Connection settings')} onClose={() => setOpen(false)}>
       <div className="space-y-3 auth-compact">
         <div className="auth-intro rounded-2xl border border-slate-100 bg-white p-3 text-xs leading-5 text-slate-500">
-          保存一次后会自动记住当前站点配置。建议固定使用正式域名，避免预览域名之间缓存不共享。
+          {t('保存一次后会自动记住当前站点配置。建议固定使用正式域名，避免预览域名之间缓存不共享。', 'Save once and this browser will remember the site configuration. Prefer a stable production domain so preview domains do not split cached credentials.')}
         </div>
         <div>
-          <label className="form-label">Worker API 地址</label>
+          <label className="form-label">{t('Worker API 地址', 'Worker API address')}</label>
           <input
             className="form-input compact-control"
             value={tmpBase}
@@ -175,40 +178,40 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p>{baseCheck.reason}</p>
-                  <button type="button" className="mt-1 underline" onClick={() => setUnlockedHost(true)}>我确认这是受我管理的 Worker，允许使用</button>
+                  <button type="button" className="mt-1 underline" onClick={() => setUnlockedHost(true)}>{t('我确认这是受我管理的 Worker，允许使用', 'I confirm this is my Worker and allow using it')}</button>
                 </div>
               </div>
             </div>
           )}
         </div>
         <div>
-          <label className="form-label">管理员密码</label>
+          <label className="form-label">{t('管理员密码', 'Admin password')}</label>
           <input
             className="form-input compact-control"
             value={tmpAdmin}
             onChange={(event) => setTmpAdmin(event.target.value)}
             type="password"
-            placeholder="ADMIN_PASSWORDS 中配置的密码"
+            placeholder={t('ADMIN_PASSWORDS 中配置的密码', 'Password configured in ADMIN_PASSWORDS')}
             onKeyDown={(event) => { if (isEnterCommit(event)) save(); }}
           />
         </div>
-        <button type="button" className="auth-advanced-toggle" onClick={() => setAdvancedOpen((value) => !value)}>{advancedOpen ? '收起高级选项' : '高级选项：站点密码 / Access Token / Turnstile'}</button>
+        <button type="button" className="auth-advanced-toggle" onClick={() => setAdvancedOpen((value) => !value)}>{advancedOpen ? t('收起高级选项', 'Hide advanced options') : t('高级选项：站点密码 / Access Token / Turnstile', 'Advanced: site password / access token / Turnstile')}</button>
         {advancedOpen && <div className="space-y-3 rounded-2xl border border-slate-100 p-3">
           <div>
-            <label className="form-label">全站访问密码 x-custom-auth（可选）</label>
-            <input className="form-input compact-control" value={tmpSite} onChange={(event) => setTmpSite(event.target.value)} type="password" placeholder="未配置 PASSWORDS 就留空" />
+            <label className="form-label">{t('全站访问密码 x-custom-auth（可选）', 'Site password x-custom-auth (optional)')}</label>
+            <input className="form-input compact-control" value={tmpSite} onChange={(event) => setTmpSite(event.target.value)} type="password" placeholder={t('未配置 PASSWORDS 就留空', 'Leave empty if PASSWORDS is not configured')} />
           </div>
           <div>
-            <label className="form-label">用户管理员 Access Token（可选）</label>
-            <textarea className="form-textarea compact-textarea" value={tmpAccessToken} onChange={(event) => setTmpAccessToken(event.target.value)} placeholder="如果 Worker 使用 ADMIN_USER_ROLE，可填 x-user-access-token" />
+            <label className="form-label">{t('用户管理员 Access Token（可选）', 'Admin user access token (optional)')}</label>
+            <textarea className="form-textarea compact-textarea" value={tmpAccessToken} onChange={(event) => setTmpAccessToken(event.target.value)} placeholder={t('如果 Worker 使用 ADMIN_USER_ROLE，可填 x-user-access-token', 'Use x-user-access-token when the Worker enables ADMIN_USER_ROLE')} />
           </div>
-          {turnstileSiteKey ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div ref={turnstileRef} /><p className="mt-2 text-xs text-slate-700">{turnstileReady ? 'Turnstile 已加载，请完成校验。' : '正在加载 Turnstile；若无法加载，可在下方手动填 cf_token。'}</p></div> : null}
+          {turnstileSiteKey ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div ref={turnstileRef} /><p className="mt-2 text-xs text-slate-700">{turnstileReady ? t('Turnstile 已加载，请完成校验。', 'Turnstile is ready. Complete the challenge.') : t('正在加载 Turnstile；若无法加载，可在下方手动填 cf_token。', 'Loading Turnstile. If it cannot load, enter cf_token manually below.')}</p></div> : null}
           <div>
-            <label className="form-label">Turnstile cf_token（可选）</label>
-            <input className="form-input compact-control" value={cfToken} onChange={(event) => setCfToken(event.target.value)} placeholder="开启 enableGlobalTurnstileCheck 时使用" />
+            <label className="form-label">{t('Turnstile cf_token（可选）', 'Turnstile cf_token (optional)')}</label>
+            <input className="form-input compact-control" value={cfToken} onChange={(event) => setCfToken(event.target.value)} placeholder={t('开启 enableGlobalTurnstileCheck 时使用', 'Used when enableGlobalTurnstileCheck is enabled')} />
           </div>
         </div>}
-        <button onClick={save} disabled={loading || !baseAllowed} className="btn-primary w-full compact">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock size={16} />} 保存并验证</button>
+        <button onClick={save} disabled={loading || !baseAllowed} className="btn-primary w-full compact">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock size={16} />} {t('保存并验证', 'Save and verify')}</button>
       </div>
     </Modal>}
   </>;

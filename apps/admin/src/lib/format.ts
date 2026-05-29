@@ -1,3 +1,5 @@
+import { getRuntimeLocale } from './locale';
+
 export function cls(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(' ');
 }
@@ -29,7 +31,7 @@ export function formatDateTime(value?: string | number | Date | null): string {
   if (!value) return '-';
   const date = parseBackendDate(value);
   if (!date) return String(value);
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getRuntimeLocale(), {
     timeZone: 'Asia/Shanghai',
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
@@ -41,12 +43,13 @@ export function formatShortDate(value?: string | number | Date | null): string {
   const date = parseBackendDate(value);
   if (!date) return String(value);
   const now = new Date();
-  const dayFormatter = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const locale = getRuntimeLocale();
+  const dayFormatter = new Intl.DateTimeFormat(locale, { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' });
   const sameDay = dayFormatter.format(date) === dayFormatter.format(now);
   if (sameDay) {
-    return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+    return new Intl.DateTimeFormat(locale, { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
   }
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'short', day: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat(locale, { timeZone: 'Asia/Shanghai', month: 'short', day: 'numeric' }).format(date);
 }
 
 export function humanBytes(size = 0): string {

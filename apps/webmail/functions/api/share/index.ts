@@ -42,7 +42,10 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       if (!jwt) throw new Error(`地址 #${id} 没有返回 JWT`);
       const address = await validateJwtAddress(workerEnv, jwt);
       if (!address) throw new Error(`地址 #${id} JWT 无法解析邮箱`);
-      const cutoff = mailVisibility === "new" ? await getLatestMailCutoff(workerEnv, jwt) : { sinceMailId: 0, sinceCreatedAt: null };
+      const snapshot = await getLatestMailCutoff(workerEnv, jwt);
+      const cutoff = mailVisibility === "new"
+        ? { sinceMailId: snapshot.sinceMailId, sinceCreatedAt: snapshot.sinceCreatedAt, mailCount: 0 }
+        : { sinceMailId: 0, sinceCreatedAt: null, mailCount: snapshot.mailCount };
       addresses.push({ id: String(id), address, jwt, ...cutoff, hiddenMailIds: [] });
     }
 
@@ -68,7 +71,7 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
         expiresAt: payload.expiresAt,
         mailVisibility: payload.mailVisibility,
         permissions: payload.permissions,
-        addresses: addresses.map(({ id, address }) => ({ id, address })),
+        addresses: addresses.map(({ id, address, mailCount }) => ({ id, address, mailCount })),
       }),
       request
     );

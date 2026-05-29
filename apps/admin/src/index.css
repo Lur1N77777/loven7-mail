@@ -6888,8 +6888,8 @@ h3,
   table-layout: fixed;
 }
 .share-admin-table .share-col-check { width: 44px; }
-.share-admin-table .share-col-url { width: 300px; }
-.share-admin-table .share-col-mailbox { width: 210px; }
+.share-admin-table .share-col-mailbox { width: 330px; }
+.share-admin-table .share-col-suffix { width: 180px; }
 .share-admin-table .share-col-range { width: 112px; }
 .share-admin-table .share-col-date { width: 158px; }
 .share-admin-table .share-col-status { width: 104px; }
@@ -6919,6 +6919,56 @@ h3,
   display: flex;
   justify-content: flex-end;
   gap: .42rem;
+}
+.share-mailbox-list {
+  display: grid;
+  max-height: 5.4rem;
+  gap: .22rem;
+  overflow: auto;
+  padding-right: .18rem;
+  color: var(--color-text);
+}
+.share-mailbox-line {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .86rem;
+  font-weight: 600;
+  letter-spacing: -.012em;
+}
+.share-suffix-cell code {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: .75rem;
+  background: var(--color-surface-soft);
+  padding: .35rem .55rem;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-mobile-addresses {
+  display: grid;
+  max-height: 5rem;
+  gap: .18rem;
+  overflow: auto;
+  padding-right: .12rem;
+}
+.share-mobile-addresses p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: .9rem;
+  font-weight: 650;
+  letter-spacing: -.012em;
+  line-height: 1.35;
+}
+.theme-dark .share-suffix-cell code {
+  background: rgba(255,255,255,.045);
+  color: var(--color-text-soft);
 }
 .share-row-actions .table-action,
 .address-desktop-actions .table-action {
@@ -7094,4 +7144,637 @@ h3,
 .theme-dark .address-floating-action-menu button.danger:hover {
   background: rgba(185,74,93,.14);
   color: #f0b8c2;
+}
+
+/* --- FINAL V22 micro-UX polish: admin profile, mobile more menu, calmer selects --- */
+.admin-profile-avatar {
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+  background: var(--color-surface-soft);
+  letter-spacing: -.02em;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+.admin-profile-avatar.is-connected {
+  color: var(--color-text);
+  background: var(--color-accent-pink-soft);
+  border-color: color-mix(in srgb, var(--color-rose) 18%, var(--color-border));
+}
+.admin-profile-status {
+  max-width: 10.6rem;
+}
+.mobile-more-menu {
+  position: fixed;
+  right: .72rem;
+  bottom: calc(4.2rem + env(safe-area-inset-bottom));
+  z-index: 112;
+  display: grid;
+  width: min(14rem, calc(100vw - 1.4rem));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .32rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.1rem;
+  padding: .42rem;
+  background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, .16), inset 0 1px 0 rgba(255,255,255,.72);
+  backdrop-filter: blur(18px);
+  transform-origin: right bottom;
+  animation: mobileMoreIn .18s cubic-bezier(.16, 1, .3, 1);
+}
+.mobile-more-item {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: flex-start;
+  gap: .42rem;
+  border: 0;
+  border-radius: .82rem;
+  padding: 0 .55rem;
+  color: var(--color-text-soft);
+  background: transparent;
+  font-size: .76rem;
+  font-weight: 560;
+  line-height: 1;
+  transition: background var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
+}
+.mobile-more-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-more-item:hover,
+.mobile-more-item.active {
+  color: var(--color-text);
+  background: var(--color-surface-soft);
+}
+.mobile-more-item:active {
+  transform: scale(.98);
+}
+.theme-dark .admin-profile-avatar {
+  background: var(--color-surface-soft) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text-soft) !important;
+}
+.theme-dark .admin-profile-avatar.is-connected {
+  background: #302A2D !important;
+  border-color: rgba(255,255,255,.08) !important;
+  color: #E0D5DA !important;
+}
+.theme-dark .mobile-more-menu {
+  background: rgba(40,40,43,.96) !important;
+  border-color: var(--color-border) !important;
+  box-shadow: 0 18px 46px rgba(0,0,0,.24) !important;
+}
+.theme-dark .mobile-more-item {
+  color: var(--color-text-soft) !important;
+}
+.theme-dark .mobile-more-item:hover,
+.theme-dark .mobile-more-item.active {
+  color: var(--color-text) !important;
+  background: var(--color-surface-soft) !important;
+}
+@keyframes mobileMoreIn {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 360px) {
+  .mobile-more-menu {
+    right: .5rem;
+    width: calc(100vw - 1rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-more-menu { animation: none !important; }
+}
+
+/* --- FINAL V23 locale-aware typography system --- */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --font-brand: "Snell Roundhand", "Segoe Script", "Lucida Handwriting", "Brush Script MT", "Baskerville Italic", "Georgia", cursive;
+  --fw-body: 400;
+  --fw-subtle: 450;
+  --fw-medium: 500;
+  --fw-strong: 600;
+  --fw-emphasis: 680;
+}
+:root[data-font-mode="en"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Aptos Display", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+}
+html,
+body,
+#root,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-ui) !important;
+}
+code,
+pre,
+.code-area,
+.font-mono {
+  font-family: var(--font-mono) !important;
+}
+main h2,
+.panel-title,
+.dashboard-hero-title,
+.mail-title-heading,
+.mail-detail-subject,
+.settings-card h3,
+.modal-card h2 {
+  font-family: var(--font-display) !important;
+  font-weight: var(--fw-strong) !important;
+}
+.brand-wordmark {
+  font-family: var(--font-brand) !important;
+}
+.sidebar-nav-item,
+.mobile-nav-item,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.sidebar-mini-btn,
+.sidebar-compose-btn,
+.table-action,
+.detail-action,
+.mail-tool-btn,
+.mail-filter-select,
+.form-input,
+.form-select,
+.form-textarea,
+.page-btn,
+.pagination-size {
+  font-family: var(--font-ui) !important;
+}
+.form-label,
+.panel-subtitle,
+.mail-sender,
+.mail-time,
+.text-slate-400,
+.text-slate-500 {
+  font-weight: var(--fw-subtle) !important;
+}
+.mail-subject,
+.address-strong,
+.verify-pill,
+.plain-copy-address {
+  font-weight: var(--fw-strong) !important;
+}
+.mail-row-unread .mail-subject {
+  font-weight: var(--fw-emphasis) !important;
+}
+.locale-mode-toggle,
+.mobile-locale-toggle {
+  font-family: var(--font-ui) !important;
+}
+.locale-mode-toggle {
+  display: flex;
+  min-height: 2.35rem;
+  align-items: center;
+  gap: .45rem;
+  justify-content: space-between;
+  border: 1px solid var(--color-border);
+  border-radius: .9rem;
+  padding: 0 .72rem;
+  color: var(--color-text-soft);
+  background: var(--color-surface);
+  font-size: .76rem;
+  font-weight: var(--fw-medium);
+  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
+}
+.locale-mode-toggle strong {
+  color: var(--color-text);
+  font-weight: var(--fw-strong);
+}
+.locale-mode-toggle em,
+.mobile-locale-toggle {
+  display: inline-grid;
+  min-width: 2rem;
+  height: 1.6rem;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--color-text);
+  background: var(--color-surface-soft);
+  font-size: .72rem;
+  font-style: normal;
+  font-weight: var(--fw-strong);
+}
+.locale-mode-toggle:hover,
+.mobile-locale-toggle:hover {
+  color: var(--color-text);
+  background: var(--color-surface-soft);
+  border-color: var(--color-border-strong);
+}
+.mobile-locale-toggle {
+  min-width: 2.15rem;
+  height: 2rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.theme-dark .locale-mode-toggle,
+.theme-dark .mobile-locale-toggle {
+  background: var(--color-surface-soft) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* --- FINAL V31 share manager information hierarchy + rounded search fix --- */
+.toolbar-field.address-search-field {
+  border-radius: .95rem !important;
+  overflow: hidden !important;
+  background-clip: padding-box !important;
+}
+.toolbar-field.address-search-field input,
+.address-search-field input {
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+.toolbar-field.address-search-field input:focus,
+.address-search-field input:focus {
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.share-admin-table {
+  min-width: 820px !important;
+  table-layout: fixed !important;
+}
+.share-admin-table .share-col-check { width: 44px !important; }
+.share-admin-table .share-col-mailbox { width: auto !important; }
+.share-admin-table .share-col-range { width: 220px !important; }
+.share-admin-table .share-col-actions { width: 176px !important; }
+.share-admin-table th,
+.share-admin-table td {
+  padding-block: .82rem !important;
+}
+.share-mailbox-cell,
+.share-range-cell {
+  white-space: normal !important;
+}
+.share-mailbox-cell-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: .75rem;
+  min-width: 0;
+}
+.share-mailbox-list {
+  max-height: 4.6rem !important;
+  min-width: 0;
+  padding-right: .18rem;
+}
+.share-mailbox-line {
+  color: var(--color-text) !important;
+  font-size: .88rem !important;
+  font-weight: 620 !important;
+  line-height: 1.36 !important;
+}
+.share-status-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .38rem;
+  min-height: 1.7rem;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--share-status-color, #737780) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--share-status-color, #737780) 8%, var(--color-surface));
+  padding: 0 .58rem;
+  color: var(--color-text-soft);
+  font-size: .74rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.share-status-inline i {
+  width: .45rem;
+  height: .45rem;
+  flex: 0 0 .45rem;
+  border-radius: 999px;
+  background: var(--share-status-color, #737780);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--share-status-color, #737780) 12%, transparent);
+}
+.share-status-inline small {
+  color: var(--color-muted);
+  font-size: .7rem;
+  font-weight: 540;
+}
+.share-status-inline.is-active { --share-status-color: #3B946F; }
+.share-status-inline.is-expired { --share-status-color: #B8843C; }
+.share-status-inline.is-revoked { --share-status-color: #C45D68; }
+.share-range-cell {
+  color: var(--color-text-soft);
+}
+.share-range-summary {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem;
+  margin: .38rem 0 0;
+  color: var(--color-muted);
+  font-size: .75rem;
+  line-height: 1.35;
+}
+.share-range-summary span {
+  color: var(--color-text-soft);
+  font-weight: 600;
+}
+.share-range-summary em {
+  color: var(--color-muted);
+  font-style: normal;
+  font-weight: 520;
+}
+.share-mode-pill {
+  min-height: 1.72rem !important;
+  min-width: 0 !important;
+  width: fit-content !important;
+  border-color: var(--color-border) !important;
+  background: var(--color-surface-soft) !important;
+  color: var(--color-text-soft) !important;
+  font-size: .73rem !important;
+  font-weight: 600 !important;
+}
+.share-row-actions {
+  gap: .38rem !important;
+}
+.share-row-actions .table-action {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  min-width: 2.25rem !important;
+  border-radius: .86rem !important;
+}
+.share-mobile-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .5rem;
+  min-width: 0;
+}
+.share-mobile-title .share-status-inline {
+  justify-content: flex-start;
+  width: fit-content;
+  max-width: 100%;
+}
+.share-mobile-addresses {
+  max-height: 4.5rem !important;
+}
+.theme-dark .toolbar-field.address-search-field input,
+.theme-dark .address-search-field input {
+  background: transparent !important;
+}
+.theme-dark .share-status-inline {
+  border-color: color-mix(in srgb, var(--share-status-color, #888) 24%, transparent);
+  background: color-mix(in srgb, var(--share-status-color, #888) 10%, var(--color-surface-soft));
+  color: var(--color-text-soft);
+}
+.theme-dark .share-mode-pill {
+  background: var(--color-surface-muted) !important;
+  color: var(--color-text-soft) !important;
+  border-color: var(--color-border) !important;
+}
+
+@media (max-width: 767px) {
+  .share-admin-table { min-width: 0 !important; }
+  .share-mobile-title {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- FINAL V32 share row compact status + simple range copy --- */
+.share-admin-table .share-col-range { width: 170px !important; }
+.share-admin-table .share-col-actions { width: 168px !important; }
+.share-mailbox-cell-grid {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: .48rem !important;
+}
+.share-mailbox-list {
+  width: fit-content !important;
+  max-width: min(34rem, 100%) !important;
+  flex: 0 1 auto !important;
+}
+.share-status-inline {
+  flex: 0 1 auto !important;
+  justify-content: flex-start !important;
+  gap: .34rem !important;
+  padding-inline: .52rem !important;
+}
+.share-status-inline b {
+  color: var(--color-muted);
+  font-size: .7rem;
+  font-weight: 520;
+  white-space: nowrap;
+}
+.share-range-main {
+  margin-top: 0 !important;
+  font-size: .82rem !important;
+  line-height: 1.35 !important;
+}
+.share-range-main em {
+  color: var(--color-text-soft) !important;
+  font-weight: 610 !important;
+}
+.share-mobile-title {
+  display: flex !important;
+  align-items: flex-start !important;
+  flex-wrap: wrap !important;
+  gap: .44rem !important;
+}
+.share-mobile-title .share-mobile-addresses {
+  width: fit-content !important;
+  max-width: min(100%, 20rem) !important;
+}
+.share-mobile-title .share-status-inline {
+  max-width: 100% !important;
+}
+
+@media (max-width: 980px) {
+  .share-mailbox-cell-grid {
+    flex-wrap: wrap !important;
+  }
+  .share-mailbox-list {
+    max-width: 100% !important;
+  }
+}
+
+/* --- FINAL V33 share manager pixel pass: compact meta pill, simple range, safe action divider --- */
+.share-admin-table {
+  min-width: 790px !important;
+}
+.share-admin-table .share-col-range {
+  width: 120px !important;
+}
+.share-admin-table .share-col-actions {
+  width: 188px !important;
+}
+.share-admin-table th:last-child,
+.share-admin-table td:last-child {
+  width: 188px !important;
+  min-width: 188px !important;
+  padding-left: .92rem !important;
+  padding-right: .68rem !important;
+  box-shadow: -1px 0 0 var(--color-border) !important;
+}
+.share-admin-table th:nth-child(3),
+.share-admin-table td.share-range-cell {
+  text-align: center !important;
+}
+.share-mailbox-cell-grid {
+  flex-wrap: nowrap !important;
+  gap: .56rem !important;
+}
+.share-mailbox-list {
+  max-width: 21rem !important;
+}
+.share-status-inline {
+  min-height: 1.78rem !important;
+  gap: .32rem !important;
+  padding-inline: .5rem !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--share-status-color, #737780) 9%, var(--color-surface)) !important;
+}
+.share-status-inline i {
+  width: .43rem !important;
+  height: .43rem !important;
+  flex-basis: .43rem !important;
+}
+.share-status-inline span,
+.share-status-inline small,
+.share-status-inline b {
+  line-height: 1 !important;
+}
+.share-status-inline span {
+  color: var(--color-text-soft);
+  font-size: .72rem;
+  font-weight: 650;
+}
+.share-status-inline small,
+.share-status-inline b {
+  color: var(--color-muted);
+  font-size: .68rem;
+  font-weight: 520;
+}
+.share-range-cell {
+  padding-left: .45rem !important;
+  padding-right: .45rem !important;
+}
+.share-range-main {
+  display: inline-flex !important;
+  justify-content: center !important;
+  width: fit-content !important;
+  margin: 0 auto !important;
+  white-space: nowrap !important;
+}
+.share-range-main em {
+  font-size: .84rem !important;
+  font-weight: 620 !important;
+}
+.share-actions-cell {
+  overflow: visible !important;
+}
+.share-row-actions {
+  justify-content: flex-end !important;
+  gap: .42rem !important;
+  min-width: 0 !important;
+}
+.share-row-actions .table-action {
+  width: 2.22rem !important;
+  height: 2.22rem !important;
+  min-width: 2.22rem !important;
+}
+.theme-dark .share-admin-table th:last-child,
+.theme-dark .share-admin-table td:last-child {
+  box-shadow: -1px 0 0 var(--color-border) !important;
+}
+@media (max-width: 980px) {
+  .share-mailbox-cell-grid {
+    flex-wrap: wrap !important;
+  }
+  .share-mailbox-list {
+    max-width: 100% !important;
+  }
+}
+
+/* --- FINAL V34 share manager header radius polish --- */
+.share-manager-table-wrap {
+  overflow: auto !important;
+  background: var(--color-surface) !important;
+  border-radius: 1rem !important;
+  clip-path: inset(0 round 1rem) !important;
+}
+.share-manager-table-wrap .share-admin-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  background: var(--color-surface) !important;
+}
+.share-manager-table-wrap .share-admin-table thead th {
+  background: var(--color-surface-soft) !important;
+}
+.share-manager-table-wrap .share-admin-table thead th:first-child {
+  border-top-left-radius: 1rem !important;
+}
+.share-manager-table-wrap .share-admin-table thead th:last-child {
+  border-top-right-radius: 1rem !important;
+}
+.share-manager-table-wrap .share-admin-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: 1rem !important;
+}
+.share-manager-table-wrap .share-admin-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: 1rem !important;
+}
+.theme-dark .share-manager-table-wrap {
+  background: var(--color-surface) !important;
+}
+.theme-dark .share-manager-table-wrap .share-admin-table thead th {
+  background: var(--color-surface-soft) !important;
+}
+
+/* --- FINAL V35 share manager single-frame alignment fix --- */
+.share-manager-table-wrap {
+  padding: 0 !important;
+  scrollbar-gutter: auto !important;
+  border-radius: 1rem !important;
+  overflow: auto !important;
+  background: var(--color-surface) !important;
+  clip-path: none !important;
+}
+.share-manager-table-wrap .share-admin-table {
+  width: 100% !important;
+  margin: 0 !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+.share-manager-table-wrap .share-admin-table thead,
+.share-manager-table-wrap .share-admin-table tbody,
+.share-manager-table-wrap .share-admin-table tr {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.share-manager-table-wrap .share-admin-table th:first-child,
+.share-manager-table-wrap .share-admin-table td:first-child {
+  padding-left: .72rem !important;
+}
+.share-manager-table-wrap .share-admin-table th:last-child,
+.share-manager-table-wrap .share-admin-table td:last-child {
+  padding-right: .72rem !important;
+}
+.share-manager-table-wrap .share-admin-table thead th:first-child {
+  border-top-left-radius: calc(1rem - 1px) !important;
+}
+.share-manager-table-wrap .share-admin-table thead th:last-child {
+  border-top-right-radius: calc(1rem - 1px) !important;
+}
+.share-manager-table-wrap .share-admin-table tbody tr:last-child td:first-child {
+  border-bottom-left-radius: calc(1rem - 1px) !important;
+}
+.share-manager-table-wrap .share-admin-table tbody tr:last-child td:last-child {
+  border-bottom-right-radius: calc(1rem - 1px) !important;
 }

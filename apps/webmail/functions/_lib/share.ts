@@ -15,6 +15,7 @@ export type ShareMailbox = {
   sinceMailId?: number;
   sinceCreatedAt?: string | null;
   hiddenMailIds?: number[];
+  mailCount?: number;
 };
 
 export type SharePayload = {
@@ -32,6 +33,7 @@ export type SharePayload = {
 export type PublicShareMailbox = {
   id: string;
   address: string;
+  mailCount?: number;
 };
 
 export type ShareAdminSummary = {
@@ -43,6 +45,7 @@ export type ShareAdminSummary = {
   revokedAt: string | null;
   status: ShareStatus;
   addressCount: number;
+  mailCount?: number;
   hiddenAddressCount: number;
   hiddenMailCount: number;
   mailVisibility: ShareMailVisibility;
@@ -116,6 +119,7 @@ function normalizeSharePayload(payload: Partial<SharePayload> | null, token: str
       sinceMailId: Number.isFinite(Number(item?.sinceMailId)) ? Math.max(0, Number(item?.sinceMailId)) : undefined,
       sinceCreatedAt: normalizeIso(item?.sinceCreatedAt, null),
       hiddenMailIds: normalizeNumberList(item?.hiddenMailIds),
+      mailCount: Number.isFinite(Number(item?.mailCount)) && Number(item?.mailCount) >= 0 ? Math.floor(Number(item?.mailCount)) : undefined,
     }))
     .filter((item) => item.id && item.address && item.jwt);
   if (addresses.length === 0) return null;
@@ -190,11 +194,18 @@ export function shareStatus(payload: Pick<SharePayload, "expiresAt" | "revokedAt
 }
 
 function publicAddresses(payload: SharePayload) {
-  return payload.addresses.map(({ id, address }) => ({ id, address }));
+  return payload.addresses.map(({ id, address, mailCount }) => ({
+    id,
+    address,
+    ...(Number.isFinite(Number(mailCount)) && Number(mailCount) >= 0 ? { mailCount: Math.floor(Number(mailCount)) } : {}),
+  }));
 }
 
 function summaryFromPayload(token: string, payload: SharePayload): StoredShareSummary {
   const hiddenMailCount = payload.addresses.reduce((sum, item) => sum + (item.hiddenMailIds?.length || 0), 0);
+  const knownMailCounts = payload.addresses
+    .map((item) => Number(item.mailCount))
+    .filter((count) => Number.isFinite(count) && count >= 0);
   return {
     token,
     createdAt: payload.createdAt,
@@ -202,6 +213,7 @@ function summaryFromPayload(token: string, payload: SharePayload): StoredShareSu
     expiresAt: payload.expiresAt,
     revokedAt: payload.revokedAt || null,
     addressCount: publicAddresses(payload).length,
+    ...(knownMailCounts.length ? { mailCount: knownMailCounts.reduce((sum, count) => sum + Math.floor(count), 0) } : {}),
     hiddenAddressCount: 0,
     hiddenMailCount,
     mailVisibility: payload.mailVisibility,
@@ -238,6 +250,7 @@ function normalizeStoredSummary(raw: unknown, token: string): StoredShareSummary
     expiresAt: normalizeIso(src.expiresAt, null),
     revokedAt: normalizeIso(src.revokedAt, null),
     addressCount: Number.isFinite(Number(src.addressCount)) ? Number(src.addressCount) : addresses.length,
+    ...(Number.isFinite(Number(src.mailCount)) && Number(src.mailCount) >= 0 ? { mailCount: Math.floor(Number(src.mailCount)) } : {}),
     hiddenAddressCount: 0,
     hiddenMailCount: Number.isFinite(Number(src.hiddenMailCount)) ? Number(src.hiddenMailCount) : 0,
     mailVisibility: normalizeMailVisibility(src.mailVisibility, "all"),
@@ -431,9 +444,10 @@ export async function getLatestMailCutoff(env: CloudmailEnv, jwt: string) {
     return {
       sinceMailId: Number.isFinite(Number(first?.id)) ? Number(first?.id) : 0,
       sinceCreatedAt: typeof first?.created_at === "string" ? first.created_at : new Date().toISOString(),
+      mailCount: Math.max(0, Number(page.count) || 0),
     };
   } catch {
-    return { sinceMailId: 0, sinceCreatedAt: new Date().toISOString() };
+    return { sinceMailId: 0, sinceCreatedAt: new Date().toISOString(), mailCount: 0 };
   }
 }
 

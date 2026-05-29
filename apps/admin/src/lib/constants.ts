@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   authRememberedAt: 'loven7.authRememberedAt',
   authCookieMirror: 'loven7.authCookieMirror',
   uiTheme: 'loven7.uiTheme',
+  uiLocale: 'loven7.locale',
   addressUserFilter: 'loven7.addressUserFilter',
   newAddressDraft: 'loven7.newAddressDraft',
   frontendLoginBase: 'loven7.frontendLoginBase',
