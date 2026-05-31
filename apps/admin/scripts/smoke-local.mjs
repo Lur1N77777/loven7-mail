@@ -170,6 +170,35 @@ function startMockApi() {
         return;
       }
       if (pathname === '/admin/address_sender') return jsonResponse(response, 200, { results: [], count: 0 });
+      if (pathname === '/admin/user_roles') return jsonResponse(response, 200, [
+        { role: 'member', label: 'Member' },
+        { role: 'vip', label: 'VIP' },
+      ]);
+      if (pathname === '/admin/role_address_config') return jsonResponse(response, 200, { configs: { member: { maxAddressCount: 20 } } });
+      if (pathname === '/admin/db_version') return jsonResponse(response, 200, { version: 'mock', ok: true });
+      if (
+        pathname === '/admin/auto_cleanup'
+        || pathname === '/admin/account_settings'
+        || pathname === '/admin/user_settings'
+        || pathname === '/admin/user_oauth2_settings'
+        || pathname === '/admin/webhook/settings'
+        || pathname === '/admin/mail_webhook/settings'
+        || pathname === '/admin/ip_blacklist/settings'
+        || pathname === '/admin/ai_extract/settings'
+        || pathname === '/admin/telegram/settings'
+      ) {
+        return jsonResponse(response, 200, {
+          enableUserRegister: true,
+          enableEmailVerify: false,
+          defaultUserRole: 'member',
+          jwtExpire: 3600,
+          emailRuleSettings: { blockReceiveUnknowAddressEmail: false },
+          addressCreationSettings: { enableSubdomainMatch: true },
+          sendMailLimitConfig: { dailyEnabled: true, dailyLimit: 100 },
+          cleanupInterval: 'daily',
+          retentionDays: 30,
+        });
+      }
       if (pathname === '/admin/mails') {
         const address = (url.searchParams.get('address') || '').toLowerCase();
         return jsonResponse(response, 200, paginate(mockRawMails.filter((row) => !address || row.address.toLowerCase() === address), url));
@@ -687,9 +716,99 @@ async function main() {
   );
   landscape.close();
 
+  const compactDesktop = await openApp({ width: 1280, height: 720, mobile: false });
+  const compactDesktopLayout = JSON.parse(await evaluate(compactDesktop, `JSON.stringify((() => {
+    const visibleRect = (el) => {
+      let rect = el.getBoundingClientRect();
+      let box = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        const clips = /(auto|scroll|hidden|clip)/.test(style.overflow + style.overflowX + style.overflowY);
+        if (!clips) continue;
+        rect = parent.getBoundingClientRect();
+        box = {
+          left: Math.max(box.left, rect.left),
+          top: Math.max(box.top, rect.top),
+          right: Math.min(box.right, rect.right),
+          bottom: Math.min(box.bottom, rect.bottom),
+        };
+      }
+      const w = Math.max(0, box.right - box.left);
+      const h = Math.max(0, box.bottom - box.top);
+      return { x: box.left, y: box.top, w, h };
+    };
+    const items = [...document.querySelectorAll('aside button, aside a')]
+      .map((el) => {
+        const r = visibleRect(el);
+        return { text: (el.textContent || '').trim(), x: r.x, y: r.y, w: r.w, h: r.h, visible: r.w > 0 && r.h > 0 };
+      })
+      .filter((item) => item.visible);
+    const overlaps = [];
+    for (let i = 0; i < items.length; i += 1) {
+      for (let j = i + 1; j < items.length; j += 1) {
+        const a = items[i];
+        const b = items[j];
+        const w = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+        const h = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+        if (w > 4 && h > 4) overlaps.push({ a: a.text, b: b.text, w, h });
+      }
+    }
+    return {
+      name: 'desktop-compact-sidebar-layout',
+      xOverflow: document.documentElement.scrollWidth > innerWidth + 1 || document.body.scrollWidth > innerWidth + 1,
+      overlaps,
+      bodySample: document.body.innerText.slice(0, 900),
+    };
+  })())`));
+  extraResults.push(compactDesktopLayout);
+  assert(!compactDesktopLayout.xOverflow, 'compact desktop dashboard has horizontal overflow');
+  assert(compactDesktopLayout.overlaps.length === 0, `compact desktop sidebar controls overlap: ${JSON.stringify(compactDesktopLayout.overlaps)}`);
+  compactDesktop.close();
+
   const desktop = await openApp({ width: 1365, height: 900 });
   const desktopDashboard = await collect(desktop, 'desktop-dashboard');
   assert(!desktopDashboard.xOverflow, 'desktop dashboard has horizontal overflow');
+  await clickText(desktop, '系统设置');
+  await evaluate(desktop, `(() => {
+    const card = [...document.querySelectorAll('.settings-card')].find((el) => el.innerText.includes('用户设置'));
+    card?.querySelector('button')?.click();
+  })()`);
+  await sleep(1000);
+  const desktopSettingsLabels = JSON.parse(await evaluate(desktop, `JSON.stringify({
+    name: 'desktop-settings-localized-labels',
+    modal: !!document.querySelector('.modal-card'),
+    bodySample: document.body.innerText.slice(0, 1800)
+  })`));
+  extraResults.push(desktopSettingsLabels);
+  assert(desktopSettingsLabels.modal, 'user settings editor modal should open');
+  assert(desktopSettingsLabels.bodySample.includes('允许用户注册'), `user settings should show Chinese field label: ${desktopSettingsLabels.bodySample}`);
+  assert(desktopSettingsLabels.bodySample.includes('原字段: enableUserRegister'), `user settings should keep original key as reference: ${desktopSettingsLabels.bodySample}`);
+  assert(desktopSettingsLabels.bodySample.includes('JWT 有效期'), `user settings should localize JWT-related fields: ${desktopSettingsLabels.bodySample}`);
+  await evaluate(desktop, `document.querySelector('.modal-card [aria-label="关闭"]')?.click()`);
+  await sleep(500);
+  await clickText(desktop, '维护');
+  const maintenanceLayout = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const select = document.querySelector('.maintenance-cleanup-grid .form-select');
+    const input = document.querySelector('.maintenance-cleanup-grid .form-input');
+    const button = document.querySelector('.maintenance-cleanup-button');
+    const rect = (el) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { top: r.top, bottom: r.bottom, height: r.height } : null;
+    };
+    return {
+      name: 'desktop-maintenance-cleanup-alignment',
+      select: rect(select),
+      input: rect(input),
+      button: rect(button),
+      xOverflow: document.documentElement.scrollWidth > innerWidth + 1 || document.body.scrollWidth > innerWidth + 1,
+      bodySample: document.body.innerText.slice(0, 1200),
+    };
+  })())`));
+  extraResults.push(maintenanceLayout);
+  assert(!maintenanceLayout.xOverflow, 'maintenance page has horizontal overflow');
+  assert(maintenanceLayout.select && maintenanceLayout.input && maintenanceLayout.button, `cleanup controls should be rendered: ${JSON.stringify(maintenanceLayout)}`);
+  assert(Math.abs(maintenanceLayout.select.top - maintenanceLayout.button.top) <= 2, `cleanup button should align with select/input top edge: ${JSON.stringify(maintenanceLayout)}`);
+  assert(Math.abs(maintenanceLayout.input.bottom - maintenanceLayout.button.bottom) <= 2, `cleanup button should align with select/input bottom edge: ${JSON.stringify(maintenanceLayout)}`);
   desktop.close();
 
   const results = [mobileDashboard, mobileSwipeStats, mobileSwipeDashboard, mobileInbox, ...extraResults, mobileAddress, mobileDark, mobileLandscapeInbox, desktopDashboard];

@@ -8224,3 +8224,67 @@ main h2,
     display: none !important;
   }
 }
+
+/* --- FINAL V40 desktop sidebar height safety --- */
+@media (min-width: 768px) {
+  aside {
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  aside > .flex-1 {
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  aside > .p-4 {
+    position: relative;
+    z-index: 2;
+    flex: 0 0 auto !important;
+    background: var(--color-bg) !important;
+  }
+}
+@media (min-width: 768px) and (max-height: 760px) {
+  aside > .flex.items-center.gap-3 {
+    padding-top: 1.15rem !important;
+    padding-bottom: 1rem !important;
+  }
+  aside > .flex-1 {
+    padding-top: .25rem !important;
+    padding-bottom: .55rem !important;
+  }
+  aside > .flex-1.space-y-5 {
+    gap: .45rem !important;
+  }
+  aside > .flex-1 > .space-y-1 {
+    margin-top: .38rem !important;
+  }
+  .sidebar-nav-item {
+    min-height: 2.36rem !important;
+    padding-top: .55rem !important;
+    padding-bottom: .55rem !important;
+    border-radius: .82rem !important;
+  }
+  aside > .p-4 {
+    padding: .65rem .85rem .85rem !important;
+  }
+  .sidebar-compose-btn {
+    min-height: 2.32rem !important;
+    margin-bottom: .55rem !important;
+    padding-top: .55rem !important;
+    padding-bottom: .55rem !important;
+    border-radius: .82rem !important;
+  }
+  .admin-profile-row .admin-profile-avatar {
+    width: 2rem !important;
+    height: 2rem !important;
+  }
+  .theme-segmented-control {
+    margin-top: .45rem !important;
+  }
+  .locale-mode-toggle {
+    min-height: 2.05rem !important;
+    margin-top: .45rem !important;
+  }
+}
