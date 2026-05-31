@@ -950,7 +950,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                 onChange={(e) => { setAddressInput(e.target.value); setPage(1); setSelectedId(null); }}
                 onKeyDown={(event) => { if (event.key === 'Escape' && addressInput) clearAddressFilter(); }}
                 className="form-input address-filter-input rounded-xl py-1.5 pr-9 text-[13px] md:rounded-2xl md:py-2 md:text-sm"
-                placeholder={t('搜索邮箱 / 主题 / 正文', 'Search mailbox / subject / body')}
+                placeholder={t('搜索邮箱、主题或正文', 'Search mailbox, subject, or body')}
                 inputMode="text"
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -964,8 +964,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                   onTouchStart={clearAddressFilterFromPress}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={clearAddressFilterFromPress}
-                  aria-label={t('清空搜索条件', 'Clear search filter')}
-                  title={t('清空搜索条件', 'Clear search filter')}
+                  aria-label={t('清空邮件搜索', 'Clear mail search')}
+                  title={t('清空邮件搜索', 'Clear mail search')}
                 >
                   <X size={14} />
                 </button>
