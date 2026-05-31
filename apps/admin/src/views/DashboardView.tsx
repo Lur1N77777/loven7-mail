@@ -61,6 +61,22 @@ const capabilityIconMap: Partial<Record<keyof OpenSettings, DashboardIcon>> = {
   enableAddressPassword: LockLogo,
 };
 
+const quickActions: Array<{
+  menu: MenuKey;
+  icon: DashboardIcon;
+  titleZh: string;
+  titleEn: string;
+  descZh: string;
+  descEn: string;
+}> = [
+  { menu: 'address', icon: AddressLogo, titleZh: '地址管理', titleEn: 'Addresses', descZh: '新建邮箱、筛选用户、批量管理。', descEn: 'Create, filter, and manage mailboxes.' },
+  { menu: 'inbox', icon: InboxLogo, titleZh: '收件箱', titleEn: 'Inbox', descZh: '查看邮件、验证码与附件。', descEn: 'Review mail, codes, and attachments.' },
+  { menu: 'sent', icon: SentLogo, titleZh: '发件箱', titleEn: 'Sent mail', descZh: '查看管理员发信记录。', descEn: 'Inspect outbound admin mail.' },
+  { menu: 'users', icon: UserAdminLogo, titleZh: '用户管理', titleEn: 'Users', descZh: '管理用户、角色与绑定地址。', descEn: 'Manage users, roles, and bindings.' },
+  { menu: 'stats', icon: ChartLogo, titleZh: '统计分析', titleEn: 'Stats', descZh: '查看占比、活跃度和能力状态。', descEn: 'Track mix, activity, and capability state.' },
+  { menu: 'maintenance', icon: StorageLogo, titleZh: '维护工具', titleEn: 'Maintenance', descZh: '数据库、迁移与清理任务。', descEn: 'Database, migration, and cleanup tools.' },
+];
+
 export function DashboardView({ stats, loading, openSettings, refresh, setActiveMenu }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void; setActiveMenu: (menu: MenuKey) => void }) {
   const locale = getRuntimeLocale();
   const t = (zh: string, en: string) => localeText(zh, en, locale);
@@ -99,9 +115,17 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
         <section className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
           <div className="panel p-4 sm:p-5">
             <h3 className="panel-title">{t('快捷入口', 'Quick actions')}</h3>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <button onClick={() => setActiveMenu('address')} className="dashboard-quick-card rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"><span className="dashboard-quick-logo"><AddressLogo className="dashboard-logo-svg" /></span><p className="font-semibold text-slate-800">{t('地址管理', 'Address management')}</p><p className="mt-1 text-sm text-slate-400">{t('新建邮箱、查看 JWT、清理收发件。', 'Create mailboxes, inspect JWTs, and clean inbox/sent items.')}</p></button>
-              <button onClick={() => setActiveMenu('inbox')} className="dashboard-quick-card rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100"><span className="dashboard-quick-logo"><InboxLogo className="dashboard-logo-svg" /></span><p className="font-semibold text-slate-800">{t('收件箱', 'Inbox')}</p><p className="mt-1 text-sm text-slate-400">{t('查看、解析和复制验证码。', 'Review, parse, and copy verification codes.')}</p></button>
+            <div className="dashboard-quick-grid mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {quickActions.map((action) => {
+                const QuickIcon = action.icon;
+                return (
+                  <button key={action.menu} onClick={() => setActiveMenu(action.menu)} className="dashboard-quick-card rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100">
+                    <span className="dashboard-quick-logo"><QuickIcon className="dashboard-logo-svg" /></span>
+                    <p className="dashboard-quick-title font-semibold text-slate-800">{t(action.titleZh, action.titleEn)}</p>
+                    <p className="dashboard-quick-desc mt-1 text-sm text-slate-400">{t(action.descZh, action.descEn)}</p>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="panel p-4 sm:p-5">
@@ -139,7 +163,7 @@ export function StatsView({ stats, loading, openSettings, refresh }: { stats: St
   return (
     <div className="stats-view-shell h-full min-h-0 overflow-y-auto p-3 md:p-4 xl:p-6">
       <div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div><h2 className="text-2xl font-bold text-slate-800">{t('统计', 'Stats')}</h2><p className="mt-1 text-sm text-slate-400">{t('统计页专注指标占比、活跃度和站点能力状态；仪表盘更偏运营总览与快捷操作。', 'Stats focuses on ratios, activity, and capability status; the dashboard is for operational overview and quick actions.')}</p></div>
+        <div><h2 className="page-title">{t('统计', 'Stats')}</h2><p className="page-subtitle mt-1">{t('统计页专注指标占比、活跃度和站点能力状态；仪表盘更偏运营总览与快捷操作。', 'Stats focuses on ratios, activity, and capability status; the dashboard is for operational overview and quick actions.')}</p></div>
         <button className="btn-secondary" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} /> {loading ? t('同步中', 'Syncing') : t('刷新统计', 'Refresh stats')}</button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -4,7 +4,7 @@ import type { Requester } from '../lib/api';
 import { jsonPretty, safeJsonParse } from '../lib/format';
 import { FRONTEND_LOGIN_BASE, STORAGE_KEYS } from '../lib/constants';
 import { readStorage, writeLocalStorage } from '../lib/storage';
-import { getRuntimeLocale, localeText } from '../lib/locale';
+import { getRuntimeLocale, localeText, type AppLocale } from '../lib/locale';
 import type { RoleAddressConfigResponse, RoleRecord, TelegramStatus } from '../types/api';
 import { EmptyState, LoadingState, Modal, type Notify } from '../components/Common';
 
@@ -30,6 +30,230 @@ function titleFromKey(key: string | number): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+const settingsKeyLabels: Record<string, { zh: string; en: string; hintZh?: string; hintEn?: string }> = {
+  title: { zh: '站点标题', en: 'Site title' },
+  prefix: { zh: '邮箱前缀', en: 'Mailbox prefix' },
+  addressRegex: { zh: '地址清理规则', en: 'Address sanitizing regex', hintZh: '用于限制邮箱 local-part 可保留的字符', hintEn: 'Controls which local-part characters are kept' },
+  minAddressLen: { zh: '地址最小长度', en: 'Minimum address length' },
+  maxAddressLen: { zh: '地址最大长度', en: 'Maximum address length' },
+  domains: { zh: '可用域名', en: 'Available domains' },
+  domainLabels: { zh: '域名显示名称', en: 'Domain display labels' },
+  defaultDomains: { zh: '默认域名', en: 'Default domains' },
+  randomSubdomainDomains: { zh: '随机二级域名范围', en: 'Random subdomain domains' },
+  needAuth: { zh: '访问需要认证', en: 'Require authentication' },
+  adminContact: { zh: '管理员联系方式', en: 'Admin contact' },
+  copyright: { zh: '版权文案', en: 'Copyright text' },
+  statusUrl: { zh: '状态页地址', en: 'Status page URL' },
+  defaultRole: { zh: '默认用户角色', en: 'Default user role' },
+  role: { zh: '角色', en: 'Role' },
+  label: { zh: '显示名称', en: 'Display label' },
+  value: { zh: '配置值', en: 'Value' },
+  enabled: { zh: '启用状态', en: 'Enabled state' },
+
+  enableUserCreateEmail: { zh: '允许用户创建邮箱', en: 'Allow users to create mailboxes' },
+  disableAnonymousUserCreateEmail: { zh: '禁止匿名用户创建邮箱', en: 'Disable anonymous mailbox creation' },
+  disableCustomAddressName: { zh: '禁止自定义邮箱名', en: 'Disable custom mailbox names' },
+  enableUserDeleteEmail: { zh: '允许用户删除邮件', en: 'Allow users to delete mail' },
+  enableAutoReply: { zh: '启用自动回复', en: 'Enable auto-reply' },
+  enableIndexAbout: { zh: '启用首页介绍', en: 'Enable landing about section' },
+  enableWebhook: { zh: '启用 Webhook', en: 'Enable Webhook' },
+  isS3Enabled: { zh: '启用 R2/S3 附件', en: 'Enable R2/S3 attachments' },
+  enableSendMail: { zh: '启用发信功能', en: 'Enable sending mail' },
+  enableAddressPassword: { zh: '启用邮箱地址密码', en: 'Enable mailbox passwords' },
+  enableAgentEmailInfo: { zh: '启用 AI 邮件信息提取', en: 'Enable AI mail extraction' },
+  enableGlobalTurnstileCheck: { zh: '启用全局 Turnstile', en: 'Enable global Turnstile' },
+  disableAdminPasswordCheck: { zh: '关闭管理员密码校验', en: 'Disable admin password check' },
+  cfTurnstileSiteKey: { zh: 'Turnstile Site Key', en: 'Turnstile site key' },
+  cfTurnstileSecretKey: { zh: 'Turnstile Secret Key', en: 'Turnstile secret key' },
+
+  emailRuleSettings: { zh: '邮件规则设置', en: 'Mail rule settings' },
+  addressCreationSettings: { zh: '地址创建设置', en: 'Address creation settings' },
+  addressCreationSubdomainMatchStatus: { zh: '子域名匹配状态', en: 'Subdomain matching status' },
+  sendMailAccountDailyLimit: { zh: '发信账号额度', en: 'Sending account quota' },
+  blockList: { zh: '地址黑名单', en: 'Address blacklist' },
+  sendBlockList: { zh: '发件黑名单', en: 'Sender blacklist' },
+  noLimitSendAddressList: { zh: '免限制发件地址', en: 'Unlimited sender addresses' },
+  verifiedAddressList: { zh: '已验证地址', en: 'Verified addresses' },
+  fromBlockList: { zh: '来源黑名单', en: 'From blacklist' },
+  blockReceiveUnknowAddressEmail: { zh: '拦截未知地址收件', en: 'Block unknown-address inbound mail' },
+  enableSubdomainMatch: { zh: '启用子域名匹配', en: 'Enable subdomain matching' },
+  storedEnabled: { zh: '保存的启用状态', en: 'Stored enabled state' },
+  dailyEnabled: { zh: '启用每日额度', en: 'Enable daily quota' },
+  monthlyEnabled: { zh: '启用每月额度', en: 'Enable monthly quota' },
+  dailyLimit: { zh: '每日额度', en: 'Daily quota' },
+  monthlyLimit: { zh: '每月额度', en: 'Monthly quota' },
+
+  webhookUrl: { zh: 'Webhook 地址', en: 'Webhook URL' },
+  webhookUrls: { zh: 'Webhook 地址列表', en: 'Webhook URLs' },
+  allowList: { zh: '允许列表', en: 'Allow list' },
+  denyList: { zh: '拒绝列表', en: 'Deny list' },
+  secret: { zh: '密钥', en: 'Secret' },
+  token: { zh: '令牌', en: 'Token' },
+  apiKey: { zh: 'API 密钥', en: 'API key' },
+  apiBase: { zh: 'API 基础地址', en: 'API base URL' },
+  baseUrl: { zh: '基础地址', en: 'Base URL' },
+  endpoint: { zh: '接口地址', en: 'Endpoint' },
+  headers: { zh: '请求头', en: 'Headers' },
+  timeout: { zh: '超时时间', en: 'Timeout' },
+  retry: { zh: '重试次数', en: 'Retry count' },
+
+  botToken: { zh: 'Bot Token', en: 'Bot token' },
+  botUsername: { zh: 'Bot 用户名', en: 'Bot username' },
+  chatId: { zh: '聊天 ID', en: 'Chat ID' },
+  webhookSecret: { zh: 'Webhook Secret', en: 'Webhook secret' },
+  miniAppUrl: { zh: 'Mini App 地址', en: 'Mini App URL' },
+
+  provider: { zh: '服务商', en: 'Provider' },
+  clientId: { zh: 'Client ID', en: 'Client ID' },
+  clientSecret: { zh: 'Client Secret', en: 'Client secret' },
+  redirectUri: { zh: '回调地址', en: 'Redirect URI' },
+  scopes: { zh: '授权范围', en: 'Scopes' },
+
+  bucket: { zh: '存储桶', en: 'Bucket' },
+  region: { zh: '区域', en: 'Region' },
+  accessKeyId: { zh: 'Access Key ID', en: 'Access key ID' },
+  secretAccessKey: { zh: 'Secret Access Key', en: 'Secret access key' },
+  publicUrl: { zh: '公开访问地址', en: 'Public URL' },
+
+  model: { zh: '模型', en: 'Model' },
+  prompt: { zh: '提示词', en: 'Prompt' },
+  systemPrompt: { zh: '系统提示词', en: 'System prompt' },
+  temperature: { zh: '温度', en: 'Temperature' },
+  maxTokens: { zh: '最大 Token 数', en: 'Max tokens' },
+
+  cleanType: { zh: '清理类型', en: 'Cleanup type' },
+  cleanDays: { zh: '保留天数', en: 'Retention days' },
+  raw_mails: { zh: '收件原始表', en: 'Inbox raw mails' },
+  sendbox: { zh: '发件箱', en: 'Sent mailbox' },
+  address: { zh: '地址表', en: 'Address table' },
+  custom_sql: { zh: '自定义 SQL', en: 'Custom SQL' },
+};
+
+const keyTokenLabels: Record<string, string> = {
+  enable: '启用',
+  enabled: '启用',
+  disable: '禁用',
+  disabled: '禁用',
+  user: '用户',
+  admin: '管理员',
+  anonymous: '匿名',
+  create: '创建',
+  creation: '创建',
+  delete: '删除',
+  mail: '邮件',
+  mails: '邮件',
+  email: '邮箱',
+  address: '地址',
+  password: '密码',
+  default: '默认',
+  role: '角色',
+  setting: '设置',
+  settings: '设置',
+  webhook: 'Webhook',
+  telegram: 'Telegram',
+  bot: 'Bot',
+  token: '令牌',
+  secret: '密钥',
+  url: '地址',
+  uri: '地址',
+  domain: '域名',
+  domains: '域名',
+  regex: '正则规则',
+  min: '最小',
+  max: '最大',
+  len: '长度',
+  length: '长度',
+  prefix: '前缀',
+  random: '随机',
+  subdomain: '子域名',
+  contact: '联系方式',
+  copyright: '版权',
+  site: '站点',
+  key: 'Key',
+  global: '全局',
+  turnstile: 'Turnstile',
+  check: '校验',
+  client: 'Client',
+  callback: '回调',
+  redirect: '跳转',
+  oauth: 'OAuth',
+  google: 'Google',
+  github: 'GitHub',
+  code: '代码',
+  limit: '限制',
+  daily: '每日',
+  monthly: '每月',
+  ip: 'IP',
+  asn: 'ASN',
+  fingerprint: '指纹',
+  black: '黑',
+  block: '拦截',
+  allow: '允许',
+  list: '列表',
+  from: '来源',
+  send: '发信',
+  receive: '收信',
+  unknown: '未知',
+  raw: '原始',
+  cleanup: '清理',
+  days: '天数',
+  s3: 'S3',
+  r2: 'R2',
+  bucket: '存储桶',
+  endpoint: '接口地址',
+  access: '访问',
+  region: '区域',
+  public: '公开',
+  ai: 'AI',
+  extract: '提取',
+  agent: 'Agent',
+  model: '模型',
+  prompt: '提示词',
+  base: '基础',
+  api: 'API',
+  open: '开放',
+  status: '状态',
+  title: '标题',
+  need: '需要',
+  auth: '认证',
+  custom: '自定义',
+  name: '名称',
+  auto: '自动',
+  reply: '回复',
+  index: '首页',
+  about: '介绍',
+  verified: '已验证',
+};
+
+function splitKeyTokens(key: string): string[] {
+  return key
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function localizedKeyLabel(key: string | number, locale: AppLocale) {
+  if (typeof key === 'number') {
+    const indexLabel = locale === 'en-US' ? `Item ${key + 1}` : `第 ${key + 1} 项`;
+    return { title: indexLabel, meta: String(key) };
+  }
+  const raw = String(key);
+  const mapped = settingsKeyLabels[raw];
+  if (mapped) {
+    return {
+      title: localeText(mapped.zh, mapped.en, locale),
+      meta: `${localeText('原字段', 'Key', locale)}: ${raw}${mapped.hintZh || mapped.hintEn ? ` · ${localeText(mapped.hintZh || mapped.zh, mapped.hintEn || mapped.en, locale)}` : ''}`,
+    };
+  }
+  const human = titleFromKey(raw);
+  if (locale === 'en-US') return { title: human, meta: `Key: ${raw}` };
+  const tokens = splitKeyTokens(raw);
+  const translated = tokens.map((token) => keyTokenLabels[token.toLowerCase()] || token).join(' ');
+  return { title: translated || human, meta: `原字段: ${raw}` };
+}
+
 function updateJsonAtPath(value: unknown, path: JsonPath, nextValue: unknown): unknown {
   if (!path.length) return nextValue;
   const [head, ...rest] = path;
@@ -52,42 +276,43 @@ function textToStringArray(value: string): string[] {
 }
 
 function JsonVisualField({ fieldKey, value, path, root, onRootChange, depth = 0 }: { fieldKey: string | number; value: unknown; path: JsonPath; root: unknown; onRootChange: (next: unknown) => void; depth?: number }) {
-  const { t } = useSettingsLocale();
-  const label = titleFromKey(fieldKey);
+  const { locale, t } = useSettingsLocale();
+  const label = localizedKeyLabel(fieldKey, locale);
   const commit = (nextValue: unknown) => onRootChange(updateJsonAtPath(root, path, nextValue));
   if (typeof value === 'boolean') {
-    return <label className="json-visual-row json-visual-switch"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span><input type="checkbox" checked={value} onChange={(e) => commit(e.target.checked)} /></label>;
+    return <label className="json-visual-row json-visual-switch"><span><strong>{label.title}</strong><small>{label.meta}</small></span><input type="checkbox" checked={value} onChange={(e) => commit(e.target.checked)} /></label>;
   }
   if (typeof value === 'number') {
-    return <label className="json-visual-row"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span><input className="form-input compact-control" type="number" value={Number.isFinite(value) ? value : 0} onChange={(e) => commit(Number(e.target.value))} /></label>;
+    return <label className="json-visual-row"><span><strong>{label.title}</strong><small>{label.meta}</small></span><input className="form-input compact-control" type="number" value={Number.isFinite(value) ? value : 0} onChange={(e) => commit(Number(e.target.value))} /></label>;
   }
   if (typeof value === 'string' || value === null || value === undefined) {
     const text = String(value ?? '');
     const multiline = text.length > 88 || text.includes('\n');
-    return <label className="json-visual-row block"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span>{multiline ? <textarea className="form-textarea json-visual-textarea" value={text} onChange={(e) => commit(e.target.value)} /> : <input className="form-input compact-control" value={text} onChange={(e) => commit(e.target.value)} />}</label>;
+    return <label className="json-visual-row block"><span><strong>{label.title}</strong><small>{label.meta}</small></span>{multiline ? <textarea className="form-textarea json-visual-textarea" value={text} onChange={(e) => commit(e.target.value)} /> : <input className="form-input compact-control" value={text} onChange={(e) => commit(e.target.value)} />}</label>;
   }
   if (Array.isArray(value)) {
     const primitive = value.every((item) => item === null || ['string', 'number', 'boolean'].includes(typeof item));
     if (primitive) {
-      return <label className="json-visual-row block"><span><strong>{label}</strong><small>{t('列表，每行一项', 'List, one item per line')} · {String(fieldKey)}</small></span><textarea className="form-textarea json-visual-textarea" value={primitiveArrayToText(value)} onChange={(e) => commit(textToStringArray(e.target.value))} /></label>;
+      return <label className="json-visual-row block"><span><strong>{label.title}</strong><small>{t('列表，每行一项', 'List, one item per line')} · {label.meta}</small></span><textarea className="form-textarea json-visual-textarea" value={primitiveArrayToText(value)} onChange={(e) => commit(textToStringArray(e.target.value))} /></label>;
     }
     return <JsonComplexField fieldKey={fieldKey} value={value} path={path} root={root} onRootChange={onRootChange} depth={depth} />;
   }
   if (isPlainObject(value)) {
     return <JsonComplexField fieldKey={fieldKey} value={value} path={path} root={root} onRootChange={onRootChange} depth={depth} />;
   }
-  return <label className="json-visual-row block"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span><textarea className="form-textarea json-visual-textarea" value={jsonPretty(value)} onChange={(e) => commit(safeJsonParse(e.target.value, value))} /></label>;
+  return <label className="json-visual-row block"><span><strong>{label.title}</strong><small>{label.meta}</small></span><textarea className="form-textarea json-visual-textarea" value={jsonPretty(value)} onChange={(e) => commit(safeJsonParse(e.target.value, value))} /></label>;
 }
 
 function JsonComplexField({ fieldKey, value, path, root, onRootChange, depth = 0 }: { fieldKey: string | number; value: unknown; path: JsonPath; root: unknown; onRootChange: (next: unknown) => void; depth?: number }) {
-  const { t } = useSettingsLocale();
+  const { locale, t } = useSettingsLocale();
   const [mode, setMode] = useState<'form' | 'json'>('form');
   const entries = isPlainObject(value) ? Object.entries(value) : [];
   const jsonValue = jsonPretty(value);
   const commitRaw = (raw: string) => onRootChange(updateJsonAtPath(root, path, safeJsonParse(raw, value)));
+  const label = localizedKeyLabel(fieldKey, locale);
   return <section className="json-visual-group" style={{ marginLeft: depth ? Math.min(depth * 10, 28) : 0 }}>
     <div className="json-visual-group-head">
-      <div><strong>{titleFromKey(fieldKey)}</strong><small>{Array.isArray(value) ? t(`${value.length} 项`, `${value.length} items`) : `${entries.length} fields`}</small></div>
+      <div><strong>{label.title}</strong><small>{Array.isArray(value) ? `${t(`${value.length} 项`, `${value.length} items`)} · ${label.meta}` : `${entries.length} ${t('个字段', 'fields')} · ${label.meta}`}</small></div>
       <div className="json-visual-mini-tabs"><button type="button" className={mode === 'form' ? 'active' : ''} onClick={() => setMode('form')}>{t('表单', 'Form')}</button><button type="button" className={mode === 'json' ? 'active' : ''} onClick={() => setMode('json')}>JSON</button></div>
     </div>
     {mode === 'json' || Array.isArray(value) ? <textarea className="code-area json-visual-code" value={jsonValue} onChange={(e) => commitRaw(e.target.value)} /> : <div className="json-visual-fields">{entries.map(([key, child]) => <div key={key}><JsonVisualField fieldKey={key} value={child} path={[...path, key]} root={root} onRootChange={onRootChange} depth={depth + 1} /></div>)}</div>}
@@ -129,7 +354,7 @@ export function SettingsView({ request, notify }: { request: Requester; notify: 
     [t('AI 提取设置', 'AI extraction settings'), t('邮件信息提取 Agent 设置。', 'Mail information extraction agent settings.'), '/admin/ai_extract/settings'],
     [t('Telegram 设置 JSON', 'Telegram settings JSON'), t('Telegram Bot / Mini App 集成配置；初始化和状态见下方专用面板。', 'Telegram Bot / Mini App integration config; initialization and status are below.'), '/admin/telegram/settings'],
   ] as const;
-  return <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6"><div className="space-y-3"><div><h2 className="text-2xl font-bold text-slate-800">{t('系统设置', 'System settings')}</h2><p className="mt-1 text-sm text-slate-400">{t('常用项支持可视化表单编辑；复杂字段仍保留 JSON 高级模式。', 'Common settings support visual form editing; complex fields still keep advanced JSON mode.')}</p></div><div className="grid gap-2.5 xl:grid-cols-2"><RoleAddressConfigPanel request={request} notify={notify} /><MailRefreshPreferenceCard notify={notify} /><FrontendLoginBaseCard notify={notify} /><AccountRulesPanel request={request} notify={notify} /><TelegramPanel request={request} notify={notify} />{cards.map(([title, desc, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} description={desc} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}</div></div></div>;
+  return <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6"><div className="space-y-3"><div><h2 className="page-title">{t('系统设置', 'System settings')}</h2><p className="page-subtitle mt-1">{t('常用项支持可视化表单编辑；复杂字段显示中文对照，复杂配置仍保留 JSON 高级模式。', 'Common settings support visual form editing with localized labels; advanced JSON mode is still available.')}</p></div><div className="grid gap-2.5 xl:grid-cols-2"><RoleAddressConfigPanel request={request} notify={notify} /><MailRefreshPreferenceCard notify={notify} /><FrontendLoginBaseCard notify={notify} /><AccountRulesPanel request={request} notify={notify} /><TelegramPanel request={request} notify={notify} />{cards.map(([title, desc, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} description={desc} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}</div></div></div>;
 }
 
 type AccountSettingsState = {
@@ -382,7 +607,7 @@ export function MaintenanceView({ request, notify }: { request: Requester; notif
   const load = useCallback(async () => { try { const [dbRes, workerRes] = await Promise.all([request('/admin/db_version').catch((e) => ({ error: String(e) })), request('/admin/worker/configs').catch((e) => ({ error: String(e) }))]); setDb(dbRes); setWorkerConfig(workerRes); } catch (error) { notify('error', error instanceof Error ? error.message : t('维护信息加载失败', 'Failed to load maintenance info')); } }, [notify, request]);
   useEffect(() => { load(); }, [load]);
   const action = async (path: string, body?: unknown) => { try { await request(path, { method: 'POST', body }); notify('success', t('操作完成', 'Operation completed')); await load(); } catch (error) { notify('error', error instanceof Error ? error.message : t('操作失败', 'Operation failed')); } };
-  return <div className="h-full overflow-y-auto p-4 md:p-8"><div className="space-y-5"><div className="flex items-center justify-between"><div><h2 className="text-2xl font-bold text-slate-800">{t('维护', 'Maintenance')}</h2><p className="mt-1 text-sm text-slate-400">{t('数据库版本、初始化、迁移、清理和 Worker 配置只读查看。', 'View database version, initialization, migrations, cleanup, and Worker config.')}</p></div><button className="btn-secondary" onClick={load}><RefreshCw size={16} /> {t('刷新', 'Refresh')}</button></div><div className="grid gap-5 xl:grid-cols-2"><div className="panel p-5"><h3 className="panel-title"><Database className="mr-2 inline h-5 w-5 text-slate-600" />{t('数据库', 'Database')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(db)}</pre><div className="mt-4 flex flex-wrap gap-3"><button className="btn-secondary" onClick={() => action('/admin/db_initialize')}><HardDrive size={16} /> {t('初始化', 'Initialize')}</button><button className="btn-secondary" onClick={() => action('/admin/db_migration')}><Database size={16} /> {t('迁移', 'Migrate')}</button></div></div><div className="panel p-5"><h3 className="panel-title"><Cloud className="mr-2 inline h-5 w-5 text-slate-600" />{t('Worker 配置', 'Worker config')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(workerConfig)}</pre></div><div className="panel p-5 xl:col-span-2"><h3 className="panel-title">{t('清理任务', 'Cleanup task')}</h3><div className="mt-4 grid gap-3 md:grid-cols-[1fr_160px_auto]"><select className="form-select" value={cleanType} onChange={(e) => setCleanType(e.target.value)}><option value="raw_mails">{t('收件 raw_mails', 'Inbox raw_mails')}</option><option value="sendbox">{t('发件 sendbox', 'Sent sendbox')}</option><option value="address">{t('地址 address', 'Address table')}</option><option value="custom_sql">{t('自定义 SQL 配置', 'Custom SQL config')}</option></select><input className="form-input" type="number" value={cleanDays} onChange={(e) => setCleanDays(Number(e.target.value))} /><button className="btn-danger" onClick={() => action('/admin/cleanup', { cleanType, cleanDays })}><Trash2 size={16} /> {t('执行清理', 'Run cleanup')}</button></div><div className="mt-5"><GenericSettingsCard title={t('自动清理配置', 'Auto cleanup config')} description={t('读取并保存 /admin/auto_cleanup 配置。', 'Read and save /admin/auto_cleanup config.')} endpoint="/admin/auto_cleanup" request={request} notify={notify} /></div></div></div></div></div>;
+  return <div className="h-full overflow-y-auto p-4 md:p-8"><div className="space-y-5"><div className="flex items-center justify-between"><div><h2 className="page-title">{t('维护', 'Maintenance')}</h2><p className="page-subtitle mt-1">{t('数据库版本、初始化、迁移、清理和 Worker 配置只读查看。', 'View database version, initialization, migrations, cleanup, and Worker config.')}</p></div><button className="btn-secondary" onClick={load}><RefreshCw size={16} /> {t('刷新', 'Refresh')}</button></div><div className="grid gap-5 xl:grid-cols-2"><div className="panel p-5"><h3 className="panel-title"><Database className="mr-2 inline h-5 w-5 text-slate-600" />{t('数据库', 'Database')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(db)}</pre><div className="mt-4 flex flex-wrap gap-3"><button className="btn-secondary" onClick={() => action('/admin/db_initialize')}><HardDrive size={16} /> {t('初始化', 'Initialize')}</button><button className="btn-secondary" onClick={() => action('/admin/db_migration')}><Database size={16} /> {t('迁移', 'Migrate')}</button></div></div><div className="panel p-5"><h3 className="panel-title"><Cloud className="mr-2 inline h-5 w-5 text-slate-600" />{t('Worker 配置', 'Worker config')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(workerConfig)}</pre></div><div className="panel p-5 xl:col-span-2"><h3 className="panel-title">{t('清理任务', 'Cleanup task')}</h3><div className="maintenance-cleanup-grid mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_auto]"><label className="maintenance-cleanup-field"><span className="form-label">{t('清理范围', 'Cleanup scope')}</span><select className="form-select compact-control" value={cleanType} onChange={(e) => setCleanType(e.target.value)}><option value="raw_mails">{t('收件 raw_mails', 'Inbox raw_mails')}</option><option value="sendbox">{t('发件 sendbox', 'Sent sendbox')}</option><option value="address">{t('地址 address', 'Address table')}</option><option value="custom_sql">{t('自定义 SQL 配置', 'Custom SQL config')}</option></select></label><label className="maintenance-cleanup-field"><span className="form-label">{t('保留天数', 'Retention days')}</span><input className="form-input compact-control" type="number" min={0} value={cleanDays} onChange={(e) => setCleanDays(Number(e.target.value))} /></label><button className="btn-danger compact maintenance-cleanup-button" onClick={() => action('/admin/cleanup', { cleanType, cleanDays })}><Trash2 size={16} /> {t('执行清理', 'Run cleanup')}</button></div><div className="mt-5"><GenericSettingsCard title={t('自动清理配置', 'Auto cleanup config')} description={t('读取并保存 /admin/auto_cleanup 配置。', 'Read and save /admin/auto_cleanup config.')} endpoint="/admin/auto_cleanup" request={request} notify={notify} /></div></div></div></div></div>;
 }
 
 

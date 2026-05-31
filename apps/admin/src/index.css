@@ -7997,3 +7997,121 @@ main h2,
   .settings-editor-tabs button { flex: 1; }
   .json-visual-row { grid-template-columns: 1fr; gap: .55rem; }
 }
+
+/* --- FINAL V38 dashboard shortcuts, typography alignment, settings labels, maintenance controls --- */
+.page-title {
+  margin: 0;
+  color: var(--color-text) !important;
+  font-family: var(--font-display) !important;
+  font-size: clamp(1.42rem, 1.14rem + .82vw, 1.92rem) !important;
+  font-weight: var(--fw-strong) !important;
+  letter-spacing: -.035em !important;
+  line-height: 1.14 !important;
+}
+.page-subtitle {
+  max-width: 56rem;
+  color: var(--color-muted) !important;
+  font-family: var(--font-ui) !important;
+  font-size: .86rem !important;
+  font-weight: var(--fw-subtle) !important;
+  line-height: 1.58 !important;
+}
+.dashboard-quick-grid {
+  align-items: stretch;
+}
+.dashboard-quick-card {
+  min-height: 9rem;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: .92rem !important;
+  border-radius: 1.15rem !important;
+}
+.dashboard-quick-card .dashboard-quick-logo {
+  width: 2.28rem;
+  height: 2.28rem;
+  margin-bottom: .45rem;
+}
+.dashboard-quick-title {
+  color: var(--color-text) !important;
+  font-family: var(--font-display) !important;
+  font-size: .92rem !important;
+  font-weight: var(--fw-strong) !important;
+  line-height: 1.24 !important;
+  letter-spacing: -.012em;
+}
+.dashboard-quick-desc {
+  color: var(--color-muted) !important;
+  font-family: var(--font-ui) !important;
+  font-size: .77rem !important;
+  font-weight: var(--fw-subtle) !important;
+  line-height: 1.44 !important;
+}
+.stats-view-shell .dashboard-stat-card p,
+.stats-view-shell .panel,
+.stats-view-shell .panel-title,
+.stats-view-shell .panel-subtitle {
+  font-family: var(--font-ui) !important;
+}
+.stats-view-shell .dashboard-stat-card p:last-child,
+.dashboard-stat-card p:last-child {
+  font-family: var(--font-display) !important;
+  font-weight: var(--fw-strong) !important;
+  letter-spacing: -.035em !important;
+}
+.maintenance-cleanup-grid {
+  align-items: end;
+}
+.maintenance-cleanup-field {
+  min-width: 0;
+  display: grid;
+  gap: .38rem;
+}
+.maintenance-cleanup-grid .form-select,
+.maintenance-cleanup-grid .form-input,
+.maintenance-cleanup-grid .maintenance-cleanup-button {
+  width: 100%;
+  min-height: 2.52rem !important;
+  height: 2.52rem !important;
+  border-radius: .92rem !important;
+  font-size: .82rem !important;
+  line-height: 1 !important;
+}
+.maintenance-cleanup-grid .maintenance-cleanup-button {
+  align-self: end;
+  white-space: nowrap;
+  padding-inline: .92rem !important;
+}
+.json-visual-row strong,
+.json-visual-group-head strong {
+  font-family: var(--font-display) !important;
+  font-weight: var(--fw-strong) !important;
+  letter-spacing: -.012em;
+}
+.json-visual-row small,
+.json-visual-group-head small {
+  font-family: var(--font-ui) !important;
+  color: var(--color-muted) !important;
+}
+.theme-dark .dashboard-quick-card,
+.theme-dark .maintenance-cleanup-field .form-input,
+.theme-dark .maintenance-cleanup-field .form-select {
+  border-color: var(--color-border) !important;
+}
+@media (max-width: 767px) {
+  .dashboard-quick-card {
+    min-height: 7.7rem;
+    padding: .78rem !important;
+  }
+  .dashboard-quick-card .dashboard-quick-logo {
+    width: 2rem;
+    height: 2rem;
+  }
+  .maintenance-cleanup-grid {
+    grid-template-columns: 1fr !important;
+    align-items: stretch;
+  }
+  .maintenance-cleanup-grid .maintenance-cleanup-button {
+    width: 100%;
+  }
+}
