@@ -17,14 +17,104 @@ function useSettingsLocale() {
   };
 }
 
+type JsonPath = Array<string | number>;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function titleFromKey(key: string | number): string {
+  return String(key)
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function updateJsonAtPath(value: unknown, path: JsonPath, nextValue: unknown): unknown {
+  if (!path.length) return nextValue;
+  const [head, ...rest] = path;
+  if (Array.isArray(value)) {
+    const clone = [...value];
+    clone[Number(head)] = updateJsonAtPath(clone[Number(head)], rest, nextValue);
+    return clone;
+  }
+  const clone = isPlainObject(value) ? { ...value } : {};
+  clone[String(head)] = updateJsonAtPath(clone[String(head)], rest, nextValue);
+  return clone;
+}
+
+function primitiveArrayToText(values: unknown[]): string {
+  return values.map((item) => String(item ?? '')).join('\n');
+}
+
+function textToStringArray(value: string): string[] {
+  return value.split(/\n+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function JsonVisualField({ fieldKey, value, path, root, onRootChange, depth = 0 }: { fieldKey: string | number; value: unknown; path: JsonPath; root: unknown; onRootChange: (next: unknown) => void; depth?: number }) {
+  const { t } = useSettingsLocale();
+  const label = titleFromKey(fieldKey);
+  const commit = (nextValue: unknown) => onRootChange(updateJsonAtPath(root, path, nextValue));
+  if (typeof value === 'boolean') {
+    return <label className="json-visual-row json-visual-switch"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span><input type="checkbox" checked={value} onChange={(e) => commit(e.target.checked)} /></label>;
+  }
+  if (typeof value === 'number') {
+    return <label className="json-visual-row"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span><input className="form-input compact-control" type="number" value={Number.isFinite(value) ? value : 0} onChange={(e) => commit(Number(e.target.value))} /></label>;
+  }
+  if (typeof value === 'string' || value === null || value === undefined) {
+    const text = String(value ?? '');
+    const multiline = text.length > 88 || text.includes('\n');
+    return <label className="json-visual-row block"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span>{multiline ? <textarea className="form-textarea json-visual-textarea" value={text} onChange={(e) => commit(e.target.value)} /> : <input className="form-input compact-control" value={text} onChange={(e) => commit(e.target.value)} />}</label>;
+  }
+  if (Array.isArray(value)) {
+    const primitive = value.every((item) => item === null || ['string', 'number', 'boolean'].includes(typeof item));
+    if (primitive) {
+      return <label className="json-visual-row block"><span><strong>{label}</strong><small>{t('列表，每行一项', 'List, one item per line')} · {String(fieldKey)}</small></span><textarea className="form-textarea json-visual-textarea" value={primitiveArrayToText(value)} onChange={(e) => commit(textToStringArray(e.target.value))} /></label>;
+    }
+    return <JsonComplexField fieldKey={fieldKey} value={value} path={path} root={root} onRootChange={onRootChange} depth={depth} />;
+  }
+  if (isPlainObject(value)) {
+    return <JsonComplexField fieldKey={fieldKey} value={value} path={path} root={root} onRootChange={onRootChange} depth={depth} />;
+  }
+  return <label className="json-visual-row block"><span><strong>{label}</strong><small>{String(fieldKey)}</small></span><textarea className="form-textarea json-visual-textarea" value={jsonPretty(value)} onChange={(e) => commit(safeJsonParse(e.target.value, value))} /></label>;
+}
+
+function JsonComplexField({ fieldKey, value, path, root, onRootChange, depth = 0 }: { fieldKey: string | number; value: unknown; path: JsonPath; root: unknown; onRootChange: (next: unknown) => void; depth?: number }) {
+  const { t } = useSettingsLocale();
+  const [mode, setMode] = useState<'form' | 'json'>('form');
+  const entries = isPlainObject(value) ? Object.entries(value) : [];
+  const jsonValue = jsonPretty(value);
+  const commitRaw = (raw: string) => onRootChange(updateJsonAtPath(root, path, safeJsonParse(raw, value)));
+  return <section className="json-visual-group" style={{ marginLeft: depth ? Math.min(depth * 10, 28) : 0 }}>
+    <div className="json-visual-group-head">
+      <div><strong>{titleFromKey(fieldKey)}</strong><small>{Array.isArray(value) ? t(`${value.length} 项`, `${value.length} items`) : `${entries.length} fields`}</small></div>
+      <div className="json-visual-mini-tabs"><button type="button" className={mode === 'form' ? 'active' : ''} onClick={() => setMode('form')}>{t('表单', 'Form')}</button><button type="button" className={mode === 'json' ? 'active' : ''} onClick={() => setMode('json')}>JSON</button></div>
+    </div>
+    {mode === 'json' || Array.isArray(value) ? <textarea className="code-area json-visual-code" value={jsonValue} onChange={(e) => commitRaw(e.target.value)} /> : <div className="json-visual-fields">{entries.map(([key, child]) => <div key={key}><JsonVisualField fieldKey={key} value={child} path={[...path, key]} root={root} onRootChange={onRootChange} depth={depth + 1} /></div>)}</div>}
+  </section>;
+}
+
+function JsonVisualEditor({ value, onChange }: { value: unknown; onChange: (next: unknown) => void }) {
+  const { t } = useSettingsLocale();
+  if (!isPlainObject(value)) {
+    return <div className="json-visual-empty">{t('当前配置不是对象结构，请使用 JSON 高级模式编辑。', 'This config is not an object; use advanced JSON mode.')}</div>;
+  }
+  const entries = Object.entries(value);
+  if (!entries.length) return <div className="json-visual-empty">{t('当前配置为空。可切换到 JSON 高级模式添加新字段。', 'This config is empty. Switch to advanced JSON mode to add fields.')}</div>;
+  return <div className="json-visual-editor">{entries.map(([key, child]) => <div key={key}><JsonVisualField fieldKey={key} value={child} path={[key]} root={value} onRootChange={onChange} /></div>)}</div>;
+}
+
 function GenericSettingsCard({ title, description, endpoint, request, notify, testEndpoint }: { title: string; description: string; endpoint: string; request: Requester; notify: Notify; testEndpoint?: string; key?: string }) {
   const { locale, t } = useSettingsLocale();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editorMode, setEditorMode] = useState<'visual' | 'json'>('visual');
   const [body, setBody] = useState('{}');
   const load = async () => { setLoading(true); try { const res = await request(endpoint); setBody(jsonPretty(res || {})); setOpen(true); } catch (error) { notify('error', error instanceof Error ? error.message : locale === 'en-US' ? `${title} load failed` : `${title} 加载失败`); } finally { setLoading(false); } };
   const save = async () => { try { const parsed = JSON.parse(body || '{}'); await request(endpoint, { method: 'POST', body: parsed }); notify('success', locale === 'en-US' ? `${title} saved` : `${title} 已保存`); } catch (error) { notify('error', error instanceof Error ? error.message : locale === 'en-US' ? `${title} save failed` : `${title} 保存失败`); } };
-  return <div className="panel settings-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{description}</p><code className="mt-2 inline-block rounded-lg bg-slate-100 px-2 py-1 text-[11px] text-slate-500">{endpoint}</code></div><button className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 size={16} />}</button></div>{open && <Modal title={title} onClose={() => setOpen(false)} wide><textarea className="code-area h-[50vh]" value={body} onChange={(e) => setBody(e.target.value)} /><div className="mt-5 flex justify-end gap-3">{testEndpoint && <button className="btn-secondary" onClick={async () => { await request(testEndpoint, { method: 'POST', body: safeJsonParse(body, {}) }); notify('success', t('测试请求已发送', 'Test request sent')); }}><Webhook size={16} /> {t('测试', 'Test')}</button>}<button className="btn-primary" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}</div>;
+  const parsedBody = safeJsonParse(body, {});
+  const updateVisual = (next: unknown) => setBody(jsonPretty(next || {}));
+  return <div className="panel settings-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{description}</p><code className="mt-2 inline-block rounded-lg bg-slate-100 px-2 py-1 text-[11px] text-slate-500">{endpoint}</code></div><button className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 size={16} />}</button></div>{open && <Modal title={title} onClose={() => setOpen(false)} wide><div className="settings-editor-toolbar"><div><strong>{t('编辑方式', 'Editor mode')}</strong><span>{t('普通字段可直接点选，复杂配置仍可切到 JSON。', 'Edit common fields directly; switch to JSON for advanced config.')}</span></div><div className="settings-editor-tabs"><button type="button" className={editorMode === 'visual' ? 'active' : ''} onClick={() => setEditorMode('visual')}>{t('可视化表单', 'Visual form')}</button><button type="button" className={editorMode === 'json' ? 'active' : ''} onClick={() => setEditorMode('json')}>JSON</button></div></div>{editorMode === 'visual' ? <JsonVisualEditor value={parsedBody} onChange={updateVisual} /> : <textarea className="code-area h-[50vh]" value={body} onChange={(e) => setBody(e.target.value)} />}<div className="mt-5 flex justify-end gap-3">{testEndpoint && <button className="btn-secondary" onClick={async () => { await request(testEndpoint, { method: 'POST', body: safeJsonParse(body, {}) }); notify('success', t('测试请求已发送', 'Test request sent')); }}><Webhook size={16} /> {t('测试', 'Test')}</button>}<button className="btn-primary" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}</div>;
 }
 
 export function SettingsView({ request, notify }: { request: Requester; notify: Notify }) {
@@ -39,7 +129,7 @@ export function SettingsView({ request, notify }: { request: Requester; notify: 
     [t('AI 提取设置', 'AI extraction settings'), t('邮件信息提取 Agent 设置。', 'Mail information extraction agent settings.'), '/admin/ai_extract/settings'],
     [t('Telegram 设置 JSON', 'Telegram settings JSON'), t('Telegram Bot / Mini App 集成配置；初始化和状态见下方专用面板。', 'Telegram Bot / Mini App integration config; initialization and status are below.'), '/admin/telegram/settings'],
   ] as const;
-  return <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6"><div className="space-y-3"><div><h2 className="text-2xl font-bold text-slate-800">{t('系统设置', 'System settings')}</h2><p className="mt-1 text-sm text-slate-400">{t('常用项改为紧凑设置，高级 JSON 仍保留。', 'Common settings are compact; advanced JSON editors remain available.')}</p></div><div className="grid gap-2.5 xl:grid-cols-2"><RoleAddressConfigPanel request={request} notify={notify} /><MailRefreshPreferenceCard notify={notify} /><FrontendLoginBaseCard notify={notify} /><AccountRulesPanel request={request} notify={notify} /><TelegramPanel request={request} notify={notify} />{cards.map(([title, desc, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} description={desc} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}</div></div></div>;
+  return <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6"><div className="space-y-3"><div><h2 className="text-2xl font-bold text-slate-800">{t('系统设置', 'System settings')}</h2><p className="mt-1 text-sm text-slate-400">{t('常用项支持可视化表单编辑；复杂字段仍保留 JSON 高级模式。', 'Common settings support visual form editing; complex fields still keep advanced JSON mode.')}</p></div><div className="grid gap-2.5 xl:grid-cols-2"><RoleAddressConfigPanel request={request} notify={notify} /><MailRefreshPreferenceCard notify={notify} /><FrontendLoginBaseCard notify={notify} /><AccountRulesPanel request={request} notify={notify} /><TelegramPanel request={request} notify={notify} />{cards.map(([title, desc, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} description={desc} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}</div></div></div>;
 }
 
 type AccountSettingsState = {
