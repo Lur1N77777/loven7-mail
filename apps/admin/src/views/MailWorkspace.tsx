@@ -65,6 +65,7 @@ function getRecipient(mail: AnyMail): string {
 }
 
 const EMAIL_IN_TEXT_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
+const EXACT_EMAIL_RE = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/iu;
 
 function normalizeMailAddressToken(value: unknown): string {
   if (Array.isArray(value)) {
@@ -87,6 +88,11 @@ function normalizeMailAddressToken(value: unknown): string {
     .replace(/[<>"']/g, '')
     .replace(/\s+/g, '')
     .trim();
+}
+
+function getExactMailboxSearch(value: string): string {
+  const trimmed = value.trim();
+  return EXACT_EMAIL_RE.test(trimmed) ? trimmed : '';
 }
 
 function getStackRecipientKey(mail: AnyMail): string {
@@ -329,7 +335,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const mailSwipeRef = useRef<{ active: boolean; startX: number; startY: number; lastX: number; lastY: number }>({ active: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
   const searchQuery = normalizeSearch(globalQuery);
   const deferredQuery = useDeferredValue(searchQuery);
-  const deferredAddressQuery = useDeferredValue(normalizeSearch(addressInput));
+  const mailSearchQuery = normalizeSearch(addressInput);
+  const deferredAddressQuery = useDeferredValue(mailSearchQuery);
   const isSearchMode = Boolean(deferredQuery || deferredAddressQuery);
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
@@ -455,7 +462,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     const normalizedAddressQuery = normalizeSearch(normalizedAddress);
     const shouldUseExactAddressIndex = mode !== 'unknown' && normalizedAddress.includes('@') && deferredAddressQuery === normalizedAddressQuery;
     const targetAddress = shouldUseExactAddressIndex ? normalizedAddress : '';
-    const indexKey = `${mode}|${targetAddress}|${pageSize}`;
+    const indexKey = `${mode}|${targetAddress}`;
     if (searchIndexKeyRef.current === indexKey && searchIndexCompleteRef.current && !forceRefresh) return;
     if (searchIndexKeyRef.current === indexKey && searchIndexLoadingRef.current && !forceRefresh) return;
     if (searchIndexKeyRef.current !== indexKey) {
@@ -547,7 +554,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     latestCountRef.current = count;
   }, [count]);
   useEffect(() => {
-    const nextAddress = addressInput.trim();
+    const nextAddress = getExactMailboxSearch(addressInput);
     if (nextAddress === address) return undefined;
     const delay = nextAddress ? ADDRESS_INPUT_DEBOUNCE_MS : 0;
     const id = window.setTimeout(() => {
