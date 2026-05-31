@@ -29,6 +29,8 @@ type FetchOptions = { addressOverride?: string; pageOverride?: number; forceRefr
 type TranslateFn = (zh: string, en: string) => string;
 
 const MAIL_LIST_CACHE_VERSION = 4;
+const MAIL_SEARCH_INDEX_PAGE_SIZE = 240;
+const MAIL_SEARCH_INDEX_MAX_PAGES = 90;
 const isParsed = (mail: AnyMail): mail is ParsedMail => typeof (mail as ParsedMail).senderAddress === 'string';
 const storageId = (mode: MailMode, id: number) => `${mode}:${id}`;
 
@@ -170,9 +172,36 @@ const searchTextCache = new WeakMap<AnyMail, string>();
 function getSearchText(mail: AnyMail): string {
   const cached = searchTextCache.get(mail);
   if (cached) return cached;
-  const value = normalizeSearch(`${getSender(mail)} ${getRecipient(mail)} ${mail.subject} ${mail.preview} ${!isParsed(mail) ? mail.to_mail : mail.to}`);
+  const bodyText = isParsed(mail)
+    ? `${mail.to || ''} ${mail.address || ''} ${mail.text || ''}`
+    : `${mail.address || ''} ${mail.from_mail || ''} ${mail.to_mail || ''} ${mail.content || ''}`;
+  const value = normalizeSearch(`${getSender(mail)} ${getSenderAddress(mail)} ${getRecipient(mail)} ${mail.subject} ${mail.preview} ${bodyText}`);
   searchTextCache.set(mail, value);
   return value;
+}
+
+function getAddressSearchText(mail: AnyMail): string {
+  return normalizeSearch(isParsed(mail)
+    ? `${mail.address || ''} ${mail.to || ''} ${mail.senderAddress || ''}`
+    : `${mail.address || ''} ${mail.from_mail || ''} ${mail.to_mail || ''}`);
+}
+
+function compareMailForSearch(a: AnyMail, b: AnyMail): number {
+  const aTime = Number(new Date((a as any).created_at || 0)) || 0;
+  const bTime = Number(new Date((b as any).created_at || 0)) || 0;
+  if (aTime !== bTime) return bTime - aTime;
+  return Number(b.id) - Number(a.id);
+}
+
+function mergeMailLists(primary: AnyMail[], secondary: AnyMail[]): AnyMail[] {
+  const seen = new Set<number>();
+  const merged: AnyMail[] = [];
+  for (const item of [...primary, ...secondary]) {
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    merged.push(item);
+  }
+  return merged.sort(compareMailForSearch);
 }
 
 function getVerificationCodes(mail: AnyMail): string[] {
@@ -259,6 +288,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const [count, setCount] = useState(0);
   const [mobileLoadedPages, setMobileLoadedPages] = useState(1);
   const [mobileLoadingMore, setMobileLoadingMore] = useState(false);
+  const [searchIndex, setSearchIndex] = useState<AnyMail[]>([]);
+  const [searchIndexLoading, setSearchIndexLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [address, setAddress] = useState('');
@@ -289,11 +320,19 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const fetchAbortRef = useRef<AbortController | null>(null);
   const mobileLoadMoreSeqRef = useRef(0);
   const mobileLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const searchIndexSeqRef = useRef(0);
+  const searchIndexAbortRef = useRef<AbortController | null>(null);
+  const searchIndexKeyRef = useRef('');
+  const searchIndexCompleteRef = useRef(false);
+  const searchIndexLoadingRef = useRef(false);
   const newIdsTimerRef = useRef<number | null>(null);
   const mobileDetailHistoryRef = useRef(false);
   const attachmentUrlsRef = useRef<Set<string>>(new Set());
   const mailSwipeRef = useRef<{ active: boolean; startX: number; startY: number; lastX: number; lastY: number }>({ active: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
-  const deferredQuery = useDeferredValue(normalizeSearch(globalQuery));
+  const searchQuery = normalizeSearch(globalQuery);
+  const deferredQuery = useDeferredValue(searchQuery);
+  const deferredAddressQuery = useDeferredValue(normalizeSearch(addressInput));
+  const isSearchMode = Boolean(deferredQuery || deferredAddressQuery);
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
@@ -307,7 +346,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   }, [activeTab, mode]);
   useEffect(() => {
     setExpandedMailStacks(new Set());
-  }, [activeTab, address, deferredQuery, mode, page]);
+  }, [activeTab, address, searchQuery, mode, page]);
 
   const persistReadIds = useCallback((next: Set<string>) => {
     setReadIds(new Set(next));
@@ -340,16 +379,20 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     return true;
   }, [mode, pageSize, readAllBefore, readIds, starredIds]);
 
-  const loadPage = useCallback(async (offset: number, forceRefresh = false, targetAddress = address, signal?: AbortSignal) => {
+  const loadPage = useCallback(async (offset: number, forceRefresh = false, targetAddress = address, signal?: AbortSignal, limitOverride = pageSize) => {
     const normalizedAddress = targetAddress.trim();
     if (mode === 'sent') {
-      const res = await request<ListResponse<SendboxRecord>>(`/admin/sendbox${buildQuery({ limit: pageSize, offset, address: normalizedAddress })}`, { forceRefresh, signal });
+      const res = await request<ListResponse<SendboxRecord>>(`/admin/sendbox${buildQuery({ limit: limitOverride, offset, address: normalizedAddress })}`, { forceRefresh, signal, cacheTtlMs: CACHE_TTL.shortList });
       return { results: (res.results || []).map(parseSendbox), count: res.count };
     }
     const endpoint = mode === 'unknown' ? '/admin/mails_unknow' : '/admin/mails';
-    const res = await request<ListResponse<RawMailRecord>>(`${endpoint}${buildQuery({ limit: pageSize, offset, address: mode === 'inbox' ? normalizedAddress : '' })}`, { forceRefresh, signal });
+    const res = await request<ListResponse<RawMailRecord>>(`${endpoint}${buildQuery({ limit: limitOverride, offset, address: mode === 'inbox' ? normalizedAddress : '' })}`, { forceRefresh, signal, cacheTtlMs: CACHE_TTL.shortList });
     return { results: (res.results || []).map(parseRawMailListItem), count: res.count };
   }, [mode, pageSize, request]);
+
+  const loadSearchIndexPage = useCallback(async (offset: number, signal?: AbortSignal, targetAddress = '') => {
+    return loadPage(offset, false, targetAddress, signal, MAIL_SEARCH_INDEX_PAGE_SIZE);
+  }, [loadPage]);
 
   const fetchData = useCallback(async (incremental = false, options: FetchOptions = {}) => {
     const targetAddress = options.addressOverride ?? address;
@@ -409,6 +452,51 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     }
   }, [address, autoSeconds, loadPage, locale, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds, t]);
 
+  const loadSearchIndex = useCallback(async (forceRefresh = false) => {
+    const normalizedAddress = address.trim();
+    const normalizedAddressQuery = normalizeSearch(normalizedAddress);
+    const shouldUseExactAddressIndex = mode !== 'unknown' && normalizedAddress.includes('@') && deferredAddressQuery === normalizedAddressQuery;
+    const targetAddress = shouldUseExactAddressIndex ? normalizedAddress : '';
+    const indexKey = `${mode}|${targetAddress}|${pageSize}`;
+    if (searchIndexKeyRef.current === indexKey && searchIndexCompleteRef.current && !forceRefresh) return;
+    if (searchIndexKeyRef.current === indexKey && searchIndexLoadingRef.current && !forceRefresh) return;
+    if (searchIndexKeyRef.current !== indexKey) {
+      setSearchIndex(mergeMailLists(mails, []));
+    }
+    searchIndexKeyRef.current = indexKey;
+    searchIndexCompleteRef.current = false;
+    searchIndexAbortRef.current?.abort();
+    const abortController = new AbortController();
+    searchIndexAbortRef.current = abortController;
+    const seq = ++searchIndexSeqRef.current;
+    searchIndexLoadingRef.current = true;
+    setSearchIndexLoading(true);
+    try {
+      const collected: AnyMail[] = [];
+      for (let index = 0; index < MAIL_SEARCH_INDEX_MAX_PAGES; index += 1) {
+        if (abortController.signal.aborted || seq !== searchIndexSeqRef.current) return;
+        const { results, count: totalCount } = await loadSearchIndexPage(index * MAIL_SEARCH_INDEX_PAGE_SIZE, abortController.signal, targetAddress);
+        if (abortController.signal.aborted || seq !== searchIndexSeqRef.current) return;
+        const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
+        collected.push(...parsed);
+        setSearchIndex((current) => mergeMailLists(current, parsed));
+        if (typeof totalCount === 'number' && collected.length >= totalCount) break;
+        if (!results.length) break;
+      }
+      if (seq === searchIndexSeqRef.current) {
+        setSearchIndex((current) => mergeMailLists(current, collected));
+        searchIndexCompleteRef.current = true;
+      }
+    } catch (error) {
+      if (!abortController.signal.aborted) console.warn('mail search index load failed', error);
+    } finally {
+      if (seq === searchIndexSeqRef.current) {
+        searchIndexLoadingRef.current = false;
+        setSearchIndexLoading(false);
+      }
+    }
+  }, [address, deferredAddressQuery, loadSearchIndexPage, mails, mode, readAllBefore, readIds, starredIds]);
+
   const closeMobileDetail = useCallback(() => {
     setIsMobileDetail(false);
     if (typeof window !== 'undefined' && mobileDetailHistoryRef.current && window.history.state?.loven7MailDetail) {
@@ -442,6 +530,9 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     latestMailsRef.current = mails;
   }, [mails]);
   useEffect(() => {
+    setSearchIndex((current) => mergeMailLists(current, mails));
+  }, [mails]);
+  useEffect(() => {
     const currentUrls = getAttachmentObjectUrls(mails);
     attachmentUrlsRef.current.forEach((url) => {
       if (!currentUrls.has(url)) URL.revokeObjectURL(url);
@@ -450,6 +541,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   }, [mails]);
   useEffect(() => () => {
     fetchAbortRef.current?.abort();
+    searchIndexAbortRef.current?.abort();
     attachmentUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     attachmentUrlsRef.current.clear();
   }, []);
@@ -523,9 +615,19 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     return () => window.clearInterval(id);
   }, [active, autoRefresh, autoSeconds, fetchData]);
   useEffect(() => {
-    if (active && mails.length > 0 && !loading && !refreshing) fetchData(true);
+    if (active && mails.length > 0 && !loading && !refreshing && !isSearchMode) fetchData(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, isSearchMode]);
+  useEffect(() => {
+    if (!active) return;
+    if (!searchQuery && !deferredAddressQuery) {
+      searchIndexCompleteRef.current = false;
+      setSearchIndex((current) => mergeMailLists(current, mails));
+      return;
+    }
+    if (compactViewport && !mails.length && !loading) return;
+    void loadSearchIndex(false);
+  }, [active, compactViewport, deferredAddressQuery, loadSearchIndex, loading, mails, searchQuery]);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const onPopState = () => {
@@ -553,15 +655,21 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     setIsMobileDetail(false);
   }, [compactViewport, isMobileDetail]);
 
-  const filtered = useMemo(() => mails.filter((mail) => {
+  const searchSource = useMemo(() => {
+    if (!deferredQuery && !deferredAddressQuery) return mails;
+    return mergeMailLists(searchIndex, mails);
+  }, [deferredAddressQuery, deferredQuery, mails, searchIndex]);
+  const filtered = useMemo(() => searchSource.filter((mail) => {
     const matchesQuery = !deferredQuery || getSearchText(mail).includes(deferredQuery);
+    const matchesAddress = !deferredAddressQuery || getAddressSearchText(mail).includes(deferredAddressQuery);
     const matchesTab = activeTab === 'all' || (activeTab === 'attachments' && isParsed(mail) && mail.attachments.length > 0) || (activeTab === 'starred' && Boolean(mail.isStarred)) || (activeTab === 'unread' && Boolean(mail.isUnread)) || (activeTab === 'read' && !mail.isUnread);
-    return matchesQuery && matchesTab;
-  }), [activeTab, deferredQuery, mails]);
+    return matchesQuery && matchesAddress && matchesTab;
+  }), [activeTab, deferredAddressQuery, deferredQuery, searchSource]);
   const mailListEntries = useMemo(() => groupConsecutiveSenderMails(filtered, mode !== 'sent'), [filtered, mode]);
   const selected = filtered.find((mail) => mail.id === selectedId) || filtered[0] || null;
   const totalPages = Math.max(1, Math.ceil(count / pageSize));
   const unreadCount = useMemo(() => mails.filter((mail) => mail.isUnread).length, [mails]);
+  const displayCount = isSearchMode ? filtered.length : (count || filtered.length);
   const tabOptions = mode === 'sent'
     ? [['all', t('全部', 'All')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]]
     : [['all', t('全部', 'All')], ['unread', t('未读', 'Unread')], ['read', t('已读', 'Read')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]];
@@ -796,7 +904,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
             <div className="mr-auto min-w-0">
               <div className="mail-title-line flex items-center gap-2">
                 <h2 className="mail-title-heading truncate text-[17px] font-bold text-slate-800 md:text-2xl">{title}</h2>
-                <span className="mail-count-badge rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 md:text-sm">{locale === 'en-US' ? `${count || filtered.length} mails` : `${count || filtered.length} 封`}</span>
+                <span className="mail-count-badge rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 md:text-sm">{locale === 'en-US' ? `${displayCount} mails` : `${displayCount} 封`}</span>
                 {unreadCount > 0 && <span className="mail-count-badge unread rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-800">{locale === 'en-US' ? `${unreadCount} unread` : `${unreadCount} 未读`}</span>}
               </div>
               <div className="mt-1 text-[11px] font-medium text-slate-500">{autoRefresh ? (locale === 'en-US' ? `Auto refresh on · sync in ${refreshCountdown}s` : `自动刷新开启 · ${refreshCountdown}s 后同步`) : t('自动刷新关闭', 'Auto refresh off')}</div>
@@ -869,7 +977,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
           </div>}
         </div>
         <div className="mail-list-viewport flex-1 overflow-y-auto px-2 pb-2 md:px-4 md:pb-4">
-          {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={t('没有匹配的邮件', 'No matching mail')} body={t('尝试刷新、修改地址筛选或调整当前筛选。', 'Try refreshing, changing the address filter, or adjusting the current filter.')} /> : mailListEntries.map((entry) => (
+          {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={t('没有匹配的邮件', 'No matching mail')} body={isSearchMode ? t('搜索结果为空，继续输入或刷新后会自动补全更多结果。', 'No search results yet. Keep typing or refresh to broaden the result set.') : t('尝试刷新、修改地址筛选或调整当前筛选。', 'Try refreshing, changing the address filter, or adjusting the current filter.')} /> : mailListEntries.map((entry) => (
             entry.type === 'single' ? (
               <MailListItem
                 key={entry.key}
