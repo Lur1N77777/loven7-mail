@@ -8115,3 +8115,112 @@ main h2,
     width: 100%;
   }
 }
+
+/* --- FINAL V39 dashboard density, stats typography, maintenance alignment polish --- */
+.dashboard-quick-count {
+  display: inline-flex;
+  min-width: 2rem;
+  height: 1.65rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-soft);
+  color: var(--color-muted);
+  font-family: var(--font-ui);
+  font-size: .72rem;
+  font-weight: var(--fw-strong);
+  line-height: 1;
+}
+.dashboard-quick-card {
+  min-height: 7.85rem !important;
+  border: 1px solid transparent;
+  background: var(--color-surface-soft) !important;
+}
+.dashboard-quick-card:hover {
+  border-color: var(--color-border) !important;
+  background: var(--color-surface-raised) !important;
+}
+.dashboard-stat-card,
+.stats-view-shell .panel,
+.stats-activity-card,
+.dashboard-quick-card {
+  font-family: var(--font-ui) !important;
+}
+.dashboard-stat-label,
+.stats-ratio-label,
+.stats-ratio-desc,
+.stats-activity-label {
+  font-family: var(--font-ui) !important;
+  font-weight: var(--fw-subtle) !important;
+  line-height: 1.35 !important;
+}
+.dashboard-stat-value,
+.stats-ratio-value,
+.stats-activity-value {
+  font-family: var(--font-display) !important;
+  font-weight: var(--fw-strong) !important;
+  letter-spacing: -.032em !important;
+  line-height: 1.12 !important;
+}
+.stats-ratio-row {
+  align-items: baseline;
+}
+.stats-ratio-label {
+  min-width: 0;
+}
+.stats-ratio-desc {
+  color: var(--color-muted) !important;
+}
+.stats-activity-card {
+  border: 1px solid transparent;
+  background: var(--color-surface-soft) !important;
+}
+.maintenance-cleanup-grid {
+  align-items: start !important;
+}
+.maintenance-cleanup-action {
+  min-width: 0;
+  display: grid;
+  gap: .38rem;
+}
+.maintenance-cleanup-action-label {
+  color: var(--color-muted) !important;
+}
+.maintenance-cleanup-action .maintenance-cleanup-button {
+  justify-content: center;
+}
+.settings-card h3,
+.settings-card .form-label,
+.json-visual-row strong,
+.json-visual-group-head strong {
+  font-family: var(--font-display) !important;
+}
+.settings-card :where(p, span, small, label, input, textarea, select, button),
+.json-visual-row :where(small, input, textarea),
+.json-visual-group :where(small, input, textarea, button) {
+  font-family: var(--font-ui) !important;
+}
+.theme-dark .dashboard-quick-count,
+.theme-dark .dashboard-quick-card,
+.theme-dark .stats-activity-card {
+  background: var(--color-surface-soft) !important;
+  border-color: var(--color-border) !important;
+}
+@media (min-width: 1280px) {
+  .dashboard-quick-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 767px) {
+  .dashboard-quick-card {
+    min-height: 6.9rem !important;
+  }
+  .dashboard-quick-count {
+    min-width: 1.8rem;
+    height: 1.5rem;
+  }
+  .maintenance-cleanup-action-label {
+    display: none !important;
+  }
+}

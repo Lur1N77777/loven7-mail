@@ -37,8 +37,8 @@ function StatCard({ icon: Icon, label, value, tone = 'neutral' }: { icon: Dashbo
   return (
     <div className="dashboard-stat-card rounded-3xl border border-slate-100 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-4">
       <div className={cls('dashboard-logo-frame mb-3 sm:mb-4', toneMap[tone])}><Icon className="dashboard-logo-svg" /></div>
-      <p className="text-sm text-slate-400">{label}</p>
-      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">{value}</p>
+      <p className="dashboard-stat-label text-sm text-slate-400">{label}</p>
+      <p className="dashboard-stat-value mt-2 text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">{value}</p>
     </div>
   );
 }
@@ -71,10 +71,13 @@ const quickActions: Array<{
 }> = [
   { menu: 'address', icon: AddressLogo, titleZh: '地址管理', titleEn: 'Addresses', descZh: '新建邮箱、筛选用户、批量管理。', descEn: 'Create, filter, and manage mailboxes.' },
   { menu: 'inbox', icon: InboxLogo, titleZh: '收件箱', titleEn: 'Inbox', descZh: '查看邮件、验证码与附件。', descEn: 'Review mail, codes, and attachments.' },
-  { menu: 'sent', icon: SentLogo, titleZh: '发件箱', titleEn: 'Sent mail', descZh: '查看管理员发信记录。', descEn: 'Inspect outbound admin mail.' },
   { menu: 'users', icon: UserAdminLogo, titleZh: '用户管理', titleEn: 'Users', descZh: '管理用户、角色与绑定地址。', descEn: 'Manage users, roles, and bindings.' },
+  { menu: 'compose', icon: PenLine, titleZh: '写邮件', titleEn: 'Compose', descZh: '快速进入发信工作台。', descEn: 'Open the compose workspace.' },
+  { menu: 'sent', icon: SentLogo, titleZh: '发件箱', titleEn: 'Sent mail', descZh: '查看管理员发信记录。', descEn: 'Inspect outbound admin mail.' },
+  { menu: 'unknown', icon: AnonymousLogo, titleZh: '未知邮件', titleEn: 'Unknown mail', descZh: '排查未匹配地址的来信。', descEn: 'Review unmatched inbound mail.' },
   { menu: 'stats', icon: ChartLogo, titleZh: '统计分析', titleEn: 'Stats', descZh: '查看占比、活跃度和能力状态。', descEn: 'Track mix, activity, and capability state.' },
   { menu: 'maintenance', icon: StorageLogo, titleZh: '维护工具', titleEn: 'Maintenance', descZh: '数据库、迁移与清理任务。', descEn: 'Database, migration, and cleanup tools.' },
+  { menu: 'settings', icon: SettingsLogo, titleZh: '系统设置', titleEn: 'Settings', descZh: '配置站点、用户与自动刷新。', descEn: 'Tune site, user, and refresh settings.' },
 ];
 
 export function DashboardView({ stats, loading, openSettings, refresh, setActiveMenu }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void; setActiveMenu: (menu: MenuKey) => void }) {
@@ -114,7 +117,13 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
 
         <section className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
           <div className="panel p-4 sm:p-5">
-            <h3 className="panel-title">{t('快捷入口', 'Quick actions')}</h3>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h3 className="panel-title">{t('快捷入口', 'Quick actions')}</h3>
+                <p className="panel-subtitle mt-1">{t('把日常最高频的管理动作集中到一屏内。', 'Keep daily admin actions within one glance.')}</p>
+              </div>
+              <span className="dashboard-quick-count">{quickActions.length}</span>
+            </div>
             <div className="dashboard-quick-grid mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {quickActions.map((action) => {
                 const QuickIcon = action.icon;
@@ -177,7 +186,7 @@ export function StatsView({ stats, loading, openSettings, refresh }: { stats: St
           <div className="mb-4 flex items-center justify-between"><div><h3 className="panel-title">{t('运行占比', 'Operational mix')}</h3><p className="panel-subtitle">{t('按当前统计接口返回值计算。', 'Calculated from the current statistics API response.')}</p></div><span className="dashboard-quick-logo"><ChartLogo className="dashboard-logo-svg" /></span></div>
           {bars.map(([label, value, color, desc]) => (
             <div className="mb-4" key={label}>
-              <div className="mb-2 flex justify-between gap-4 text-sm"><span className="text-slate-500">{label}<em className="ml-2 not-italic text-xs text-slate-400">{desc}</em></span><span className="font-medium text-slate-700">{value}</span></div>
+              <div className="stats-ratio-row mb-2 flex justify-between gap-4 text-sm"><span className="stats-ratio-label text-slate-500">{label}<em className="stats-ratio-desc ml-2 not-italic text-xs text-slate-400">{desc}</em></span><span className="stats-ratio-value font-medium text-slate-700">{value}</span></div>
               <div className="h-2.5 overflow-hidden rounded-full bg-slate-100"><div className={cls('h-full rounded-full transition-all', color)} style={{ width: `${Math.max(4, (value / total) * 100)}%` }} /></div>
             </div>
           ))}
@@ -185,8 +194,8 @@ export function StatsView({ stats, loading, openSettings, refresh }: { stats: St
         <div className="panel p-4 sm:p-5">
           <h3 className="panel-title">{t('活跃度', 'Activity')}</h3>
           <div className="mt-4 space-y-3">
-            <div className="rounded-2xl bg-slate-50 p-3"><p className="text-sm text-slate-400">{t('7 天 / 总地址', '7d / total addresses')}</p><p className="mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount7days / stats.addressCount) * 100)}%` : '0%'}</p></div>
-            <div className="rounded-2xl bg-slate-50 p-3"><p className="text-sm text-slate-400">{t('30 天 / 总地址', '30d / total addresses')}</p><p className="mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount30days / stats.addressCount) * 100)}%` : '0%'}</p></div>
+            <div className="stats-activity-card rounded-2xl bg-slate-50 p-3"><p className="stats-activity-label text-sm text-slate-400">{t('7 天 / 总地址', '7d / total addresses')}</p><p className="stats-activity-value mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount7days / stats.addressCount) * 100)}%` : '0%'}</p></div>
+            <div className="stats-activity-card rounded-2xl bg-slate-50 p-3"><p className="stats-activity-label text-sm text-slate-400">{t('30 天 / 总地址', '30d / total addresses')}</p><p className="stats-activity-value mt-2 text-2xl font-bold text-slate-800">{stats.addressCount ? `${Math.round((stats.activeAddressCount30days / stats.addressCount) * 100)}%` : '0%'}</p></div>
           </div>
         </div>
       </div>

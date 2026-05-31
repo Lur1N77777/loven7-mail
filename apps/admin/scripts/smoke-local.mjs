@@ -543,7 +543,17 @@ async function main() {
     assert(addressSearchInfo.bodySample.includes('bob.shop88@example.test'), `address search must still ask backend when local index cache is stale/incomplete: ${addressSearchInfo.bodySample}`);
     await evaluate(mobile, `document.querySelector('.address-search-clear')?.click()`);
     await sleep(900);
-    await evaluate(mobile, `document.querySelector('.mobile-address-card [aria-label="查看收件箱"]')?.click()`);
+    await evaluate(mobile, `(() => {
+      const direct = document.querySelector('.mobile-address-card [aria-label="查看收件箱"]');
+      if (direct) { direct.click(); return; }
+      document.querySelector('.mobile-address-card .mobile-address-more')?.click();
+    })()`);
+    await sleep(250);
+    await evaluate(mobile, `(() => {
+      const buttons = Array.from(document.querySelectorAll('.mobile-address-action-menu button'));
+      const viewInbox = buttons.find((button) => /查看收件箱|View inbox/i.test(button.textContent || ''));
+      viewInbox?.click();
+    })()`);
     await sleep(1000);
     const directInboxBeforeClear = JSON.parse(await evaluate(mobile, `JSON.stringify({
       header: document.querySelector('.mobile-header')?.innerText || '',
@@ -599,9 +609,14 @@ async function main() {
     })()`);
     await sleep(300);
     await clickText(mobile, '新建地址');
+    await evaluate(mobile, `document.querySelector('.modal-card .popover-select-trigger')?.click()`);
+    await sleep(250);
     const createAddressInfo = JSON.parse(await evaluate(mobile, `JSON.stringify({
       modal: !!document.querySelector('.modal-card'),
-      domainOptions: [...document.querySelectorAll('.modal-card select option')].map((option) => option.textContent.trim()),
+      domainOptions: [
+        ...document.querySelectorAll('.modal-card select option'),
+        ...document.querySelectorAll('.modal-card .popover-select-option')
+      ].map((option) => option.textContent.trim()),
       namePlaceholder: [...document.querySelectorAll('.modal-card input')].map((input) => input.getAttribute('placeholder') || '').join('|')
     })`));
     extraResults.push({ name: 'mobile-address-create-open', ...createAddressInfo });
@@ -636,12 +651,12 @@ async function main() {
     const rememberedCreateInfo = JSON.parse(await evaluate(mobile, `JSON.stringify({
       modal: !!document.querySelector('.modal-card'),
       inputValues: [...document.querySelectorAll('.modal-card input')].map((input) => input.value),
-      selectedDomain: document.querySelector('.modal-card select')?.value || '',
+      selectedDomain: document.querySelector('.modal-card select')?.value || document.querySelector('.modal-card .popover-select-label')?.textContent.trim() || '',
       preview: [...document.querySelectorAll('.modal-card div, .modal-card p')].map((el) => el.textContent.trim()).find((text) => text.includes('预览：')) || ''
     })`));
     extraResults.push({ name: 'mobile-address-create-remembered', ...rememberedCreateInfo });
     assert(rememberedCreateInfo.inputValues.some((value) => value === 'bg.'), `create dialog should remember custom prefix: ${JSON.stringify(rememberedCreateInfo)}`);
-    assert(rememberedCreateInfo.selectedDomain === 'example.test', `create dialog should remember selected domain: ${JSON.stringify(rememberedCreateInfo)}`);
+    assert(rememberedCreateInfo.selectedDomain.includes('example.test') || rememberedCreateInfo.preview.includes('@example.test'), `create dialog should remember selected domain: ${JSON.stringify(rememberedCreateInfo)}`);
     assert(rememberedCreateInfo.preview.includes('bg.'), `create preview should keep prefix separator after reopen: ${JSON.stringify(rememberedCreateInfo)}`);
     await clickSelector(mobile, '.modal-card button');
     await clickSelector(mobile, '.user-filter-trigger');
