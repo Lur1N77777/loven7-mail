@@ -181,9 +181,7 @@ function getSearchText(mail: AnyMail): string {
 }
 
 function getAddressSearchText(mail: AnyMail): string {
-  return normalizeSearch(isParsed(mail)
-    ? `${mail.address || ''} ${mail.to || ''} ${mail.senderAddress || ''}`
-    : `${mail.address || ''} ${mail.from_mail || ''} ${mail.to_mail || ''}`);
+  return getSearchText(mail);
 }
 
 function compareMailForSearch(a: AnyMail, b: AnyMail): number {
@@ -952,8 +950,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                 onChange={(e) => { setAddressInput(e.target.value); setPage(1); setSelectedId(null); }}
                 onKeyDown={(event) => { if (event.key === 'Escape' && addressInput) clearAddressFilter(); }}
                 className="form-input address-filter-input rounded-xl py-1.5 pr-9 text-[13px] md:rounded-2xl md:py-2 md:text-sm"
-                placeholder={t('筛选邮箱地址', 'Filter mailbox address')}
-                inputMode="email"
+                placeholder={t('搜索邮箱 / 主题 / 正文', 'Search mailbox / subject / body')}
+                inputMode="text"
                 autoCapitalize="none"
                 autoCorrect="off"
               />
@@ -966,8 +964,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                   onTouchStart={clearAddressFilterFromPress}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={clearAddressFilterFromPress}
-                  aria-label={t('清空邮箱地址筛选', 'Clear mailbox address filter')}
-                  title={t('清空邮箱地址筛选', 'Clear mailbox address filter')}
+                  aria-label={t('清空搜索条件', 'Clear search filter')}
+                  title={t('清空搜索条件', 'Clear search filter')}
                 >
                   <X size={14} />
                 </button>
