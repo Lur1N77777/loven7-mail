@@ -86,7 +86,7 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
   const capabilities = capabilityLabels.map(([zh, en, key]) => ({ label: t(zh, en), key, enabled: Boolean(openSettings?.[key]) }));
 
   return (
-    <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6">
+    <div className="dashboard-view-shell dashboard-view-typography h-full overflow-y-auto p-3 md:p-4 xl:p-6">
       <div className="space-y-4">
         <section className="dashboard-hero p-4 sm:rounded-[2rem] md:p-6">
           <div className="relative z-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -116,15 +116,15 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
-          <div className="panel p-4 sm:p-5">
+          <div className="panel dashboard-quick-panel p-4 sm:p-5">
             <div className="flex items-end justify-between gap-3">
               <div>
                 <h3 className="panel-title">{t('快捷入口', 'Quick actions')}</h3>
-                <p className="panel-subtitle mt-1">{t('把日常最高频的管理动作集中到一屏内。', 'Keep daily admin actions within one glance.')}</p>
+                <p className="panel-subtitle mt-1">{t('地址、邮件、用户、设置和维护入口集中展示，不再让大块区域空着。', 'Addresses, mail, users, settings, and maintenance are grouped here without wasted space.')}</p>
               </div>
               <span className="dashboard-quick-count">{quickActions.length}</span>
             </div>
-            <div className="dashboard-quick-grid mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="dashboard-quick-grid mt-4 grid gap-3">
               {quickActions.map((action) => {
                 const QuickIcon = action.icon;
                 return (
@@ -170,7 +170,7 @@ export function StatsView({ stats, loading, openSettings, refresh }: { stats: St
   const enabledCount = capabilityLabels.filter(([, , key]) => Boolean(openSettings?.[key])).length;
 
   return (
-    <div className="stats-view-shell h-full min-h-0 overflow-y-auto p-3 md:p-4 xl:p-6">
+    <div className="stats-view-shell dashboard-view-typography h-full min-h-0 overflow-y-auto p-3 md:p-4 xl:p-6">
       <div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div><h2 className="page-title">{t('统计', 'Stats')}</h2><p className="page-subtitle mt-1">{t('统计页专注指标占比、活跃度和站点能力状态；仪表盘更偏运营总览与快捷操作。', 'Stats focuses on ratios, activity, and capability status; the dashboard is for operational overview and quick actions.')}</p></div>
         <button className="btn-secondary" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} /> {loading ? t('同步中', 'Syncing') : t('刷新统计', 'Refresh stats')}</button>

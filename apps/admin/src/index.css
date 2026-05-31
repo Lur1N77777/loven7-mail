@@ -8288,3 +8288,148 @@ main h2,
     margin-top: .45rem !important;
   }
 }
+
+/* --- FINAL V41 admin dashboard/settings micro polish --- */
+.dashboard-view-typography,
+.dashboard-view-typography :where(button, input, textarea, select, p, span, small, label),
+.maintenance-view-shell,
+.maintenance-view-shell :where(button, input, textarea, select, p, span, small, label),
+.settings-card,
+.settings-card :where(button, input, textarea, select, p, span, small, label) {
+  font-family: var(--font-ui) !important;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+.dashboard-view-typography :where(.page-title, .panel-title, .dashboard-hero-title, .dashboard-quick-title, .dashboard-stat-value, .stats-activity-value, .stats-ratio-value),
+.maintenance-view-shell :where(.page-title, .panel-title),
+.settings-card :where(h3, .form-label) {
+  font-family: var(--font-display) !important;
+  font-weight: var(--fw-strong) !important;
+  letter-spacing: -.018em;
+}
+.dashboard-quick-panel {
+  overflow: hidden;
+}
+.dashboard-quick-grid {
+  grid-template-columns: repeat(auto-fit, minmax(10.8rem, 1fr)) !important;
+}
+.dashboard-quick-card {
+  min-height: 6.85rem !important;
+  gap: .18rem;
+  border: 1px solid var(--color-border) !important;
+}
+.dashboard-quick-card .dashboard-quick-logo {
+  width: 2.08rem !important;
+  height: 2.08rem !important;
+  margin-bottom: .34rem !important;
+}
+.dashboard-quick-title {
+  min-height: 1.15rem;
+}
+.dashboard-quick-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.stats-view-shell .dashboard-stat-card,
+.dashboard-view-shell .dashboard-stat-card {
+  min-height: 8.25rem;
+}
+.stats-view-shell .panel-title,
+.dashboard-view-shell .panel-title {
+  font-size: 1rem !important;
+  line-height: 1.25 !important;
+}
+.stats-ratio-row,
+.stats-activity-card,
+.dashboard-stat-card {
+  color: var(--color-text-soft);
+}
+.settings-card-meta {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: .42rem;
+  border: 1px solid var(--color-border);
+  border-radius: .75rem;
+  background: var(--color-surface-soft);
+  padding: .18rem .26rem .18rem .48rem;
+  color: var(--color-muted);
+  font-size: .68rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.settings-card-meta code {
+  max-width: min(17rem, 50vw);
+  overflow: hidden;
+  border-radius: .56rem !important;
+  background: var(--color-surface-raised) !important;
+  padding: .28rem .42rem !important;
+  color: var(--color-text-soft) !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.maintenance-cleanup-grid {
+  align-items: end !important;
+  grid-template-columns: minmax(14rem, 1fr) minmax(8rem, 10rem) max-content !important;
+}
+.maintenance-cleanup-field,
+.maintenance-cleanup-action {
+  display: grid !important;
+  min-width: 0;
+  gap: .4rem !important;
+}
+.maintenance-cleanup-grid .form-label {
+  height: 1rem;
+  margin: 0 !important;
+  line-height: 1rem !important;
+}
+.maintenance-cleanup-action-label {
+  visibility: hidden;
+}
+.maintenance-cleanup-grid .form-select,
+.maintenance-cleanup-grid .form-input,
+.maintenance-cleanup-grid .maintenance-cleanup-button {
+  height: 2.56rem !important;
+  min-height: 2.56rem !important;
+  border-radius: .98rem !important;
+}
+.maintenance-cleanup-action .maintenance-cleanup-button {
+  width: auto !important;
+  min-width: 9.1rem !important;
+  padding-inline: .95rem !important;
+  white-space: nowrap;
+}
+.theme-dark .settings-card-meta {
+  background: var(--color-surface-soft) !important;
+  border-color: var(--color-border) !important;
+}
+.theme-dark .settings-card-meta code {
+  background: var(--color-surface) !important;
+  color: var(--color-text-soft) !important;
+}
+@media (max-width: 767px) {
+  .dashboard-quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .dashboard-quick-card {
+    min-height: 6.45rem !important;
+  }
+  .maintenance-cleanup-grid {
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+  }
+  .maintenance-cleanup-action-label {
+    display: none !important;
+  }
+  .maintenance-cleanup-action .maintenance-cleanup-button {
+    width: 100% !important;
+  }
+  .settings-card-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .settings-card-meta code {
+    max-width: 56vw;
+  }
+}

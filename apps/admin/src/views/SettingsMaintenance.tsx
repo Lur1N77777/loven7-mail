@@ -76,6 +76,10 @@ const settingsKeyLabels: Record<string, { zh: string; en: string; hintZh?: strin
   passwordMaxLength: { zh: '密码最大长度', en: 'Maximum password length' },
   jwtExpire: { zh: 'JWT 有效期', en: 'JWT expiration' },
   jwtSecret: { zh: 'JWT 密钥', en: 'JWT secret' },
+  jwtPrivateKey: { zh: 'JWT 私钥', en: 'JWT private key' },
+  jwtPublicKey: { zh: 'JWT 公钥', en: 'JWT public key' },
+  sessionExpire: { zh: '会话有效期', en: 'Session expiration' },
+  sessionSecret: { zh: '会话密钥', en: 'Session secret' },
 
   emailRuleSettings: { zh: '邮件规则设置', en: 'Mail rule settings' },
   addressCreationSettings: { zh: '地址创建设置', en: 'Address creation settings' },
@@ -108,6 +112,18 @@ const settingsKeyLabels: Record<string, { zh: string; en: string; hintZh?: strin
   headers: { zh: '请求头', en: 'Headers' },
   timeout: { zh: '超时时间', en: 'Timeout' },
   retry: { zh: '重试次数', en: 'Retry count' },
+  retries: { zh: '重试次数', en: 'Retries' },
+  corsOrigins: { zh: 'CORS 允许来源', en: 'CORS allowed origins' },
+  allowedOrigins: { zh: '允许访问来源', en: 'Allowed origins' },
+  frontendUrl: { zh: '前端地址', en: 'Frontend URL' },
+  frontendBaseUrl: { zh: '前端基础地址', en: 'Frontend base URL' },
+  loginUrl: { zh: '登录地址', en: 'Login URL' },
+  workerBaseUrl: { zh: 'Worker 基础地址', en: 'Worker base URL' },
+  workerUrl: { zh: 'Worker 地址', en: 'Worker URL' },
+  mailWorkerBaseUrl: { zh: '邮件 Worker 地址', en: 'Mail Worker base URL' },
+  adminPassword: { zh: '管理员密码', en: 'Admin password' },
+  sitePassword: { zh: '站点访问密码', en: 'Site password' },
+  accessPassword: { zh: '访问密码', en: 'Access password' },
 
   botToken: { zh: 'Bot Token', en: 'Bot token' },
   botUsername: { zh: 'Bot 用户名', en: 'Bot username' },
@@ -128,12 +144,27 @@ const settingsKeyLabels: Record<string, { zh: string; en: string; hintZh?: strin
   accessKeyId: { zh: 'Access Key ID', en: 'Access key ID' },
   secretAccessKey: { zh: 'Secret Access Key', en: 'Secret access key' },
   publicUrl: { zh: '公开访问地址', en: 'Public URL' },
+  accountId: { zh: '账户 ID', en: 'Account ID' },
+  namespaceId: { zh: '命名空间 ID', en: 'Namespace ID' },
+  kvNamespaceId: { zh: 'KV 命名空间 ID', en: 'KV namespace ID' },
+  databaseId: { zh: '数据库 ID', en: 'Database ID' },
+  d1DatabaseId: { zh: 'D1 数据库 ID', en: 'D1 database ID' },
+  shareKv: { zh: '共享 KV', en: 'Share KV' },
+  shareKV: { zh: '共享 KV', en: 'Share KV' },
+  shareEncryptionSecret: { zh: '共享链接加密密钥', en: 'Share encryption secret' },
+  shareTokenExpireDays: { zh: '共享链接默认有效天数', en: 'Default share expiry days' },
+  shareDefaultVisibility: { zh: '共享邮件默认范围', en: 'Default share visibility' },
+  shareDefaultPermission: { zh: '共享默认权限', en: 'Default share permission' },
 
   model: { zh: '模型', en: 'Model' },
   prompt: { zh: '提示词', en: 'Prompt' },
   systemPrompt: { zh: '系统提示词', en: 'System prompt' },
   temperature: { zh: '温度', en: 'Temperature' },
   maxTokens: { zh: '最大 Token 数', en: 'Max tokens' },
+  openaiApiKey: { zh: 'OpenAI API 密钥', en: 'OpenAI API key' },
+  openaiBaseUrl: { zh: 'OpenAI 基础地址', en: 'OpenAI base URL' },
+  aiProvider: { zh: 'AI 服务商', en: 'AI provider' },
+  extractionModel: { zh: '提取模型', en: 'Extraction model' },
 
   cleanType: { zh: '清理类型', en: 'Cleanup type' },
   cleanDays: { zh: '保留天数', en: 'Retention days' },
@@ -269,6 +300,41 @@ const keyTokenLabels: Record<string, string> = {
   smtp: 'SMTP',
   imap: 'IMAP',
   pop3: 'POP3',
+  cors: 'CORS',
+  origin: '来源',
+  origins: '来源',
+  frontend: '前端',
+  backend: '后端',
+  worker: 'Worker',
+  cloudflare: 'Cloudflare',
+  kv: 'KV',
+  namespace: '命名空间',
+  database: '数据库',
+  d1: 'D1',
+  share: '共享',
+  sharing: '共享',
+  encryption: '加密',
+  private: '私有',
+  publickey: '公钥',
+  privatekey: '私钥',
+  session: '会话',
+  expireday: '有效天数',
+  visibility: '可见范围',
+  permission: '权限',
+  permissions: '权限',
+  attachment: '附件',
+  attachments: '附件',
+  storage: '存储',
+  object: '对象',
+  proxy: '代理',
+  host: '主机',
+  port: '端口',
+  ssl: 'SSL',
+  tls: 'TLS',
+  sender: '发件人',
+  recipient: '收件人',
+  subject: '主题',
+  template: '模板',
 };
 
 function joinLocalizedTokens(parts: string[]) {
@@ -394,7 +460,7 @@ function GenericSettingsCard({ title, description, endpoint, request, notify, te
   const save = async () => { try { const parsed = JSON.parse(body || '{}'); await request(endpoint, { method: 'POST', body: parsed }); notify('success', locale === 'en-US' ? `${title} saved` : `${title} 已保存`); } catch (error) { notify('error', error instanceof Error ? error.message : locale === 'en-US' ? `${title} save failed` : `${title} 保存失败`); } };
   const parsedBody = safeJsonParse(body, {});
   const updateVisual = (next: unknown) => setBody(jsonPretty(next || {}));
-  return <div className="panel settings-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{description}</p><code className="mt-2 inline-block rounded-lg bg-slate-100 px-2 py-1 text-[11px] text-slate-500">{endpoint}</code></div><button className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 size={16} />}</button></div>{open && <Modal title={title} onClose={() => setOpen(false)} wide><div className="settings-editor-toolbar"><div><strong>{t('编辑方式', 'Editor mode')}</strong><span>{t('普通字段可直接点选，复杂配置仍可切到 JSON。', 'Edit common fields directly; switch to JSON for advanced config.')}</span></div><div className="settings-editor-tabs"><button type="button" className={editorMode === 'visual' ? 'active' : ''} onClick={() => setEditorMode('visual')}>{t('可视化表单', 'Visual form')}</button><button type="button" className={editorMode === 'json' ? 'active' : ''} onClick={() => setEditorMode('json')}>JSON</button></div></div>{editorMode === 'visual' ? <JsonVisualEditor value={parsedBody} onChange={updateVisual} /> : <textarea className="code-area h-[50vh]" value={body} onChange={(e) => setBody(e.target.value)} />}<div className="mt-5 flex justify-end gap-3">{testEndpoint && <button className="btn-secondary" onClick={async () => { await request(testEndpoint, { method: 'POST', body: safeJsonParse(body, {}) }); notify('success', t('测试请求已发送', 'Test request sent')); }}><Webhook size={16} /> {t('测试', 'Test')}</button>}<button className="btn-primary" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}</div>;
+  return <div className="panel settings-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{description}</p><div className="settings-card-meta mt-2"><span>{t('中文字段名', 'Localized labels')}</span><code>{endpoint}</code></div></div><button className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 size={16} />}</button></div>{open && <Modal title={title} onClose={() => setOpen(false)} wide><div className="settings-editor-toolbar"><div><strong>{t('编辑方式', 'Editor mode')}</strong><span>{t('表单里左侧显示中文对照，灰色小字保留原始字段名；复杂配置仍可切到 JSON。', 'The form shows localized labels first and keeps the original key in muted text; switch to JSON for advanced config.')}</span></div><div className="settings-editor-tabs"><button type="button" className={editorMode === 'visual' ? 'active' : ''} onClick={() => setEditorMode('visual')}>{t('可视化表单', 'Visual form')}</button><button type="button" className={editorMode === 'json' ? 'active' : ''} onClick={() => setEditorMode('json')}>JSON</button></div></div>{editorMode === 'visual' ? <JsonVisualEditor value={parsedBody} onChange={updateVisual} /> : <textarea className="code-area h-[50vh]" value={body} onChange={(e) => setBody(e.target.value)} />}<div className="mt-5 flex justify-end gap-3">{testEndpoint && <button className="btn-secondary" onClick={async () => { await request(testEndpoint, { method: 'POST', body: safeJsonParse(body, {}) }); notify('success', t('测试请求已发送', 'Test request sent')); }}><Webhook size={16} /> {t('测试', 'Test')}</button>}<button className="btn-primary" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}</div>;
 }
 
 export function SettingsView({ request, notify }: { request: Requester; notify: Notify }) {
@@ -662,7 +728,7 @@ export function MaintenanceView({ request, notify }: { request: Requester; notif
   const load = useCallback(async () => { try { const [dbRes, workerRes] = await Promise.all([request('/admin/db_version').catch((e) => ({ error: String(e) })), request('/admin/worker/configs').catch((e) => ({ error: String(e) }))]); setDb(dbRes); setWorkerConfig(workerRes); } catch (error) { notify('error', error instanceof Error ? error.message : t('维护信息加载失败', 'Failed to load maintenance info')); } }, [notify, request]);
   useEffect(() => { load(); }, [load]);
   const action = async (path: string, body?: unknown) => { try { await request(path, { method: 'POST', body }); notify('success', t('操作完成', 'Operation completed')); await load(); } catch (error) { notify('error', error instanceof Error ? error.message : t('操作失败', 'Operation failed')); } };
-  return <div className="h-full overflow-y-auto p-4 md:p-8"><div className="space-y-5"><div className="flex items-center justify-between"><div><h2 className="page-title">{t('维护', 'Maintenance')}</h2><p className="page-subtitle mt-1">{t('数据库版本、初始化、迁移、清理和 Worker 配置只读查看。', 'View database version, initialization, migrations, cleanup, and Worker config.')}</p></div><button className="btn-secondary" onClick={load}><RefreshCw size={16} /> {t('刷新', 'Refresh')}</button></div><div className="grid gap-5 xl:grid-cols-2"><div className="panel p-5"><h3 className="panel-title"><Database className="mr-2 inline h-5 w-5 text-slate-600" />{t('数据库', 'Database')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(db)}</pre><div className="mt-4 flex flex-wrap gap-3"><button className="btn-secondary" onClick={() => action('/admin/db_initialize')}><HardDrive size={16} /> {t('初始化', 'Initialize')}</button><button className="btn-secondary" onClick={() => action('/admin/db_migration')}><Database size={16} /> {t('迁移', 'Migrate')}</button></div></div><div className="panel p-5"><h3 className="panel-title"><Cloud className="mr-2 inline h-5 w-5 text-slate-600" />{t('Worker 配置', 'Worker config')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(workerConfig)}</pre></div><div className="panel p-5 xl:col-span-2"><h3 className="panel-title">{t('清理任务', 'Cleanup task')}</h3><div className="maintenance-cleanup-grid mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_auto]"><label className="maintenance-cleanup-field"><span className="form-label">{t('清理范围', 'Cleanup scope')}</span><select className="form-select compact-control" value={cleanType} onChange={(e) => setCleanType(e.target.value)}><option value="raw_mails">{t('收件 raw_mails', 'Inbox raw_mails')}</option><option value="sendbox">{t('发件 sendbox', 'Sent sendbox')}</option><option value="address">{t('地址 address', 'Address table')}</option><option value="custom_sql">{t('自定义 SQL 配置', 'Custom SQL config')}</option></select></label><label className="maintenance-cleanup-field"><span className="form-label">{t('保留天数', 'Retention days')}</span><input className="form-input compact-control" type="number" min={0} value={cleanDays} onChange={(e) => setCleanDays(Number(e.target.value))} /></label><div className="maintenance-cleanup-action"><span className="form-label maintenance-cleanup-action-label">{t('操作', 'Action')}</span><button className="btn-danger compact maintenance-cleanup-button" onClick={() => action('/admin/cleanup', { cleanType, cleanDays })}><Trash2 size={16} /> {t('执行清理', 'Run cleanup')}</button></div></div><div className="mt-5"><GenericSettingsCard title={t('自动清理配置', 'Auto cleanup config')} description={t('读取并保存 /admin/auto_cleanup 配置。', 'Read and save /admin/auto_cleanup config.')} endpoint="/admin/auto_cleanup" request={request} notify={notify} /></div></div></div></div></div>;
+  return <div className="maintenance-view-shell h-full overflow-y-auto p-4 md:p-8"><div className="space-y-5"><div className="flex items-center justify-between"><div><h2 className="page-title">{t('维护', 'Maintenance')}</h2><p className="page-subtitle mt-1">{t('数据库版本、初始化、迁移、清理和 Worker 配置只读查看。', 'View database version, initialization, migrations, cleanup, and Worker config.')}</p></div><button className="btn-secondary" onClick={load}><RefreshCw size={16} /> {t('刷新', 'Refresh')}</button></div><div className="grid gap-5 xl:grid-cols-2"><div className="panel p-5"><h3 className="panel-title"><Database className="mr-2 inline h-5 w-5 text-slate-600" />{t('数据库', 'Database')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(db)}</pre><div className="mt-4 flex flex-wrap gap-3"><button className="btn-secondary" onClick={() => action('/admin/db_initialize')}><HardDrive size={16} /> {t('初始化', 'Initialize')}</button><button className="btn-secondary" onClick={() => action('/admin/db_migration')}><Database size={16} /> {t('迁移', 'Migrate')}</button></div></div><div className="panel p-5"><h3 className="panel-title"><Cloud className="mr-2 inline h-5 w-5 text-slate-600" />{t('Worker 配置', 'Worker config')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(workerConfig)}</pre></div><div className="panel p-5 xl:col-span-2"><h3 className="panel-title">{t('清理任务', 'Cleanup task')}</h3><div className="maintenance-cleanup-grid mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_auto]"><label className="maintenance-cleanup-field"><span className="form-label">{t('清理范围', 'Cleanup scope')}</span><select className="form-select compact-control" value={cleanType} onChange={(e) => setCleanType(e.target.value)}><option value="raw_mails">{t('收件 raw_mails', 'Inbox raw_mails')}</option><option value="sendbox">{t('发件 sendbox', 'Sent sendbox')}</option><option value="address">{t('地址 address', 'Address table')}</option><option value="custom_sql">{t('自定义 SQL 配置', 'Custom SQL config')}</option></select></label><label className="maintenance-cleanup-field"><span className="form-label">{t('保留天数', 'Retention days')}</span><input className="form-input compact-control" type="number" min={0} value={cleanDays} onChange={(e) => setCleanDays(Number(e.target.value))} /></label><div className="maintenance-cleanup-action"><span className="form-label maintenance-cleanup-action-label">{t('操作', 'Action')}</span><button className="btn-danger compact maintenance-cleanup-button" onClick={() => action('/admin/cleanup', { cleanType, cleanDays })}><Trash2 size={16} /> {t('执行清理', 'Run cleanup')}</button></div></div><div className="mt-5"><GenericSettingsCard title={t('自动清理配置', 'Auto cleanup config')} description={t('读取并保存 /admin/auto_cleanup 配置。', 'Read and save /admin/auto_cleanup config.')} endpoint="/admin/auto_cleanup" request={request} notify={notify} /></div></div></div></div></div>;
 }
 
 
