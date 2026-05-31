@@ -217,8 +217,59 @@ export function PopoverSelect({
 
 export function Pagination({ page, setPage, pageSize, setPageSize, totalPages, count, variant = 'inline' }: { page: number; setPage: (page: number) => void; pageSize: number; setPageSize: (size: number) => void; totalPages: number; count: number; variant?: 'inline' | 'floating' }) {
   const [sizeOpen, setSizeOpen] = useState(false);
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
   const locale = getRuntimeLocale();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => setSizeOpen(false), [pageSize]);
+  useEffect(() => {
+    if (!sizeOpen) return undefined;
+    const updateRect = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      setMenuRect(rect || null);
+    };
+    const close = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || (target instanceof Element && target.closest('.pagination-size-menu'))) return;
+      setSizeOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setSizeOpen(false); };
+    updateRect();
+    window.addEventListener('resize', updateRect, { passive: true });
+    window.addEventListener('scroll', updateRect, { passive: true, capture: true });
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('resize', updateRect);
+      window.removeEventListener('scroll', updateRect, { capture: true });
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [sizeOpen]);
+  const menu = sizeOpen && (
+    <div
+      className={cls('pagination-size-menu', variant === 'floating' && 'pagination-size-menu-portal')}
+      role="menu"
+      style={variant === 'floating' && menuRect ? {
+        position: 'fixed',
+        left: Math.max(8, Math.min(menuRect.left, window.innerWidth - 112)),
+        top: Math.max(8, menuRect.top - (PAGE_SIZE_OPTIONS.length * 33 + 14)),
+        zIndex: 140,
+      } : undefined}
+    >
+      {PAGE_SIZE_OPTIONS.map((size) => (
+        <button
+          key={size}
+          type="button"
+          role="menuitemradio"
+          aria-checked={pageSize === size}
+          className={cls(pageSize === size && 'active')}
+          onClick={() => { setPageSize(size); setPage(1); setSizeOpen(false); }}
+        >
+          {locale === 'en-US' ? `${size}/page` : `${size}/页`}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <div className={cls('pagination-bar flex flex-row items-center justify-between gap-2 border-t border-slate-100 px-2 py-1.5 text-xs text-slate-500 md:px-3 md:py-2', variant === 'floating' && 'pagination-floating')}>
       <span className="pagination-summary min-w-0 truncate"><span className="hidden sm:inline">{locale === 'en-US' ? `${count || 0} items · ` : `${count || 0} 条 · `}</span>{page}/{totalPages}</span>
@@ -229,27 +280,13 @@ export function Pagination({ page, setPage, pageSize, setPageSize, totalPages, c
             aria-label={localeText('每页数量', 'Items per page', locale)}
             aria-haspopup="menu"
             aria-expanded={sizeOpen}
+            ref={triggerRef}
             className={cls('form-select pagination-size pagination-size-trigger', sizeOpen && 'active')}
             onClick={() => setSizeOpen((open) => !open)}
           >
             {locale === 'en-US' ? `${pageSize}/page` : `${pageSize}/页`}
           </button>
-          {sizeOpen && (
-            <div className="pagination-size-menu" role="menu">
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={pageSize === size}
-                  className={cls(pageSize === size && 'active')}
-                  onClick={() => { setPageSize(size); setPage(1); setSizeOpen(false); }}
-                >
-                  {locale === 'en-US' ? `${size}/page` : `${size}/页`}
-                </button>
-              ))}
-            </div>
-          )}
+          {variant === 'floating' ? (typeof document === 'undefined' ? menu : createPortal(menu, document.body)) : menu}
         </div>
         <button className="page-btn compact" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={localeText('上一页', 'Previous page', locale)}>‹</button>
         <button className="page-btn compact" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={localeText('下一页', 'Next page', locale)}>›</button>
