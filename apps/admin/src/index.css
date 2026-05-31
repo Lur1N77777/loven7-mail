@@ -7778,3 +7778,44 @@ main h2,
 .share-manager-table-wrap .share-admin-table tbody tr:last-child td:last-child {
   border-bottom-right-radius: calc(1rem - 1px) !important;
 }
+
+/* --- FINAL V36 mail search smoothness + pagination menu reliability --- */
+.mail-list-item,
+.mail-stack-item,
+.mail-stack-child {
+  will-change: auto !important;
+  transition-property: background-color, border-color, color, box-shadow, opacity !important;
+}
+.mail-list-item:active,
+.mail-stack-item:active,
+.mail-stack-child:active {
+  transform: none !important;
+}
+.mail-stack-item {
+  transform: none !important;
+}
+.mail-stack-child {
+  transform: none !important;
+}
+.mail-stack-expand-button:active,
+.mail-filter-trigger:active,
+.pagination-size-trigger:active {
+  transform: none !important;
+}
+.pagination-bar,
+.pagination-size-popover {
+  overflow: visible !important;
+}
+.pagination-size-menu {
+  z-index: 140 !important;
+}
+.pagination-size-menu-portal {
+  min-width: 6.25rem !important;
+  transform-origin: bottom left !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16) !important;
+}
+.theme-dark .pagination-size-menu-portal {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .24) !important;
+}
