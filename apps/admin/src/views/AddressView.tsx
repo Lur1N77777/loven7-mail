@@ -948,8 +948,10 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   const frontendBase = () => {
     const stored = readStorage(STORAGE_KEYS.frontendLoginBase, '').trim().replace(/\/+$/, '');
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin.replace(/\/+$/, '') : '';
-    if (stored && stored !== currentOrigin) return stored;
-    return FRONTEND_LOGIN_BASE || stored || currentOrigin;
+    const isLocalAdmin = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(currentOrigin);
+    if (FRONTEND_LOGIN_BASE) return FRONTEND_LOGIN_BASE;
+    if (stored && (stored !== currentOrigin || isLocalAdmin)) return stored;
+    return isLocalAdmin ? currentOrigin : '';
   };
   const copyLoginUrl = async (row: AddressRecord) => {
     try {
@@ -1411,6 +1413,8 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     );
   };
 
+  const credentialLoginUrl = credential ? buildAddressLoginUrl(credential.jwt, frontendBase()) : '';
+
   return (
     <div className="address-view-shell h-full space-y-4 overflow-y-auto p-3 md:p-4 xl:p-6" onScrollCapture={() => { closeMobileActionMenu(); closeDesktopActionMenu(); }}>
       <div className="address-page-head flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -1833,12 +1837,12 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
           <textarea readOnly className="code-area h-48" value={credential.jwt} />
           <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-500">
             <p className="mb-2 font-medium text-slate-700">{t('一键登录链接', 'One-click login link')}</p>
-            <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded-xl bg-white px-3 py-2 text-xs text-slate-500">{buildAddressLoginUrl(credential.jwt, readStorage(STORAGE_KEYS.frontendLoginBase, typeof window !== 'undefined' ? window.location.origin : ''))}</code>
+            <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded-xl bg-white px-3 py-2 text-xs text-slate-500">{credentialLoginUrl}</code>
           </div>
           <div className="flex flex-wrap gap-3">
             <button className="btn-primary" onClick={() => copyAddressValue(credential.jwt, t('已复制 JWT', 'JWT copied'))}><KeyRound size={16} /> {t('复制 JWT', 'Copy JWT')}</button>
-            <a className="btn-secondary" href={buildAddressLoginUrl(credential.jwt, readStorage(STORAGE_KEYS.frontendLoginBase, typeof window !== 'undefined' ? window.location.origin : ''))} target="_blank" rel="noreferrer"><ExternalLink size={16} /> {t('一键登录该地址', 'Login to this address')}</a>
-            <button className="btn-secondary" onClick={() => copyAddressValue(buildAddressLoginUrl(credential.jwt, readStorage(STORAGE_KEYS.frontendLoginBase, typeof window !== 'undefined' ? window.location.origin : '')), t('已复制登录地址链接', 'Login link copied'))}><Copy size={16} /> {t('一键复制登录地址链接', 'Copy login link')}</button>
+            <a className="btn-secondary" href={credentialLoginUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} /> {t('一键登录该地址', 'Login to this address')}</a>
+            <button className="btn-secondary" onClick={() => copyAddressValue(credentialLoginUrl, t('已复制登录地址链接', 'Login link copied'))}><Copy size={16} /> {t('一键复制登录地址链接', 'Copy login link')}</button>
           </div>
         </div>
       </Modal>}

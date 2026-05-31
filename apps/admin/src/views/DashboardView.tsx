@@ -73,10 +73,7 @@ const quickActions: Array<{
   { menu: 'inbox', icon: InboxLogo, titleZh: '收件箱', titleEn: 'Inbox', descZh: '查看邮件、验证码与附件。', descEn: 'Review mail, codes, and attachments.' },
   { menu: 'users', icon: UserAdminLogo, titleZh: '用户管理', titleEn: 'Users', descZh: '管理用户、角色与绑定地址。', descEn: 'Manage users, roles, and bindings.' },
   { menu: 'compose', icon: PenLine, titleZh: '写邮件', titleEn: 'Compose', descZh: '快速进入发信工作台。', descEn: 'Open the compose workspace.' },
-  { menu: 'sent', icon: SentLogo, titleZh: '发件箱', titleEn: 'Sent mail', descZh: '查看管理员发信记录。', descEn: 'Inspect outbound admin mail.' },
-  { menu: 'unknown', icon: AnonymousLogo, titleZh: '未知邮件', titleEn: 'Unknown mail', descZh: '排查未匹配地址的来信。', descEn: 'Review unmatched inbound mail.' },
   { menu: 'stats', icon: ChartLogo, titleZh: '统计分析', titleEn: 'Stats', descZh: '查看占比、活跃度和能力状态。', descEn: 'Track mix, activity, and capability state.' },
-  { menu: 'maintenance', icon: StorageLogo, titleZh: '维护工具', titleEn: 'Maintenance', descZh: '数据库、迁移与清理任务。', descEn: 'Database, migration, and cleanup tools.' },
   { menu: 'settings', icon: SettingsLogo, titleZh: '系统设置', titleEn: 'Settings', descZh: '配置站点、用户与自动刷新。', descEn: 'Tune site, user, and refresh settings.' },
 ];
 
@@ -120,7 +117,7 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
             <div className="flex items-end justify-between gap-3">
               <div>
                 <h3 className="panel-title">{t('快捷入口', 'Quick actions')}</h3>
-                <p className="panel-subtitle mt-1">{t('地址、邮件、用户、设置和维护入口集中展示，不再让大块区域空着。', 'Addresses, mail, users, settings, and maintenance are grouped here without wasted space.')}</p>
+                <p className="panel-subtitle mt-1">{t('常用入口保持 6 项，地址、邮件、用户、统计与设置集中展示。', 'Six common actions keep addresses, mail, users, stats, and settings grouped cleanly.')}</p>
               </div>
               <span className="dashboard-quick-count">{quickActions.length}</span>
             </div>

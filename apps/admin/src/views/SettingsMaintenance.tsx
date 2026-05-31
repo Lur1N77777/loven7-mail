@@ -637,7 +637,7 @@ function MailRefreshPreferenceCard({ notify }: { notify: Notify }) {
 
 function FrontendLoginBaseCard({ notify }: { notify: Notify }) {
   const { t } = useSettingsLocale();
-  const defaultBase = FRONTEND_LOGIN_BASE || (typeof window !== 'undefined' ? window.location.origin : '');
+  const defaultBase = FRONTEND_LOGIN_BASE || '';
   const [value, setValue] = useState(() => readStorage(STORAGE_KEYS.frontendLoginBase, defaultBase));
   const normalized = (value || defaultBase).trim().replace(/\/$/, '');
   const save = () => {
@@ -645,7 +645,7 @@ function FrontendLoginBaseCard({ notify }: { notify: Notify }) {
     setValue(normalized);
     notify('success', t('前端登录链接前缀已保存', 'Frontend login link prefix saved'));
   };
-  return <div className="panel settings-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><Link className="mr-2 inline h-4 w-4 text-slate-600" />{t('前端登录链接前缀', 'Frontend login link prefix')}</h3><p className="panel-subtitle">{t('用于', 'Used for')} <code>/?JWT=</code>{t(' 登录链接。', ' login links.')}</p></div></div><div className="mt-3 flex flex-col gap-2 sm:flex-row"><input className="form-input compact-control" value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultBase || 'https://your-frontend.example.com'} /><button className="btn-primary compact shrink-0" onClick={save}><Save size={15} /> {t('保存', 'Save')}</button></div><p className="mt-2 truncate rounded-xl bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">{t('示例：', 'Example: ')}{normalized || defaultBase}/?JWT=...</p></div>;
+  return <div className="panel settings-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><Link className="mr-2 inline h-4 w-4 text-slate-600" />{t('前端登录链接前缀', 'Frontend login link prefix')}</h3><p className="panel-subtitle">{t('必须填写用户站地址，用于', 'Set the webmail site URL for')} <code>/?JWT=</code>{t(' 登录链接和共享链接接口；不要填写后台管理站地址。', ' login links and share-link APIs; do not use the admin URL.')}</p></div></div><div className="mt-3 flex flex-col gap-2 sm:flex-row"><input className="form-input compact-control" value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultBase || 'https://your-webmail.example.com'} /><button className="btn-primary compact shrink-0" onClick={save}><Save size={15} /> {t('保存', 'Save')}</button></div><p className="mt-2 truncate rounded-xl bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">{normalized ? `${t('示例：', 'Example: ')}${normalized}/?JWT=...` : t('尚未配置：共享链接管理会提示先填写用户站地址。', 'Not configured: share management will ask for the webmail URL first.')}</p></div>;
 }
 
 function RoleAddressConfigPanel({ request, notify }: { request: Requester; notify: Notify }) {
