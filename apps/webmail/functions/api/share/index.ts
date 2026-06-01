@@ -1,4 +1,4 @@
-import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, fetchWorkerJson, json, mapUpstreamError, sanitizeSettings, UpstreamError, withCors } from "../../_lib/http";
+import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, fetchWorkerJson, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
 import { getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
 import type { PagesHandler } from "../../_lib/types";
 
@@ -116,7 +116,7 @@ async function resolveVerifiedJwtAddress(env: Parameters<PagesHandler>[0]["env"]
   if (decodedAddress) return { address: decodedAddress, verifiedBy: "jwt-payload" as const };
   try {
     const settingsRaw = await fetchWorkerJson<unknown>(env, "/api/settings", { jwt });
-    const settings = sanitizeSettings(settingsRaw, fallbackAddress);
+    const settings = settingsRaw && typeof settingsRaw === "object" ? settingsRaw as Record<string, unknown> : {};
     const settingsAddress = normalizeAddress(settings.address);
     if (settingsAddress) return { address: settingsAddress, verifiedBy: "settings" as const };
   } catch {
