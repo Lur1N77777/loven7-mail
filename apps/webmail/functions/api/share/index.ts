@@ -1,5 +1,5 @@
-import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, fetchWorkerJson, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
-import { getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, validateJwtAddress, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
+import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, fetchWorkerJson, json, mapUpstreamError, sanitizeSettings, UpstreamError, withCors } from "../../_lib/http";
+import { getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
 import type { PagesHandler } from "../../_lib/types";
 
 type AddressHint = {
@@ -111,6 +111,20 @@ async function loginAddressPassword(env: Parameters<PagesHandler>[0]["env"], add
   return "";
 }
 
+async function resolveVerifiedJwtAddress(env: Parameters<PagesHandler>[0]["env"], jwt: string, fallbackAddress = "") {
+  const decodedAddress = normalizeAddress(decodeJwtAddress(jwt));
+  if (decodedAddress) return { address: decodedAddress, verifiedBy: "jwt-payload" as const };
+  try {
+    const settingsRaw = await fetchWorkerJson<unknown>(env, "/api/settings", { jwt });
+    const settings = sanitizeSettings(settingsRaw, fallbackAddress);
+    const settingsAddress = normalizeAddress(settings.address);
+    if (settingsAddress) return { address: settingsAddress, verifiedBy: "settings" as const };
+  } catch {
+    // The caller must not treat fallbackAddress as verified. It is only for error context.
+  }
+  return { address: normalizeAddress(fallbackAddress), verifiedBy: "unverified" as const };
+}
+
 export const onRequestOptions: PagesHandler = ({ request }) => {
   return new Response(null, { status: 204, headers: corsHeaders(request) });
 };
@@ -155,12 +169,11 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       }
       if (!jwt) throw new Error(`地址 #${id} 没有返回可用于分享的 JWT`);
       if (!fallbackAddress) fallbackAddress = decodeJwtAddress(jwt);
-      const decodedAddress = normalizeAddress(decodeJwtAddress(jwt));
-      if (fallbackAddress && decodedAddress && !sameAddress(decodedAddress, fallbackAddress)) {
-        throw new Error(`地址 #${id} 的访问凭证与目标邮箱不匹配，请刷新地址列表后重试`);
+      const resolved = await resolveVerifiedJwtAddress(workerEnv, jwt, fallbackAddress);
+      const address = resolved.address;
+      if (!address || resolved.verifiedBy === "unverified") {
+        throw new Error(`地址 #${id} 的访问凭证无法验证邮箱归属，请刷新地址列表或重置密码后重试`);
       }
-      const address = normalizeAddress(await validateJwtAddress(workerEnv, jwt, fallbackAddress)) || fallbackAddress;
-      if (!address) throw new Error(`地址 #${id} JWT 无法解析邮箱，请在地址管理列表刷新后重试`);
       if (fallbackAddress && !sameAddress(address, fallbackAddress)) {
         throw new Error(`地址 #${id} 的访问凭证属于其他邮箱，请刷新地址列表后重试`);
       }
