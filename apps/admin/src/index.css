@@ -4333,6 +4333,134 @@ section.grid p.text-3xl {
 }
 .theme-dark .share-row-revoked { opacity: .5; }
 
+/* Share creation range selector: compact segmented cards instead of bulky radio boxes. */
+.share-visibility-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .45rem;
+  padding: .28rem;
+  border: 1px solid color-mix(in oklch, var(--color-border) 88%, transparent);
+  border-radius: 1.15rem;
+  background: color-mix(in oklch, var(--color-surface-soft) 78%, var(--color-surface) 22%);
+}
+.share-visibility-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 58px;
+  padding: .62rem .72rem .62rem 2.35rem;
+  border: 1px solid transparent;
+  border-radius: .88rem;
+  color: var(--color-text-soft);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease);
+}
+.share-visibility-option:hover {
+  background: color-mix(in oklch, var(--color-surface) 82%, var(--color-primary-soft) 18%);
+}
+.share-visibility-option:active { transform: scale(.992); }
+.share-visibility-option.active {
+  border-color: color-mix(in oklch, var(--color-primary) 24%, var(--color-border) 76%);
+  background: color-mix(in oklch, var(--color-surface) 68%, var(--color-primary-soft) 32%);
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-primary) 14%, transparent), 0 8px 22px rgba(15, 23, 42, .06);
+}
+.share-visibility-option input {
+  position: absolute;
+  left: .78rem;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  transform: translateY(-50%);
+  opacity: 0;
+}
+.share-visibility-option::before {
+  content: "";
+  position: absolute;
+  left: .78rem;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in oklch, var(--color-muted) 45%, var(--color-border) 55%);
+  border-radius: 999px;
+  background: var(--color-surface);
+  transform: translateY(-50%);
+  transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+}
+.share-visibility-option::after {
+  content: "";
+  position: absolute;
+  left: calc(.78rem + 5px);
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  transform: translateY(-50%) scale(.45);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
+}
+.share-visibility-option.active::before {
+  border-color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary-soft) 55%, var(--color-surface) 45%);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 10%, transparent);
+}
+.share-visibility-option.active::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+.share-choice-body {
+  display: block;
+  min-width: 0;
+}
+.share-choice-body strong {
+  display: block;
+  font-size: .86rem;
+  font-weight: 760;
+  line-height: 1.22;
+  color: var(--color-text);
+}
+.share-choice-body small {
+  display: block;
+  margin-top: .18rem;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: .72rem;
+  font-weight: 520;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-visibility-note {
+  margin-top: .45rem;
+  color: var(--color-muted);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+.theme-dark .share-visibility-switch {
+  background: rgba(255,255,255,.035);
+  border-color: rgba(255,255,255,.08);
+}
+.theme-dark .share-visibility-option.active {
+  background: rgba(255,255,255,.075);
+  border-color: rgba(255,255,255,.16);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+.theme-dark .share-visibility-option::before { background: rgba(255,255,255,.04); }
+@media (max-width: 520px) {
+  .share-visibility-switch { grid-template-columns: 1fr; }
+  .share-visibility-option { min-height: 52px; }
+  .share-choice-body small { white-space: normal; }
+}
+
 
 /* --- FINAL V15 mail-header-control-system: consistent toolbar geometry --- */
 .mail-list-panel {

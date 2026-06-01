@@ -562,6 +562,22 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     { value: 'new', label: t('仅新增', 'New only'), description: t('从现在开始', 'From now on') },
     { value: 'all', label: t('包含历史', 'Include history'), description: t('显示已有邮件', 'Show existing mail') },
   ], [t]);
+  const renderShareVisibilitySwitch = (name: string, value: ShareMailVisibility, onChange: (next: ShareMailVisibility) => void, note?: string) => (
+    <>
+      <div className="share-visibility-switch" role="radiogroup" aria-label={t('共享邮件范围', 'Shared mail range')}>
+        {shareVisibilityOptions.map((option) => (
+          <label key={option.value} className={cls('share-visibility-option', value === option.value && 'active')}>
+            <input type="radio" name={name} checked={value === option.value} onChange={() => onChange(option.value)} />
+            <span className="share-choice-body">
+              <strong>{option.label}</strong>
+              <small>{option.description}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+      {note ? <p className="share-visibility-note">{note}</p> : null}
+    </>
+  );
   const shareStatusText = useCallback((status: ShareStatus) => {
     if (status === 'revoked') return t('已撤销', 'Revoked');
     if (status === 'expired') return t('已失效', 'Expired');
@@ -1664,16 +1680,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
             <label className="form-label">{t('有效期', 'Expiry')}</label>
             <PopoverSelect ariaLabel={t('共享链接有效期', 'Share link expiry')} value={shareExpiry} options={shareExpiryOptions} onChange={(value) => setShareExpiry(value as ShareExpiryOption)} />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className={cls('share-choice-card', shareMailVisibility === 'new' && 'active')}>
-              <input type="radio" name="shareMailVisibility" checked={shareMailVisibility === 'new'} onChange={() => setShareMailVisibility('new')} />
-              <span><strong>{t('仅新增邮件', 'New mail only')}</strong><small>{t('默认打开为空，只显示分享后收到的新邮件。', 'Opens empty by default and only shows mail received after sharing.')}</small></span>
-            </label>
-            <label className={cls('share-choice-card', shareMailVisibility === 'all' && 'active')}>
-              <input type="radio" name="shareMailVisibility" checked={shareMailVisibility === 'all'} onChange={() => setShareMailVisibility('all')} />
-              <span><strong>{t('包含历史邮件', 'Include history')}</strong><small>{t('对方可以看到当前已有历史邮件。', 'Recipients can see existing mail history.')}</small></span>
-            </label>
-          </div>
+          {renderShareVisibilitySwitch('shareMailVisibility', shareMailVisibility, setShareMailVisibility)}
           <label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={shareAllowHideMail} onChange={(event) => setShareAllowHideMail(event.target.checked)} />{t('允许访客从分享页移除邮件（只影响此链接，不删除后台真实邮件）', 'Allow visitors to remove mail from the share view only; real admin mail is not deleted.')}</label>
           <div className="max-h-36 overflow-y-auto rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
             {selectedRows.map((row) => <div key={row.id} className="truncate py-0.5">#{row.id} · {row.name}</div>)}
@@ -1828,8 +1835,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
           </div>
           <div>
             <label className="form-label">{t('邮件范围', 'Mail range')}</label>
-            <PopoverSelect ariaLabel={t('共享邮件范围', 'Shared mail range')} value={shareEditVisibility} options={shareVisibilityOptions} onChange={(value) => setShareEditVisibility(value as ShareMailVisibility)} />
-            <p className="mt-1 text-xs text-slate-400">{t('切换为仅新增会以当前时刻重新记录 cutoff。', 'Switching to new-only records a fresh cutoff from now.')}</p>
+            {renderShareVisibilitySwitch('shareEditVisibility', shareEditVisibility, setShareEditVisibility, t('切换为仅新增会以当前时刻重新记录 cutoff。', 'Switching to new-only records a fresh cutoff from now.'))}
           </div>
           {shareEditTarget.status === 'revoked' && <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{t('保存后会同时恢复这个已撤销的共享链接。', 'Saving will also restore this revoked share link.')}</p>}
           <button className="btn-primary w-full" disabled={shareActionBusy === `update:${shareEditTarget.token}`} onClick={updateShareExpiry}>
