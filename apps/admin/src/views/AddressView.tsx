@@ -1170,7 +1170,13 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
       const response = await fetch(`${base}/api/share`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ addressIds: rows.map((row) => row.id), expiresIn, mailVisibility: visibility, permissions: { hideMail: shareAllowHideMail } }),
+        body: JSON.stringify({
+          addressIds: rows.map((row) => row.id),
+          addresses: rows.map((row) => ({ id: row.id, address: row.name })),
+          expiresIn,
+          mailVisibility: visibility,
+          permissions: { hideMail: shareAllowHideMail },
+        }),
       });
       const text = await response.text();
       let data: any = null;

@@ -472,6 +472,15 @@ export default function App() {
     localeRef.current = locale;
   }, [locale]);
 
+  useEffect(() => {
+    if (session || !loginError || loading !== "idle") return undefined;
+    const timer = window.setTimeout(() => {
+      passwordInputRef.current?.focus();
+      passwordInputRef.current?.select();
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [loading, loginError, session]);
+
   const showToast = useCallback((message: string) => {
     setToast(message);
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);

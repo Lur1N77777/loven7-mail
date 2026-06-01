@@ -430,9 +430,13 @@ export function filterSharedMailPage(raw: unknown, mailbox: ShareMailbox, share:
 
 export async function validateJwtAddress(env: CloudmailEnv, jwt: string, fallback = "") {
   const fallbackAddress = fallback || decodeJwtAddress(jwt);
-  const settingsRaw = await fetchWorkerJson<unknown>(env, "/api/settings", { jwt });
-  const settings = sanitizeSettings(settingsRaw, fallbackAddress);
-  return settings.address || fallbackAddress;
+  try {
+    const settingsRaw = await fetchWorkerJson<unknown>(env, "/api/settings", { jwt });
+    const settings = sanitizeSettings(settingsRaw, fallbackAddress);
+    return settings.address || fallbackAddress;
+  } catch {
+    return fallbackAddress;
+  }
 }
 
 export async function getLatestMailCutoff(env: CloudmailEnv, jwt: string) {
@@ -461,7 +465,9 @@ export function shareError(error: unknown) {
   if (error instanceof UpstreamError) {
     if (error.status === 401 && error.message === "缺少管理员凭证") return errorJson(401, "缺少管理员凭证", "missing_admin_auth");
     if (error.status === 401 || error.status === 403) return errorJson(401, "管理员凭证无效", "invalid_admin_auth");
-    if (error.status === 500) return errorJson(500, error.message, "share_not_configured");
+    if (error.status === 500 && /is not configured|未配置|MAIL_WORKER_BASE_URL|SHARE_KV|SHARE_ENCRYPTION_SECRET/i.test(error.message)) {
+      return errorJson(500, error.message, "share_not_configured");
+    }
   }
   return errorJson(500, "共享链接处理失败", "share_failed");
 }

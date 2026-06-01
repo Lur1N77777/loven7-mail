@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name loven7-mail-webmail"
+    "deploy": "npm run build && node scripts/deploy-pages.mjs",
+    "smoke:local": "node scripts/smoke-local.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",

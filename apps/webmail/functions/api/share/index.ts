@@ -1,9 +1,15 @@
-import { corsHeaders, errorJson, fetchAdminWorkerJson, json, mapUpstreamError, withCors } from "../../_lib/http";
+import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
 import { getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, validateJwtAddress, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
 import type { PagesHandler } from "../../_lib/types";
 
+type AddressHint = {
+  id: string;
+  address: string;
+};
+
 type CreateShareBody = {
   addressIds?: unknown;
+  addresses?: unknown;
   expiresIn?: unknown;
   mailVisibility?: unknown;
   permissions?: unknown;
@@ -15,6 +21,35 @@ function parseAddressIds(value: unknown) {
     .map((item) => Number.parseInt(String(item), 10))
     .filter((item) => Number.isFinite(item) && item > 0);
   return [...new Set(ids)].slice(0, 50);
+}
+
+function normalizeAddress(value: unknown) {
+  const text = String(value || "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) ? text : "";
+}
+
+function parseAddressHints(value: unknown) {
+  const hints = new Map<string, AddressHint>();
+  if (!Array.isArray(value)) return hints;
+  for (const item of value) {
+    const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const id = String(record.id || "").trim();
+    const address = normalizeAddress(record.address || record.name || record.email);
+    if (id && address) hints.set(id, { id, address });
+  }
+  return hints;
+}
+
+function extractJwtFromCredential(value: unknown) {
+  const src = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const nested = src.data && typeof src.data === "object" ? src.data as Record<string, unknown> : {};
+  for (const record of [src, nested]) {
+    for (const key of ["jwt", "JWT", "credential", "token", "access_token"]) {
+      const candidate = String(record[key] || "").trim();
+      if (candidate) return candidate;
+    }
+  }
+  return "";
 }
 
 export const onRequestOptions: PagesHandler = ({ request }) => {
@@ -30,6 +65,7 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
 
     const body = (await request.json().catch(() => null)) as CreateShareBody | null;
     const addressIds = parseAddressIds(body?.addressIds);
+    const addressHints = parseAddressHints(body?.addresses);
     if (!addressIds.length) return withCors(errorJson(400, "请选择至少一个邮箱地址", "missing_addresses"), request);
 
     const ttl = parseShareTtl(body?.expiresIn);
@@ -37,11 +73,18 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
     const permissions = normalizeSharePermissions(body?.permissions);
     const addresses = [];
     for (const id of addressIds) {
-      const credential = await fetchAdminWorkerJson<{ jwt?: string }>(workerEnv, `/admin/show_password/${id}`, adminPassword);
-      const jwt = String(credential?.jwt || "").trim();
-      if (!jwt) throw new Error(`地址 #${id} 没有返回 JWT`);
-      const address = await validateJwtAddress(workerEnv, jwt);
-      if (!address) throw new Error(`地址 #${id} JWT 无法解析邮箱`);
+      let credential: unknown;
+      try {
+        credential = await fetchAdminWorkerJson<unknown>(workerEnv, `/admin/show_password/${id}`, adminPassword);
+      } catch (error) {
+        if (error instanceof UpstreamError && (error.status === 401 || error.status === 403)) throw error;
+        throw new Error(`无法读取地址 #${id} 的访问凭证，请确认 Worker API 地址、管理员密码和站点访问密码是否正确`);
+      }
+      const jwt = extractJwtFromCredential(credential);
+      if (!jwt) throw new Error(`地址 #${id} 没有返回可用于分享的 JWT`);
+      const fallbackAddress = addressHints.get(String(id))?.address || decodeJwtAddress(jwt);
+      const address = normalizeAddress(await validateJwtAddress(workerEnv, jwt, fallbackAddress)) || fallbackAddress;
+      if (!address) throw new Error(`地址 #${id} JWT 无法解析邮箱，请在地址管理列表刷新后重试`);
       const snapshot = await getLatestMailCutoff(workerEnv, jwt);
       const cutoff = mailVisibility === "new"
         ? { sinceMailId: snapshot.sinceMailId, sinceCreatedAt: snapshot.sinceCreatedAt, mailCount: 0 }
