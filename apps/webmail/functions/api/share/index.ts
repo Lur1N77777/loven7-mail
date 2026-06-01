@@ -33,6 +33,12 @@ function normalizeAddress(value: unknown) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) ? text : "";
 }
 
+function sameAddress(left: unknown, right: unknown) {
+  const normalizedLeft = normalizeAddress(left);
+  const normalizedRight = normalizeAddress(right);
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+}
+
 function parseAddressHints(value: unknown) {
   const hints = new Map<string, AddressHint>();
   if (!Array.isArray(value)) return hints;
@@ -92,6 +98,10 @@ async function loginAddressPassword(env: Parameters<PagesHandler>[0]["env"], add
         body: { email: address, password: hashedPassword },
       });
       const jwt = String(loginBody?.jwt || "").trim();
+      const resolvedAddress = normalizeAddress(loginBody?.address);
+      if (resolvedAddress && !sameAddress(resolvedAddress, address)) {
+        throw new Error(`地址登录返回了不匹配的邮箱：${resolvedAddress}`);
+      }
       if (jwt) return jwt;
     } catch (error) {
       lastError = error;
@@ -145,8 +155,15 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       }
       if (!jwt) throw new Error(`地址 #${id} 没有返回可用于分享的 JWT`);
       if (!fallbackAddress) fallbackAddress = decodeJwtAddress(jwt);
+      const decodedAddress = normalizeAddress(decodeJwtAddress(jwt));
+      if (fallbackAddress && decodedAddress && !sameAddress(decodedAddress, fallbackAddress)) {
+        throw new Error(`地址 #${id} 的访问凭证与目标邮箱不匹配，请刷新地址列表后重试`);
+      }
       const address = normalizeAddress(await validateJwtAddress(workerEnv, jwt, fallbackAddress)) || fallbackAddress;
       if (!address) throw new Error(`地址 #${id} JWT 无法解析邮箱，请在地址管理列表刷新后重试`);
+      if (fallbackAddress && !sameAddress(address, fallbackAddress)) {
+        throw new Error(`地址 #${id} 的访问凭证属于其他邮箱，请刷新地址列表后重试`);
+      }
       const snapshot = await getLatestMailCutoff(workerEnv, jwt);
       const cutoff = mailVisibility === "new"
         ? { sinceMailId: snapshot.sinceMailId, sinceCreatedAt: snapshot.sinceCreatedAt, mailCount: 0 }
