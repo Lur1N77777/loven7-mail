@@ -1,4 +1,4 @@
-import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
+import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, fetchWorkerJson, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
 import { getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, validateJwtAddress, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
 import type { PagesHandler } from "../../_lib/types";
 
@@ -13,6 +13,11 @@ type CreateShareBody = {
   expiresIn?: unknown;
   mailVisibility?: unknown;
   permissions?: unknown;
+};
+
+type AddressLoginResponse = {
+  jwt?: string;
+  address?: string;
 };
 
 function parseAddressIds(value: unknown) {
@@ -44,11 +49,55 @@ function extractJwtFromCredential(value: unknown) {
   const src = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const nested = src.data && typeof src.data === "object" ? src.data as Record<string, unknown> : {};
   for (const record of [src, nested]) {
-    for (const key of ["jwt", "JWT", "credential", "token", "access_token"]) {
+    for (const key of ["jwt", "JWT", "token", "access_token"]) {
       const candidate = String(record[key] || "").trim();
       if (candidate) return candidate;
     }
   }
+  return "";
+}
+
+function extractAddressPassword(value: unknown) {
+  const src = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const nested = src.data && typeof src.data === "object" ? src.data as Record<string, unknown> : {};
+  for (const record of [src, nested]) {
+    for (const key of ["credential", "password"]) {
+      const candidate = String(record[key] || "").trim();
+      if (candidate) return candidate;
+    }
+  }
+  return "";
+}
+
+function looksLikeJwt(value: string) {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value.trim());
+}
+
+async function sha256Hex(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function loginAddressPassword(env: Parameters<PagesHandler>[0]["env"], address: string, password: string) {
+  const attempts = [await sha256Hex(password)];
+  if (/^[a-f0-9]{64}$/i.test(password)) attempts.push(password);
+  let lastError: unknown = null;
+  for (const hashedPassword of [...new Set(attempts)]) {
+    try {
+      const loginBody = await fetchWorkerJson<AddressLoginResponse>(env, "/api/address_login", {
+        method: "POST",
+        body: { email: address, password: hashedPassword },
+      });
+      const jwt = String(loginBody?.jwt || "").trim();
+      if (jwt) return jwt;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
   return "";
 }
 
@@ -80,9 +129,22 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
         if (error instanceof UpstreamError && (error.status === 401 || error.status === 403)) throw error;
         throw new Error(`无法读取地址 #${id} 的访问凭证，请确认 Worker API 地址、管理员密码和站点访问密码是否正确`);
       }
-      const jwt = extractJwtFromCredential(credential);
+      let jwt = extractJwtFromCredential(credential);
+      let fallbackAddress = addressHints.get(String(id))?.address || decodeJwtAddress(jwt);
+      const password = extractAddressPassword(credential);
+      if (!jwt && looksLikeJwt(password)) jwt = password;
+      if (!jwt && password && fallbackAddress) {
+        try {
+          jwt = await loginAddressPassword(workerEnv, fallbackAddress, password);
+        } catch (error) {
+          if (error instanceof UpstreamError && (error.status === 401 || error.status === 403)) {
+            throw new Error(`地址 #${id} 的邮箱密码无法登录，请先在地址管理中重置密码后再创建分享`);
+          }
+          throw error;
+        }
+      }
       if (!jwt) throw new Error(`地址 #${id} 没有返回可用于分享的 JWT`);
-      const fallbackAddress = addressHints.get(String(id))?.address || decodeJwtAddress(jwt);
+      if (!fallbackAddress) fallbackAddress = decodeJwtAddress(jwt);
       const address = normalizeAddress(await validateJwtAddress(workerEnv, jwt, fallbackAddress)) || fallbackAddress;
       if (!address) throw new Error(`地址 #${id} JWT 无法解析邮箱，请在地址管理列表刷新后重试`);
       const snapshot = await getLatestMailCutoff(workerEnv, jwt);
