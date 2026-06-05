@@ -100,7 +100,7 @@ export function buildMailHtmlDocument(html: string): string {
       const reset = () => { active = false; startX = startY = lastX = lastY = 0; };
       const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
       const postProgress = (dx) => {
-        window.parent?.postMessage({ type: 'loven7-mail-iframe-swipe-progress', dx: clamp(dx, -96, 140) }, '*');
+        window.parent?.postMessage({ type: 'loven7-mail-iframe-swipe-progress', dx: clamp(dx, -180, 180) }, '*');
       };
       document.addEventListener('touchstart', (event) => {
         if (event.touches.length !== 1) return;
@@ -116,7 +116,7 @@ export function buildMailHtmlDocument(html: string): string {
         lastY = touch.clientY;
         const dx = lastX - startX;
         const dy = Math.abs(lastY - startY);
-        if (Math.abs(dx) > 18 && Math.abs(dx) > dy * 1.15) {
+        if (Math.abs(dx) > 10 && Math.abs(dx) > dy * .82) {
           event.preventDefault();
           postProgress(dx);
         }
@@ -126,7 +126,7 @@ export function buildMailHtmlDocument(html: string): string {
         const dx = lastX - startX;
         const dy = Math.abs(lastY - startY);
         reset();
-        if (Math.abs(dx) < 72 || Math.abs(dx) < dy * 1.25 || dy > 92) {
+        if (Math.abs(dx) < 46 || Math.abs(dx) < dy * .82 || dy > 150) {
           postProgress(0);
           return;
         }

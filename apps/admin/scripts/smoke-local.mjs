@@ -15,9 +15,12 @@ const tempProfile = mkdtempSync(path.join(tmpdir(), 'loven7-smoke-chrome-'));
 let previewProcess;
 let chromeProcess;
 let mockServer;
+let secondaryMockServer;
 let messageId = 0;
 let appApiBase = process.env.SMOKE_API_BASE || '';
+let secondaryApiBase = '';
 let lastNewAddressPayload = null;
+let mockRequestLog = [];
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -118,12 +121,21 @@ function paginate(items, url) {
   return { results: items.slice(offset, offset + limit), count: items.length };
 }
 
-function startMockApi() {
+function startMockApi(port = mockApiPort) {
   return new Promise((resolve, reject) => {
     const server = createServer((request, response) => {
       if (request.method === 'OPTIONS') return jsonResponse(response, 204, {});
-      const url = new URL(request.url || '/', `http://127.0.0.1:${mockApiPort}`);
+      const url = new URL(request.url || '/', `http://127.0.0.1:${port}`);
       const pathname = url.pathname.replace(/\/+$/, '') || '/';
+      mockRequestLog.push({
+        method: request.method,
+        host: request.headers.host || '',
+        pathname,
+        adminAuth: request.headers['x-admin-auth'] || '',
+        siteAuth: request.headers['x-custom-auth'] || '',
+        userAccessToken: request.headers['x-user-access-token'] || '',
+        authorization: request.headers.authorization || '',
+      });
       if (pathname === '/open_api/settings') return jsonResponse(response, 200, {
         domains: ['example.test', 'mail.example.test'],
         defaultDomains: ['example.test'],
@@ -209,7 +221,7 @@ function startMockApi() {
       return jsonResponse(response, 404, { error: `mock route not found: ${pathname}` });
     });
     server.once('error', reject);
-    server.listen(mockApiPort, '127.0.0.1', () => resolve(server));
+    server.listen(port, '127.0.0.1', () => resolve(server));
   });
 }
 
@@ -360,7 +372,7 @@ async function waitForMailFrameText(ws, matcher, timeoutMs = 5000) {
   return last;
 }
 
-async function openApp({ width, height, dark = false, mobile }) {
+async function openApp({ width, height, dark = false, mobile, seedAuth = true, legacyAuthCookie = '', authRememberedAt = Date.now(), extraStorageScript = '' }) {
   const ws = await cdpNewPage('about:blank');
   ws.send(JSON.stringify({ id: ++messageId, method: 'Page.enable', params: {} }));
   const emulateMobile = typeof mobile === 'boolean' ? mobile : width < 768;
@@ -371,14 +383,52 @@ async function openApp({ width, height, dark = false, mobile }) {
     complete: true,
     results: mockAddresses.filter((row) => row.name.startsWith('alice.')),
   };
+  const authStorageScript = seedAuth
+    ? `
+      Object.keys(localStorage).filter((key) => key.startsWith('loven7.auth.v1.')).forEach((key) => localStorage.removeItem(key));
+      Object.keys(sessionStorage).filter((key) => key.startsWith('loven7.auth.v1.')).forEach((key) => sessionStorage.removeItem(key));
+      localStorage.removeItem('loven7.authExpiredNotice');
+      localStorage.setItem('loven7.adminPassword',${JSON.stringify(process.env.SMOKE_ADMIN_PASSWORD || 'smoke-cache')});
+      localStorage.setItem('loven7.apiBase',${JSON.stringify(appApiBase)});
+      ${authRememberedAt === null ? `localStorage.removeItem('loven7.authRememberedAt');` : `localStorage.setItem('loven7.authRememberedAt',${JSON.stringify(String(authRememberedAt))});`}
+    `
+    : `
+      document.cookie = 'loven7.authCookieMirror=; Max-Age=0; Path=/; SameSite=Strict';
+      Object.keys(localStorage).filter((key) => key.startsWith('loven7.auth.v1.')).forEach((key) => localStorage.removeItem(key));
+      Object.keys(sessionStorage).filter((key) => key.startsWith('loven7.auth.v1.')).forEach((key) => sessionStorage.removeItem(key));
+      localStorage.removeItem('loven7.adminPassword');
+      localStorage.removeItem('loven7.sitePassword');
+      localStorage.removeItem('loven7.userAccessToken');
+      localStorage.removeItem('loven7.addressJwt');
+      localStorage.removeItem('loven7.apiBase');
+      localStorage.removeItem('loven7.authRememberedAt');
+      localStorage.removeItem('loven7.authExpiredNotice');
+      sessionStorage.removeItem('loven7.adminPassword');
+      sessionStorage.removeItem('loven7.sitePassword');
+      sessionStorage.removeItem('loven7.userAccessToken');
+      sessionStorage.removeItem('loven7.addressJwt');
+      sessionStorage.removeItem('loven7.authRememberedAt');
+    `;
+  const cookieScript = legacyAuthCookie
+    ? `document.cookie = 'loven7.authCookieMirror=${encodeURIComponent(legacyAuthCookie)}; Path=/; SameSite=Strict';`
+    : '';
   await cdpSend(ws, 'Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: emulateMobile });
   await cdpSend(ws, 'Emulation.setTouchEmulationEnabled', { enabled: emulateMobile, maxTouchPoints: emulateMobile ? 5 : 0 }).catch(() => undefined);
   await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', {
     source: `
-      localStorage.setItem('loven7.adminPassword',${JSON.stringify(process.env.SMOKE_ADMIN_PASSWORD || 'smoke-cache')});
-      localStorage.setItem('loven7.apiBase',${JSON.stringify(appApiBase)});
+      ${authStorageScript}
       localStorage.setItem('loven7.uiTheme','${dark ? 'dark' : 'light'}');
+      localStorage.setItem('loven7.locale','zh-CN');
+      localStorage.setItem('loven7.mailAutoRefreshEnabled','true');
+      localStorage.setItem('loven7.mailAutoRefreshSeconds','60');
+      localStorage.removeItem('loven7.frontendLoginBase');
+      localStorage.removeItem('loven7.newAddressDraft');
+      localStorage.removeItem('loven7.mailReadIds');
+      localStorage.removeItem('loven7.mailStarredIds');
+      localStorage.removeItem('loven7.mailReadAllBefore');
       localStorage.setItem('loven7.addressListCache.index:id:descend',${JSON.stringify(JSON.stringify(staleAddressIndex))});
+      ${extraStorageScript}
+      ${cookieScript}
     `,
   });
   await cdpSend(ws, 'Page.navigate', { url: baseUrl });
@@ -389,17 +439,142 @@ async function openApp({ width, height, dark = false, mobile }) {
     theme: localStorage.getItem('loven7.uiTheme') || ''
   })`).catch(() => '{}');
   const parsedStorage = JSON.parse(storageState || '{}');
-  if (parsedStorage.apiBase !== appApiBase || parsedStorage.theme !== (dark ? 'dark' : 'light')) {
+  if (seedAuth && (parsedStorage.apiBase !== appApiBase || parsedStorage.theme !== (dark ? 'dark' : 'light'))) {
     await evaluate(ws, `
+      Object.keys(localStorage).filter((key) => key.startsWith('loven7.auth.v1.')).forEach((key) => localStorage.removeItem(key));
+      Object.keys(sessionStorage).filter((key) => key.startsWith('loven7.auth.v1.')).forEach((key) => sessionStorage.removeItem(key));
       localStorage.setItem('loven7.adminPassword',${JSON.stringify(process.env.SMOKE_ADMIN_PASSWORD || 'smoke-cache')});
       localStorage.setItem('loven7.apiBase',${JSON.stringify(appApiBase)});
+      localStorage.removeItem('loven7.authExpiredNotice');
+      ${authRememberedAt === null ? `localStorage.removeItem('loven7.authRememberedAt');` : `localStorage.setItem('loven7.authRememberedAt',${JSON.stringify(String(authRememberedAt))});`}
       localStorage.setItem('loven7.uiTheme','${dark ? 'dark' : 'light'}');
+      localStorage.setItem('loven7.locale','zh-CN');
+      localStorage.setItem('loven7.mailAutoRefreshEnabled','true');
+      localStorage.setItem('loven7.mailAutoRefreshSeconds','60');
+      localStorage.removeItem('loven7.frontendLoginBase');
+      localStorage.removeItem('loven7.newAddressDraft');
+      localStorage.removeItem('loven7.mailReadIds');
+      localStorage.removeItem('loven7.mailStarredIds');
+      localStorage.removeItem('loven7.mailReadAllBefore');
       localStorage.setItem('loven7.addressListCache.index:id:descend',${JSON.stringify(JSON.stringify(staleAddressIndex))});
+      ${extraStorageScript}
     `);
     await cdpSend(ws, 'Page.navigate', { url: baseUrl });
   }
   await sleep(1800);
   return ws;
+}
+
+function encodeCookieMirror(value) {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64');
+}
+
+function authScopeForBase(value) {
+  const normalized = String(value || '').trim().replace(/\/+$/, '') || 'same-origin';
+  return Buffer.from(normalized, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '') || 'same-origin';
+}
+
+function isPrivateAdminStorageKey(key) {
+  return [
+    'loven7.adminPassword',
+    'loven7.sitePassword',
+    'loven7.userAccessToken',
+    'loven7.addressJwt',
+    'loven7.authRememberedAt',
+    'loven7.addressUserFilter',
+    'loven7.shareAdminListCache',
+  ].includes(key)
+    || key.startsWith('loven7.auth.v1.')
+    || key.startsWith('loven7.mailListCache.')
+    || key.startsWith('loven7.mailDetailSession.')
+    || key.startsWith('loven7.addressListCache.')
+    || key.startsWith('loven7.senderAccessListCache.')
+    || key.startsWith('loven7.userListCache.');
+}
+
+async function setInputValue(ws, selectorExpression, value) {
+  await evaluate(ws, `(() => {
+    const input = ${selectorExpression};
+    if (!input) return false;
+    const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    setter ? setter.call(input, ${JSON.stringify(value)}) : (input.value = ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+}
+
+async function readAuthStorageSnapshot(ws) {
+  return JSON.parse(await evaluate(ws, `JSON.stringify((() => {
+    const normalizeBase = (value) => String(value || '').trim().replace(/\\/+$/, '');
+    const encodeScope = (value) => {
+      const normalized = normalizeBase(value) || 'same-origin';
+      const bytes = new TextEncoder().encode(normalized);
+      let binary = '';
+      bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+      return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '') || 'same-origin';
+    };
+    const rawCookie = (document.cookie.split('; ').find((part) => part.startsWith('loven7.authCookieMirror=')) || '').split('=').slice(1).join('=');
+    let decodedCookie = '';
+    let parsedCookie = null;
+    if (rawCookie) {
+      try {
+        const binary = atob(decodeURIComponent(rawCookie));
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+        decodedCookie = new TextDecoder().decode(bytes);
+        parsedCookie = JSON.parse(decodedCookie);
+      } catch (error) {
+        decodedCookie = String(error);
+      }
+    }
+    const currentApiBase = localStorage.getItem('loven7.apiBase') || '';
+    const currentScope = encodeScope(currentApiBase);
+    const scopedKey = (field) => 'loven7.auth.v1.' + currentScope + '.' + field;
+    return {
+      rawCookie,
+      decodedCookie,
+      parsedCookie,
+      modalOpen: !!document.querySelector('.modal-card'),
+      currentScope,
+      localApiBase: currentApiBase,
+      localAdmin: localStorage.getItem(scopedKey('adminPassword')) || localStorage.getItem('loven7.adminPassword') || '',
+      localSite: localStorage.getItem(scopedKey('sitePassword')) || localStorage.getItem('loven7.sitePassword') || '',
+      localAccessToken: localStorage.getItem(scopedKey('userAccessToken')) || localStorage.getItem('loven7.userAccessToken') || '',
+      localAddressJwt: localStorage.getItem(scopedKey('addressJwt')) || localStorage.getItem('loven7.addressJwt') || '',
+      localRememberedAt: localStorage.getItem(scopedKey('rememberedAt')) || localStorage.getItem('loven7.authRememberedAt') || '',
+      legacyLocalAdmin: localStorage.getItem('loven7.adminPassword') || '',
+      legacyLocalSite: localStorage.getItem('loven7.sitePassword') || '',
+      legacyLocalAccessToken: localStorage.getItem('loven7.userAccessToken') || '',
+      legacyLocalAddressJwt: localStorage.getItem('loven7.addressJwt') || '',
+      legacyLocalRememberedAt: localStorage.getItem('loven7.authRememberedAt') || '',
+      localExpiredNotice: localStorage.getItem('loven7.authExpiredNotice') || '',
+      sessionAdmin: sessionStorage.getItem(scopedKey('adminPassword')) || sessionStorage.getItem('loven7.adminPassword') || '',
+      sessionSite: sessionStorage.getItem(scopedKey('sitePassword')) || sessionStorage.getItem('loven7.sitePassword') || '',
+      sessionAccessToken: sessionStorage.getItem(scopedKey('userAccessToken')) || sessionStorage.getItem('loven7.userAccessToken') || '',
+      sessionAddressJwt: sessionStorage.getItem(scopedKey('addressJwt')) || sessionStorage.getItem('loven7.addressJwt') || '',
+      sessionRememberedAt: sessionStorage.getItem(scopedKey('rememberedAt')) || sessionStorage.getItem('loven7.authRememberedAt') || '',
+      legacySessionAdmin: sessionStorage.getItem('loven7.adminPassword') || '',
+      legacySessionSite: sessionStorage.getItem('loven7.sitePassword') || '',
+      legacySessionAccessToken: sessionStorage.getItem('loven7.userAccessToken') || '',
+      legacySessionAddressJwt: sessionStorage.getItem('loven7.addressJwt') || '',
+      legacySessionRememberedAt: sessionStorage.getItem('loven7.authRememberedAt') || '',
+      localTheme: localStorage.getItem('loven7.uiTheme') || '',
+      localLocale: localStorage.getItem('loven7.locale') || '',
+      localNewAddressDraft: localStorage.getItem('loven7.newAddressDraft') || '',
+      localFrontendLoginBase: localStorage.getItem('loven7.frontendLoginBase') || '',
+      localMailAutoRefreshEnabled: localStorage.getItem('loven7.mailAutoRefreshEnabled') || '',
+      localMailAutoRefreshSeconds: localStorage.getItem('loven7.mailAutoRefreshSeconds') || '',
+      localMailReadIds: localStorage.getItem('loven7.mailReadIds') || '',
+      localMailStarredIds: localStorage.getItem('loven7.mailStarredIds') || '',
+      privateLocalKeys: Object.keys(localStorage).filter(${isPrivateAdminStorageKey.toString()}),
+      privateSessionKeys: Object.keys(sessionStorage).filter(${isPrivateAdminStorageKey.toString()}),
+      adminPasswordInputs: [...document.querySelectorAll('.modal-card input[type="password"]')].map((input) => input.value),
+      accessTokenValue: document.querySelector('.modal-card textarea')?.value || '',
+      expiredNoticeVisible: /超过 7 天未重新认证|more than 7 days since the last verification/i.test(document.body.innerText),
+      bodySample: document.body.innerText.slice(0, 1000)
+    };
+  })())`));
 }
 
 async function clickText(ws, text) {
@@ -506,10 +681,218 @@ async function main() {
   if (shouldUseMockApi) {
     mockServer = await startMockApi();
     appApiBase = `http://127.0.0.1:${mockApiPort}`;
+    secondaryMockServer = await startMockApi(mockApiPort + 1);
+    secondaryApiBase = `http://127.0.0.1:${mockApiPort + 1}`;
   }
   chromeProcess = spawnChrome();
   await waitForHttp(`http://127.0.0.1:${cdpPort}/json/version`);
   const extraResults = [];
+
+  const authSecurity = await openApp({
+    width: 390,
+    height: 844,
+    seedAuth: false,
+    legacyAuthCookie: encodeCookieMirror({
+      apiBase: appApiBase,
+      adminPassword: 'legacy-admin-secret',
+      sitePassword: 'legacy-site-secret',
+      userAccessToken: 'legacy-access-token',
+      rememberedAt: Date.now(),
+    }),
+  });
+  const legacyCookieSnapshot = await readAuthStorageSnapshot(authSecurity);
+  extraResults.push({ name: 'admin-auth-legacy-cookie-scrubbed', ...legacyCookieSnapshot });
+  assert(legacyCookieSnapshot.modalOpen, `auth modal should open when only legacy cookie had sensitive credentials: ${JSON.stringify(legacyCookieSnapshot)}`);
+  assert(legacyCookieSnapshot.parsedCookie?.apiBase === appApiBase, `legacy cookie should keep apiBase only: ${JSON.stringify(legacyCookieSnapshot)}`);
+  assert(!legacyCookieSnapshot.parsedCookie?.adminPassword && !legacyCookieSnapshot.parsedCookie?.sitePassword && !legacyCookieSnapshot.parsedCookie?.userAccessToken, `legacy auth cookie should be scrubbed: ${JSON.stringify(legacyCookieSnapshot)}`);
+  assert(!legacyCookieSnapshot.decodedCookie.includes('legacy-admin-secret') && !legacyCookieSnapshot.decodedCookie.includes('legacy-site-secret') && !legacyCookieSnapshot.decodedCookie.includes('legacy-access-token'), `legacy secrets should not remain in cookie: ${legacyCookieSnapshot.decodedCookie}`);
+
+  await setInputValue(authSecurity, `document.querySelector('.modal-card input[inputmode="url"]')`, appApiBase);
+  await setInputValue(authSecurity, `document.querySelector('.modal-card input[type="password"]')`, 'smoke-admin-secret');
+  await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /高级选项|Advanced/.test(button.textContent || ''))?.click()`);
+  await sleep(300);
+  await setInputValue(authSecurity, `[...document.querySelectorAll('.modal-card input[type="password"]')][1]`, 'smoke-site-secret');
+  await setInputValue(authSecurity, `document.querySelector('.modal-card textarea')`, 'smoke-access-token');
+  await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /保存并验证|Save and verify/.test(button.textContent || ''))?.click()`);
+  await sleep(1400);
+  const savedCookieSnapshot = await readAuthStorageSnapshot(authSecurity);
+  extraResults.push({ name: 'admin-auth-save-cookie-non-sensitive', ...savedCookieSnapshot });
+  assert(!savedCookieSnapshot.modalOpen, `auth modal should close after successful save: ${JSON.stringify(savedCookieSnapshot)}`);
+  assert(savedCookieSnapshot.localAdmin === 'smoke-admin-secret' && savedCookieSnapshot.localSite === 'smoke-site-secret' && savedCookieSnapshot.localAccessToken === 'smoke-access-token', `localStorage should still remember credentials for UX: ${JSON.stringify(savedCookieSnapshot)}`);
+  assert(savedCookieSnapshot.sessionAdmin === 'smoke-admin-secret' && savedCookieSnapshot.sessionSite === 'smoke-site-secret' && savedCookieSnapshot.sessionAccessToken === 'smoke-access-token', `sessionStorage should mirror credentials for current tab: ${JSON.stringify(savedCookieSnapshot)}`);
+  assert(!savedCookieSnapshot.legacyLocalAdmin && !savedCookieSnapshot.legacyLocalSite && !savedCookieSnapshot.legacyLocalAccessToken && !savedCookieSnapshot.legacyLocalRememberedAt, `saving auth should remove legacy global localStorage credentials: ${JSON.stringify(savedCookieSnapshot)}`);
+  assert(!savedCookieSnapshot.legacySessionAdmin && !savedCookieSnapshot.legacySessionSite && !savedCookieSnapshot.legacySessionAccessToken && !savedCookieSnapshot.legacySessionRememberedAt, `saving auth should remove legacy global sessionStorage credentials: ${JSON.stringify(savedCookieSnapshot)}`);
+  assert(savedCookieSnapshot.parsedCookie?.apiBase === appApiBase && savedCookieSnapshot.parsedCookie?.rememberedAt, `auth cookie should keep only non-sensitive metadata: ${JSON.stringify(savedCookieSnapshot)}`);
+  assert(!savedCookieSnapshot.parsedCookie?.adminPassword && !savedCookieSnapshot.parsedCookie?.sitePassword && !savedCookieSnapshot.parsedCookie?.userAccessToken, `auth cookie should not store sensitive fields: ${JSON.stringify(savedCookieSnapshot)}`);
+  assert(!savedCookieSnapshot.decodedCookie.includes('smoke-admin-secret') && !savedCookieSnapshot.decodedCookie.includes('smoke-site-secret') && !savedCookieSnapshot.decodedCookie.includes('smoke-access-token'), `saved cookie must not contain secrets: ${savedCookieSnapshot.decodedCookie}`);
+
+  if (secondaryApiBase) {
+    mockRequestLog = [];
+    await evaluate(authSecurity, `[...document.querySelectorAll('button')].find((button) => /凭据|Auth/.test(button.textContent || button.getAttribute('aria-label') || ''))?.click()`);
+    await sleep(500);
+    await setInputValue(authSecurity, `document.querySelector('.modal-card input[inputmode="url"]')`, secondaryApiBase);
+    await sleep(300);
+    const switchedEmptySnapshot = await readAuthStorageSnapshot(authSecurity);
+    extraResults.push({ name: 'admin-auth-switch-base-clears-old-inputs', ...switchedEmptySnapshot });
+    assert(switchedEmptySnapshot.adminPasswordInputs.every((value) => !value) && !switchedEmptySnapshot.accessTokenValue, `switching to an unbound API base should clear old credentials in the form: ${JSON.stringify(switchedEmptySnapshot)}`);
+    await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /保存并验证|Save and verify/.test(button.textContent || ''))?.click()`);
+    await sleep(900);
+    const secondaryHost = new URL(secondaryApiBase).host;
+    const leakedToSecondary = mockRequestLog.filter((entry) => entry.host === secondaryHost && (entry.adminAuth === 'smoke-admin-secret' || entry.siteAuth === 'smoke-site-secret' || entry.userAccessToken === 'smoke-access-token' || /smoke\.jwt/.test(entry.authorization)));
+    extraResults.push({ name: 'admin-auth-switch-base-no-old-header-leak', secondaryRequests: mockRequestLog.filter((entry) => entry.host === secondaryHost) });
+    assert(leakedToSecondary.length === 0, `old API base credentials must not be sent to new API base: ${JSON.stringify(leakedToSecondary)}`);
+    await setInputValue(authSecurity, `document.querySelector('.modal-card input[type="password"]')`, 'secondary-admin-secret');
+    await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /保存并验证|Save and verify/.test(button.textContent || ''))?.click()`);
+    await sleep(1400);
+    const secondarySavedSnapshot = await readAuthStorageSnapshot(authSecurity);
+    extraResults.push({ name: 'admin-auth-secondary-base-saved', ...secondarySavedSnapshot });
+    assert(!secondarySavedSnapshot.modalOpen, `secondary base auth should save and close modal: ${JSON.stringify(secondarySavedSnapshot)}`);
+    assert(secondarySavedSnapshot.localApiBase === secondaryApiBase && secondarySavedSnapshot.localAdmin === 'secondary-admin-secret', `secondary base should have its own scoped credentials: ${JSON.stringify(secondarySavedSnapshot)}`);
+    assert(!secondarySavedSnapshot.legacyLocalAdmin && !secondarySavedSnapshot.legacySessionAdmin, `secondary save should not recreate global legacy credentials: ${JSON.stringify(secondarySavedSnapshot)}`);
+    await evaluate(authSecurity, `[...document.querySelectorAll('button')].find((button) => /凭据|Auth/.test(button.textContent || button.getAttribute('aria-label') || ''))?.click()`);
+    await sleep(500);
+    await setInputValue(authSecurity, `document.querySelector('.modal-card input[inputmode="url"]')`, appApiBase);
+    await sleep(300);
+    const switchedBackSnapshot = await readAuthStorageSnapshot(authSecurity);
+    extraResults.push({ name: 'admin-auth-switch-back-loads-original-scope', ...switchedBackSnapshot });
+    assert(switchedBackSnapshot.adminPasswordInputs.some((value) => value === 'smoke-admin-secret'), `switching back to original API base should load original scoped admin credential: ${JSON.stringify(switchedBackSnapshot)}`);
+    await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /保存并验证|Save and verify/.test(button.textContent || ''))?.click()`);
+    await sleep(1200);
+  }
+
+  await evaluate(authSecurity, `(() => {
+    const scope = ${JSON.stringify(authScopeForBase(appApiBase))};
+    localStorage.setItem('loven7.auth.v1.' + scope + '.addressJwt', 'smoke.jwt.token');
+    sessionStorage.setItem('loven7.auth.v1.' + scope + '.addressJwt', 'smoke.session.jwt.token');
+    localStorage.setItem('loven7.auth.v1.' + scope + '.rememberedAt', '1780000000000');
+    sessionStorage.setItem('loven7.auth.v1.' + scope + '.rememberedAt', '1780000000000');
+    localStorage.setItem('loven7.addressUserFilter', JSON.stringify({ userId: 101, userEmail: 'alice@example.test', requestId: 1 }));
+    localStorage.setItem('loven7.shareAdminListCache', JSON.stringify({ version: 1, results: [{ token: 'private-share-token' }] }));
+    localStorage.setItem('loven7.mailListCache.inbox:1:20:', JSON.stringify({ version: 1, items: [{ id: 9002, subject: 'private mail cache' }] }));
+    sessionStorage.setItem('loven7.mailDetailSession.inbox:9002', JSON.stringify({ id: 9002, raw: 'private raw mail cache' }));
+    localStorage.setItem('loven7.addressListCache.index:id:descend', JSON.stringify({ version: 1, results: [{ address: 'private-address-cache@example.test' }] }));
+    localStorage.setItem('loven7.senderAccessListCache.1:20:test', JSON.stringify({ version: 1, results: [{ address: 'private-sender-cache@example.test' }] }));
+    localStorage.setItem('loven7.userListCache.1:20:', JSON.stringify({ version: 1, users: [{ user_email: 'private-user-cache@example.test' }] }));
+    localStorage.setItem('loven7.locale', 'en-US');
+    localStorage.setItem('loven7.newAddressDraft', JSON.stringify({ version: 1, customPrefix: 'keep.', selectedDomain: 'example.test' }));
+    localStorage.setItem('loven7.frontendLoginBase', 'https://webmail.example.test');
+    localStorage.setItem('loven7.mailAutoRefreshEnabled', 'false');
+    localStorage.setItem('loven7.mailAutoRefreshSeconds', '45');
+    localStorage.setItem('loven7.mailReadIds', JSON.stringify(['inbox:9002']));
+    localStorage.setItem('loven7.mailStarredIds', JSON.stringify(['inbox:9002']));
+  })()`);
+  const beforeForgetSnapshot = await readAuthStorageSnapshot(authSecurity);
+  extraResults.push({ name: 'admin-auth-before-forget-browser', ...beforeForgetSnapshot });
+  assert(beforeForgetSnapshot.privateLocalKeys.length >= 5 && beforeForgetSnapshot.privateSessionKeys.length >= 1, `forget-browser setup should seed private keys: ${JSON.stringify(beforeForgetSnapshot)}`);
+  await evaluate(authSecurity, `[...document.querySelectorAll('button')].find((button) => /凭据|Auth/.test(button.textContent || button.getAttribute('aria-label') || ''))?.click()`);
+  await sleep(500);
+  await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /退出并忘记此浏览器|Sign out and forget this browser/.test(button.textContent || ''))?.click()`);
+  await sleep(400);
+  await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /退出并清理|Sign out and clear/.test(button.textContent || ''))?.click()`);
+  await sleep(900);
+  await evaluate(authSecurity, `[...document.querySelectorAll('button')].find((button) => /凭据|Auth/.test(button.textContent || button.getAttribute('aria-label') || ''))?.click()`);
+  await sleep(500);
+  await evaluate(authSecurity, `[...document.querySelectorAll('.modal-card button')].find((button) => /高级选项|Advanced/.test(button.textContent || ''))?.click()`);
+  await sleep(300);
+  const forgetSnapshot = await readAuthStorageSnapshot(authSecurity);
+  extraResults.push({ name: 'admin-auth-forget-browser-clears-private-state', ...forgetSnapshot });
+  assert(!forgetSnapshot.rawCookie, `forget browser should delete auth cookie mirror: ${JSON.stringify(forgetSnapshot)}`);
+  assert(!forgetSnapshot.localAdmin && !forgetSnapshot.localSite && !forgetSnapshot.localAccessToken && !forgetSnapshot.localAddressJwt && !forgetSnapshot.localRememberedAt, `forget browser should clear local credentials and address JWT: ${JSON.stringify(forgetSnapshot)}`);
+  assert(!forgetSnapshot.sessionAdmin && !forgetSnapshot.sessionSite && !forgetSnapshot.sessionAccessToken && !forgetSnapshot.sessionAddressJwt && !forgetSnapshot.sessionRememberedAt, `forget browser should clear session credentials and address JWT: ${JSON.stringify(forgetSnapshot)}`);
+  assert(forgetSnapshot.privateLocalKeys.length === 0 && forgetSnapshot.privateSessionKeys.length === 0, `forget browser should clear private admin caches: ${JSON.stringify(forgetSnapshot)}`);
+  assert(forgetSnapshot.localApiBase === appApiBase, `forget browser should keep API base: ${JSON.stringify(forgetSnapshot)}`);
+  assert(forgetSnapshot.localLocale === 'en-US' && forgetSnapshot.localNewAddressDraft.includes('keep.') && forgetSnapshot.localFrontendLoginBase === 'https://webmail.example.test', `forget browser should keep UX settings: ${JSON.stringify(forgetSnapshot)}`);
+  assert(forgetSnapshot.localMailAutoRefreshEnabled === 'false' && forgetSnapshot.localMailAutoRefreshSeconds === '45' && forgetSnapshot.localMailReadIds.includes('inbox:9002') && forgetSnapshot.localMailStarredIds.includes('inbox:9002'), `forget browser should keep mail UX preferences: ${JSON.stringify(forgetSnapshot)}`);
+  assert(forgetSnapshot.modalOpen, `credential modal should reopen after forget: ${JSON.stringify(forgetSnapshot)}`);
+  assert(forgetSnapshot.adminPasswordInputs.every((value) => !value) && !forgetSnapshot.accessTokenValue, `credential inputs should not keep old secrets after forget: ${JSON.stringify(forgetSnapshot)}`);
+  assert(!/已连接|Connected/.test(forgetSnapshot.bodySample), `UI should not show connected state after forget: ${forgetSnapshot.bodySample}`);
+  authSecurity.close();
+
+  const rememberedAuthSecurity = await openApp({
+    width: 390,
+    height: 844,
+    seedAuth: true,
+    legacyAuthCookie: encodeCookieMirror({
+      apiBase: appApiBase,
+      adminPassword: 'legacy-local-admin-secret',
+      sitePassword: 'legacy-local-site-secret',
+      userAccessToken: 'legacy-local-access-token',
+      rememberedAt: Date.now(),
+    }),
+  });
+  const rememberedCookieSnapshot = await readAuthStorageSnapshot(rememberedAuthSecurity);
+  extraResults.push({ name: 'admin-auth-legacy-cookie-scrubbed-with-local-storage', ...rememberedCookieSnapshot });
+  assert(!rememberedCookieSnapshot.modalOpen, `remembered local credentials should keep auth modal closed: ${JSON.stringify(rememberedCookieSnapshot)}`);
+  assert(rememberedCookieSnapshot.localAdmin === (process.env.SMOKE_ADMIN_PASSWORD || 'smoke-cache'), `seeded local credentials should remain available: ${JSON.stringify(rememberedCookieSnapshot)}`);
+  assert(rememberedCookieSnapshot.parsedCookie?.apiBase === appApiBase, `remembered legacy cookie should keep apiBase: ${JSON.stringify(rememberedCookieSnapshot)}`);
+  assert(!rememberedCookieSnapshot.parsedCookie?.adminPassword && !rememberedCookieSnapshot.parsedCookie?.sitePassword && !rememberedCookieSnapshot.parsedCookie?.userAccessToken, `remembered legacy auth cookie should be scrubbed despite local storage: ${JSON.stringify(rememberedCookieSnapshot)}`);
+  assert(!rememberedCookieSnapshot.decodedCookie.includes('legacy-local-admin-secret') && !rememberedCookieSnapshot.decodedCookie.includes('legacy-local-site-secret') && !rememberedCookieSnapshot.decodedCookie.includes('legacy-local-access-token'), `remembered legacy secrets should not remain in cookie: ${rememberedCookieSnapshot.decodedCookie}`);
+  rememberedAuthSecurity.close();
+
+  const recentAuthSecurity = await openApp({
+    width: 390,
+    height: 844,
+    seedAuth: true,
+    authRememberedAt: Date.now() - 6 * 24 * 60 * 60 * 1000,
+    extraStorageScript: `
+      localStorage.setItem('loven7.sitePassword', 'recent-site-secret');
+      localStorage.setItem('loven7.userAccessToken', 'recent-access-token');
+      localStorage.setItem('loven7.addressJwt', 'recent.jwt.token');
+      sessionStorage.setItem('loven7.adminPassword', ${JSON.stringify(process.env.SMOKE_ADMIN_PASSWORD || 'smoke-cache')});
+      sessionStorage.setItem('loven7.authRememberedAt', String(Date.now() - 6 * 24 * 60 * 60 * 1000));
+    `,
+  });
+  const recentAuthSnapshot = await readAuthStorageSnapshot(recentAuthSecurity);
+  extraResults.push({ name: 'admin-auth-recent-remembered-kept', ...recentAuthSnapshot });
+  assert(!recentAuthSnapshot.modalOpen, `recent remembered auth should keep modal closed: ${JSON.stringify(recentAuthSnapshot)}`);
+  assert(recentAuthSnapshot.localAdmin === (process.env.SMOKE_ADMIN_PASSWORD || 'smoke-cache') && recentAuthSnapshot.localSite === 'recent-site-secret' && recentAuthSnapshot.localAccessToken === 'recent-access-token', `recent auth credentials should be kept: ${JSON.stringify(recentAuthSnapshot)}`);
+  assert(recentAuthSnapshot.localAddressJwt === 'recent.jwt.token' && Number(recentAuthSnapshot.localRememberedAt) > 0, `recent address JWT and rememberedAt should be kept: ${JSON.stringify(recentAuthSnapshot)}`);
+  assert(!recentAuthSnapshot.expiredNoticeVisible && !recentAuthSnapshot.localExpiredNotice, `recent auth should not show expired notice: ${JSON.stringify(recentAuthSnapshot)}`);
+  recentAuthSecurity.close();
+
+  const expiredAuthSecurity = await openApp({
+    width: 390,
+    height: 844,
+    seedAuth: true,
+    authRememberedAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
+    legacyAuthCookie: encodeCookieMirror({
+      apiBase: appApiBase,
+      rememberedAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
+    }),
+    extraStorageScript: `
+      localStorage.setItem('loven7.sitePassword', 'expired-site-secret');
+      localStorage.setItem('loven7.userAccessToken', 'expired-access-token');
+      localStorage.setItem('loven7.addressJwt', 'expired.jwt.token');
+      localStorage.setItem('loven7.addressUserFilter', JSON.stringify({ userId: 102, userEmail: 'bob@example.test', requestId: 9 }));
+      localStorage.setItem('loven7.shareAdminListCache', JSON.stringify({ results: [{ token: 'expired-private-share' }] }));
+      localStorage.setItem('loven7.mailListCache.inbox:expired', JSON.stringify({ items: [{ subject: 'expired private cache' }] }));
+      localStorage.setItem('loven7.locale', 'en-US');
+      localStorage.setItem('loven7.newAddressDraft', JSON.stringify({ version: 1, customPrefix: 'keep-expired.' }));
+      localStorage.setItem('loven7.frontendLoginBase', 'https://webmail.expired.example.test');
+      localStorage.setItem('loven7.mailAutoRefreshEnabled', 'false');
+      localStorage.setItem('loven7.mailAutoRefreshSeconds', '45');
+      localStorage.setItem('loven7.mailReadIds', JSON.stringify(['inbox:expired']));
+      localStorage.setItem('loven7.mailStarredIds', JSON.stringify(['inbox:expired']));
+      sessionStorage.setItem('loven7.adminPassword', ${JSON.stringify(process.env.SMOKE_ADMIN_PASSWORD || 'smoke-cache')});
+      sessionStorage.setItem('loven7.addressJwt', 'expired.session.jwt.token');
+      sessionStorage.setItem('loven7.authRememberedAt', String(Date.now() - 8 * 24 * 60 * 60 * 1000));
+      sessionStorage.setItem('loven7.mailDetailSession.inbox:expired', JSON.stringify({ raw: 'expired private detail' }));
+    `,
+  });
+  const expiredAuthSnapshot = await readAuthStorageSnapshot(expiredAuthSecurity);
+  extraResults.push({ name: 'admin-auth-expired-auto-cleared', ...expiredAuthSnapshot });
+  assert(expiredAuthSnapshot.modalOpen, `expired auth should reopen credential modal: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(!expiredAuthSnapshot.rawCookie, `expired auth should delete auth cookie mirror: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(!expiredAuthSnapshot.localAdmin && !expiredAuthSnapshot.localSite && !expiredAuthSnapshot.localAccessToken && !expiredAuthSnapshot.localAddressJwt && !expiredAuthSnapshot.localRememberedAt, `expired auth should clear local credentials: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(!expiredAuthSnapshot.sessionAdmin && !expiredAuthSnapshot.sessionSite && !expiredAuthSnapshot.sessionAccessToken && !expiredAuthSnapshot.sessionAddressJwt && !expiredAuthSnapshot.sessionRememberedAt, `expired auth should clear session credentials: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(expiredAuthSnapshot.privateLocalKeys.length === 0 && expiredAuthSnapshot.privateSessionKeys.length === 0, `expired auth should clear private caches: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(expiredAuthSnapshot.localApiBase === appApiBase, `expired auth should keep API base: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(expiredAuthSnapshot.localLocale === 'en-US' && expiredAuthSnapshot.localNewAddressDraft.includes('keep-expired.') && expiredAuthSnapshot.localFrontendLoginBase === 'https://webmail.expired.example.test', `expired auth should keep UX settings: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(expiredAuthSnapshot.localMailAutoRefreshEnabled === 'false' && expiredAuthSnapshot.localMailAutoRefreshSeconds === '45' && expiredAuthSnapshot.localMailReadIds.includes('inbox:expired') && expiredAuthSnapshot.localMailStarredIds.includes('inbox:expired'), `expired auth should keep mail UX preferences: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(expiredAuthSnapshot.expiredNoticeVisible, `expired auth should show clear re-auth notice: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(expiredAuthSnapshot.adminPasswordInputs.every((value) => !value) && !expiredAuthSnapshot.accessTokenValue, `expired auth credential inputs should be empty: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(!/已连接|Connected/.test(expiredAuthSnapshot.bodySample), `expired auth UI should not show connected state: ${expiredAuthSnapshot.bodySample}`);
+  expiredAuthSecurity.close();
 
   const mobile = await openApp({ width: 390, height: 844 });
   const mobileDashboard = await collect(mobile, 'mobile-dashboard');
@@ -822,6 +1205,7 @@ main().catch((error) => {
   killProcessTree(chromeProcess);
   killProcessTree(previewProcess);
   if (mockServer) await new Promise((resolve) => mockServer.close(resolve)).catch(() => undefined);
+  if (secondaryMockServer) await new Promise((resolve) => secondaryMockServer.close(resolve)).catch(() => undefined);
   await sleep(100);
   try { rmSync(tempProfile, { recursive: true, force: true }); } catch {}
   process.exit(process.exitCode || 0);

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Bot, Cloud, Database, Edit3, HardDrive, Link, Loader2, RefreshCw, Save, ShieldCheck, Trash2, Webhook } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Bot, Cloud, Database, Edit3, HardDrive, Languages, Link, Loader2, RefreshCw, Save, ShieldCheck, Trash2, Webhook } from 'lucide-react';
 import type { Requester } from '../lib/api';
 import { jsonPretty, safeJsonParse } from '../lib/format';
 import { FRONTEND_LOGIN_BASE, STORAGE_KEYS } from '../lib/constants';
 import { readStorage, writeLocalStorage } from '../lib/storage';
-import { getRuntimeLocale, localeText, type AppLocale } from '../lib/locale';
+import { getLocaleShortLabel, getRuntimeLocale, localeText, toggleLocale, type AppLocale } from '../lib/locale';
 import type { RoleAddressConfigResponse, RoleRecord, TelegramStatus } from '../types/api';
 import { EmptyState, LoadingState, Modal, type Notify } from '../components/Common';
 
@@ -463,7 +463,38 @@ function GenericSettingsCard({ title, description, endpoint, request, notify, te
   return <div className="panel settings-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{description}</p><div className="settings-card-meta mt-2"><span>{t('中文字段名', 'Localized labels')}</span><code>{endpoint}</code></div></div><button className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 size={16} />}</button></div>{open && <Modal title={title} onClose={() => setOpen(false)} wide><div className="settings-editor-toolbar"><div><strong>{t('编辑方式', 'Editor mode')}</strong><span>{t('表单里左侧显示中文对照，灰色小字保留原始字段名；复杂配置仍可切到 JSON。', 'The form shows localized labels first and keeps the original key in muted text; switch to JSON for advanced config.')}</span></div><div className="settings-editor-tabs"><button type="button" className={editorMode === 'visual' ? 'active' : ''} onClick={() => setEditorMode('visual')}>{t('可视化表单', 'Visual form')}</button><button type="button" className={editorMode === 'json' ? 'active' : ''} onClick={() => setEditorMode('json')}>JSON</button></div></div>{editorMode === 'visual' ? <JsonVisualEditor value={parsedBody} onChange={updateVisual} /> : <textarea className="code-area h-[50vh]" value={body} onChange={(e) => setBody(e.target.value)} />}<div className="mt-5 flex justify-end gap-3">{testEndpoint && <button className="btn-secondary" onClick={async () => { await request(testEndpoint, { method: 'POST', body: safeJsonParse(body, {}) }); notify('success', t('测试请求已发送', 'Test request sent')); }}><Webhook size={16} /> {t('测试', 'Test')}</button>}<button className="btn-primary" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}</div>;
 }
 
-export function SettingsView({ request, notify }: { request: Requester; notify: Notify }) {
+function InterfacePreferenceCard({ locale, setLocale, authPanel }: { locale?: AppLocale; setLocale?: (locale: AppLocale) => void; authPanel?: ReactNode }) {
+  const currentLocale = locale || getRuntimeLocale();
+  const t = (zh: string, en: string) => localeText(zh, en, currentLocale);
+  const nextLocale = toggleLocale(currentLocale);
+  return (
+    <div className="panel settings-card interface-preference-card xl:col-span-2">
+      <div className="settings-card-head">
+        <div>
+          <h3 className="font-semibold text-slate-800"><Languages className="mr-2 inline h-4 w-4 text-slate-600" />{t('界面偏好', 'Interface preferences')}</h3>
+          <p className="panel-subtitle">{t('语言和连接设置集中放在这里，不再长期占用手机右上角。', 'Language and connection settings live here instead of occupying the mobile top corner.')}</p>
+        </div>
+      </div>
+      <div className="interface-preference-actions mt-3">
+        <button type="button" className="interface-preference-action" onClick={() => setLocale?.(nextLocale)}>
+          <Languages size={17} />
+          <span>{t('界面语言', 'Language')}</span>
+          <strong>{currentLocale === 'en-US' ? 'English' : '中文'}</strong>
+          <em>{getLocaleShortLabel(nextLocale)}</em>
+        </button>
+        {authPanel && (
+          <div className="interface-preference-action interface-preference-auth">
+            <ShieldCheck size={17} />
+            <span>{t('连接设置', 'Connection')}</span>
+            <div className="interface-auth-control">{authPanel}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function SettingsView({ request, notify, locale, setLocale, authPanel }: { request: Requester; notify: Notify; locale?: AppLocale; setLocale?: (locale: AppLocale) => void; authPanel?: ReactNode }) {
   const { t } = useSettingsLocale();
   const cards = [
     [t('账户设置 JSON', 'Account settings JSON'), t('账户规则的完整 JSON 高级编辑入口。', 'Full JSON editor for account rules.'), '/admin/account_settings'],
@@ -475,7 +506,7 @@ export function SettingsView({ request, notify }: { request: Requester; notify: 
     [t('AI 提取设置', 'AI extraction settings'), t('邮件信息提取 Agent 设置。', 'Mail information extraction agent settings.'), '/admin/ai_extract/settings'],
     [t('Telegram 设置 JSON', 'Telegram settings JSON'), t('Telegram Bot / Mini App 集成配置；初始化和状态见下方专用面板。', 'Telegram Bot / Mini App integration config; initialization and status are below.'), '/admin/telegram/settings'],
   ] as const;
-  return <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6"><div className="space-y-3"><div><h2 className="page-title">{t('系统设置', 'System settings')}</h2><p className="page-subtitle mt-1">{t('常用项支持可视化表单编辑；字段标题优先显示中文，灰色小字保留原始字段名，复杂配置仍可切到 JSON 高级模式。', 'Common settings support visual form editing; field titles are localized while the muted line keeps the original key, and advanced JSON mode remains available.')}</p></div><div className="grid gap-2.5 xl:grid-cols-2"><RoleAddressConfigPanel request={request} notify={notify} /><MailRefreshPreferenceCard notify={notify} /><FrontendLoginBaseCard notify={notify} /><AccountRulesPanel request={request} notify={notify} /><TelegramPanel request={request} notify={notify} />{cards.map(([title, desc, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} description={desc} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}</div></div></div>;
+  return <div className="h-full overflow-y-auto p-3 md:p-4 xl:p-6"><div className="space-y-3"><div><h2 className="page-title">{t('系统设置', 'System settings')}</h2><p className="page-subtitle mt-1">{t('常用项支持可视化表单编辑；字段标题优先显示中文，灰色小字保留原始字段名，复杂配置仍可切到 JSON 高级模式。', 'Common settings support visual form editing; field titles are localized while the muted line keeps the original key, and advanced JSON mode remains available.')}</p></div><div className="grid gap-2.5 xl:grid-cols-2"><InterfacePreferenceCard locale={locale} setLocale={setLocale} authPanel={authPanel} /><RoleAddressConfigPanel request={request} notify={notify} /><MailRefreshPreferenceCard notify={notify} /><FrontendLoginBaseCard notify={notify} /><AccountRulesPanel request={request} notify={notify} /><TelegramPanel request={request} notify={notify} />{cards.map(([title, desc, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} description={desc} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}</div></div></div>;
 }
 
 type AccountSettingsState = {

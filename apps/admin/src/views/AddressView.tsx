@@ -26,7 +26,7 @@ const USER_OPTIONS_PAGE_SIZE = 100;
 const ADDRESS_INDEX_PAGE_SIZE = 500;
 const BATCH_MAIL_SCAN_PAGE_SIZE = 50;
 const BATCH_MAIL_SCAN_CONCURRENCY = 5;
-const SHARE_LIST_CACHE_KEY = 'loven7.shareAdminListCache';
+const SHARE_LIST_CACHE_KEY = STORAGE_KEYS.shareAdminListCache;
 
 type DomainOption = { label: string; value: string };
 type NewAddressForm = {
@@ -121,6 +121,33 @@ function shareSearchText(row: ShareAdminRecord): string {
     row.mailVisibility,
     ...row.addresses.map((item) => `${item.id} ${item.address}`),
   ].join(' '));
+}
+
+function currentAdminOrigin() {
+  if (typeof window === 'undefined') return '';
+  return window.location.origin.replace(/\/+$/, '');
+}
+
+function isShareApiNetworkError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return error instanceof TypeError || /failed to fetch|networkerror|load failed|fetch failed/i.test(message);
+}
+
+function shareApiNetworkHint(base: string, error: unknown) {
+  const locale = getRuntimeLocale();
+  const adminOrigin = currentAdminOrigin() || (locale === 'en-US' ? '<current admin origin>' : '<当前后台 origin>');
+  const original = error instanceof Error ? error.message : String(error || '');
+  const suffix = original ? (locale === 'en-US' ? ` Original error: ${original}` : ` 原始错误：${original}`) : '';
+  return localeText(
+    `无法访问用户站共享接口（浏览器网络/CORS 失败）。请确认「系统设置 → 前端登录链接前缀」填写的是用户站地址：${base}；在用户站 Cloudflare Pages 环境变量设置 SHARE_ADMIN_CORS_ORIGINS=${adminOrigin}；并确认 SHARE_KV 与 SHARE_ENCRYPTION_SECRET 已配置。${suffix}`,
+    `Cannot reach the webmail share API (browser network/CORS failure). Check that Settings → Frontend login link prefix is the webmail URL: ${base}; set SHARE_ADMIN_CORS_ORIGINS=${adminOrigin} in the webmail Cloudflare Pages project; and confirm SHARE_KV plus SHARE_ENCRYPTION_SECRET are configured.${suffix}`,
+    locale
+  );
+}
+
+function normalizeShareApiError(error: unknown, base: string, fallback: string) {
+  if (isShareApiNetworkError(error)) return new Error(shareApiNetworkHint(base, error));
+  return error instanceof Error ? error : new Error(fallback);
 }
 
 function useLocaleCopy() {
@@ -1000,11 +1027,16 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     };
     const sitePassword = readStorage(STORAGE_KEYS.sitePassword, '');
     if (sitePassword) headers['x-custom-auth'] = sitePassword;
-    const response = await fetch(`${base}/api/share/admin${path}`, {
-      method: init.method || 'GET',
-      headers,
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${base}/api/share/admin${path}`, {
+        method: init.method || 'GET',
+        headers,
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      });
+    } catch (error) {
+      throw normalizeShareApiError(error, base, t('共享链接管理请求失败', 'Share-link management request failed'));
+    }
     const text = await response.text();
     let data: any = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
@@ -1183,17 +1215,22 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
       };
       const sitePassword = readStorage(STORAGE_KEYS.sitePassword, '');
       if (sitePassword) headers['x-custom-auth'] = sitePassword;
-      const response = await fetch(`${base}/api/share`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          addressIds: rows.map((row) => row.id),
-          addresses: rows.map((row) => ({ id: row.id, address: row.name })),
-          expiresIn,
-          mailVisibility: visibility,
-          permissions: { hideMail: shareAllowHideMail },
-        }),
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${base}/api/share`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            addressIds: rows.map((row) => row.id),
+            addresses: rows.map((row) => ({ id: row.id, address: row.name })),
+            expiresIn,
+            mailVisibility: visibility,
+            permissions: { hideMail: shareAllowHideMail },
+          }),
+        });
+      } catch (error) {
+        throw normalizeShareApiError(error, base, t('创建共享链接失败', 'Failed to create share link'));
+      }
       const text = await response.text();
       let data: any = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
@@ -1629,7 +1666,12 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
         </div>
       , document.body)}
 
-      {createOpen && <Modal title={t('新建邮箱地址', 'New mailbox address')} onClose={() => setCreateOpen(false)}>
+      {createOpen && <Modal
+        title={t('新建邮箱地址', 'New mailbox address')}
+        onClose={() => setCreateOpen(false)}
+        cardClassName="new-address-modal-card"
+        bodyClassName="new-address-modal-body"
+      >
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
             <div>
@@ -1651,6 +1693,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
               value={newAddress.domain || defaultDomain || RANDOM_DOMAIN_VALUE}
               disabled={settingsLoading || domainOptions.length === 0}
               options={domainSelectOptions}
+              className="new-address-domain-select"
               onChange={(value) => setNewAddress({ ...newAddress, domain: value, enableRandomSubdomain: value === RANDOM_DOMAIN_VALUE ? newAddress.enableRandomSubdomain : newAddress.enableRandomSubdomain && randomSubdomainDomains.has(value) })}
             />
           </div>

@@ -16,6 +16,27 @@ const AUTO_REFRESH_MS = 10_000;
 type LoadingState = "boot" | "login" | "sync" | "idle";
 type MobilePane = "list" | "reader";
 type MailViewMode = "html" | "text" | "source";
+type ActiveRun = { id: number; controller: AbortController; cacheKey?: string };
+type SyncTask = { runId: number; promise: Promise<void> };
+
+const STALE_SESSION_MESSAGE = "loven7_session_changed";
+
+function staleSessionError() {
+  const error = new Error(STALE_SESSION_MESSAGE);
+  error.name = "AbortError";
+  return error;
+}
+
+function isAbortLike(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; message?: unknown };
+  return candidate.name === "AbortError" || candidate.message === STALE_SESSION_MESSAGE;
+}
+
+function isRuntimeConfigError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /Cloudflare Pages|MAIL_WORKER_BASE_URL|SHARE_KV|SHARE_ENCRYPTION_SECRET|邮箱 API 未配置|共享功能未/.test(error.message);
+}
 
 function formatDate(value: string | undefined, locale: AppLocale) {
   if (!value) return "";
@@ -238,6 +259,7 @@ const UI_COPY = {
     sharedMailbox: "共享邮箱",
     selectMailbox: "选择邮箱",
     copied: "已复制",
+    copyAddressAction: "复制",
     copyAddressTitle: "点击复制邮箱地址",
     autoRefreshTitleOn: "已开启：每 10 秒自动刷新",
     autoRefreshTitleOff: "开启每 10 秒自动刷新",
@@ -311,6 +333,7 @@ const UI_COPY = {
     sharedMailbox: "Shared mailbox",
     selectMailbox: "Choose mailbox",
     copied: "Copied",
+    copyAddressAction: "Copy",
     copyAddressTitle: "Copy mailbox address",
     autoRefreshTitleOn: "On: auto refresh every 10 seconds",
     autoRefreshTitleOff: "Turn on 10-second auto refresh",
@@ -444,16 +467,21 @@ export default function App() {
   const [refreshCycleKey, setRefreshCycleKey] = useState(0);
   const [refreshFeedback, setRefreshFeedback] = useState<string | null>(null);
   const [addressCopied, setAddressCopied] = useState(false);
+  const [mailboxMenuOpen, setMailboxMenuOpen] = useState(false);
   const [copiedCodeMailId, setCopiedCodeMailId] = useState<number | null>(null);
   const [mailViewMode, setMailViewMode] = useState<MailViewMode>("html");
-  const [resolvedHtml, setResolvedHtml] = useState<{ mailId: number; html: string } | null>(null);
-  const syncRef = useRef<Promise<void> | null>(null);
+  const [resolvedHtml, setResolvedHtml] = useState<{ cacheKey: string; mailId: number; html: string } | null>(null);
+  const syncRef = useRef<SyncTask | null>(null);
+  const runSequenceRef = useRef(0);
+  const activeRunRef = useRef<ActiveRun | null>(null);
+  const sessionRef = useRef<WebmailSession | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const refreshFeedbackTimerRef = useRef<number | null>(null);
   const autoRefreshTimerRef = useRef<number | null>(null);
   const isRefreshingRef = useRef(false);
   const addressCopyTimerRef = useRef<number | null>(null);
   const codeCopyTimerRef = useRef<number | null>(null);
+  const mailboxMenuRef = useRef<HTMLDivElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const copy = UI_COPY[locale];
@@ -464,6 +492,96 @@ export default function App() {
     () => mails.find((mail) => mail.id === selectedId) || mails[0] || null,
     [mails, selectedId]
   );
+
+  const setActiveSession = useCallback((nextSession: WebmailSession | null) => {
+    sessionRef.current = nextSession;
+    setSession(nextSession);
+  }, []);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  useEffect(() => {
+    if (!mailboxMenuOpen) return;
+    const closeOnOutside = (event: MouseEvent) => {
+      if (!mailboxMenuRef.current?.contains(event.target as Node)) setMailboxMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMailboxMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mailboxMenuOpen]);
+
+  useEffect(() => {
+    setMailboxMenuOpen(false);
+  }, [session?.shareMailboxId, session?.shareToken]);
+
+  const beginRun = useCallback((cacheKey?: string): ActiveRun => {
+    activeRunRef.current?.controller.abort();
+    const run: ActiveRun = {
+      id: ++runSequenceRef.current,
+      controller: new AbortController(),
+      cacheKey,
+    };
+    activeRunRef.current = run;
+    syncRef.current = null;
+    isRefreshingRef.current = false;
+    setIsRefreshing(false);
+    return run;
+  }, []);
+
+  const cancelRun = useCallback(() => {
+    activeRunRef.current?.controller.abort();
+    activeRunRef.current = null;
+    runSequenceRef.current += 1;
+    syncRef.current = null;
+    isRefreshingRef.current = false;
+    setIsRefreshing(false);
+  }, []);
+
+  const isRunActive = useCallback((run: ActiveRun, activeSession?: WebmailSession) => {
+    const current = activeRunRef.current;
+    if (!current || current.id !== run.id || run.controller.signal.aborted) return false;
+    if (activeSession) {
+      if (current.cacheKey && current.cacheKey !== activeSession.cacheKey) return false;
+      if (sessionRef.current?.cacheKey !== activeSession.cacheKey) return false;
+    }
+    return true;
+  }, []);
+
+  const assertRunActive = useCallback((run: ActiveRun, activeSession?: WebmailSession) => {
+    if (!isRunActive(run, activeSession)) throw staleSessionError();
+  }, [isRunActive]);
+
+  const attachRunSession = useCallback((run: ActiveRun, activeSession: WebmailSession) => {
+    assertRunActive(run);
+    run.cacheKey = activeSession.cacheKey;
+    if (activeRunRef.current?.id === run.id) activeRunRef.current.cacheKey = activeSession.cacheKey;
+  }, [assertRunActive]);
+
+  const getRunForSession = useCallback((activeSession: WebmailSession): ActiveRun => {
+    const current = activeRunRef.current;
+    if (!current || current.controller.signal.aborted || (current.cacheKey && current.cacheKey !== activeSession.cacheKey)) {
+      return beginRun(activeSession.cacheKey);
+    }
+    current.cacheKey = activeSession.cacheKey;
+    return current;
+  }, [beginRun]);
+
+  const resetMailboxState = useCallback(() => {
+    clearImageMemoryCache();
+    setResolvedHtml(null);
+    setMails([]);
+    setSelectedId(null);
+    setNextOffset(0);
+    setHasMoreHistory(false);
+  }, []);
 
   useEffect(() => {
     writeLocale(locale);
@@ -493,39 +611,43 @@ export default function App() {
     refreshFeedbackTimerRef.current = window.setTimeout(() => setRefreshFeedback(null), 1300);
   }, []);
 
-  const fetchSessionMailPage = useCallback((activeSession: WebmailSession, limit: number, offset: number): Promise<MailPage> => {
+  const fetchSessionMailPage = useCallback((activeSession: WebmailSession, limit: number, offset: number, signal?: AbortSignal): Promise<MailPage> => {
     if (isShareSession(activeSession)) {
-      return fetchShareMailPage(activeSession.shareToken, activeSession.shareMailboxId, limit, offset);
+      return fetchShareMailPage(activeSession.shareToken, activeSession.shareMailboxId, limit, offset, { signal });
     }
-    return fetchMailPage(activeSession.jwt, limit, offset);
+    return fetchMailPage(activeSession.jwt, limit, offset, { signal });
   }, []);
 
-  const fetchSessionSettings = useCallback((activeSession: WebmailSession): Promise<SafeSettings> => {
+  const fetchSessionSettings = useCallback((activeSession: WebmailSession, signal?: AbortSignal): Promise<SafeSettings> => {
     if (isShareSession(activeSession)) {
-      return fetchShareSettings(activeSession.shareToken, activeSession.shareMailboxId);
+      return fetchShareSettings(activeSession.shareToken, activeSession.shareMailboxId, { signal });
     }
-    return fetchSafeSettings(activeSession.jwt);
+    return fetchSafeSettings(activeSession.jwt, { signal });
   }, []);
 
   const persist = useCallback(
-    async (nextMails: ParsedMail[], offset = nextMails.length, more = hasMoreHistory) => {
-      if (!session) return;
+    async (activeSession: WebmailSession, nextMails: ParsedMail[], offset = nextMails.length, more = hasMoreHistory, run = activeRunRef.current) => {
+      if (run && !isRunActive(run, activeSession)) return;
       await writeMailboxCache({
-        cacheKey: session.cacheKey,
-        address: session.address,
+        cacheKey: activeSession.cacheKey,
+        address: activeSession.address,
         updatedAt: new Date().toISOString(),
         nextOffset: offset,
         mails: nextMails,
       });
+      if (run && !isRunActive(run, activeSession)) return;
       setNextOffset(offset);
       setHasMoreHistory(more);
     },
-    [hasMoreHistory, session]
+    [hasMoreHistory, isRunActive]
   );
 
-  const loadFirstPage = useCallback(async (activeSession: WebmailSession) => {
-    const page = await fetchSessionMailPage(activeSession, PAGE_SIZE, 0);
+  const loadFirstPage = useCallback(async (activeSession: WebmailSession, run: ActiveRun) => {
+    assertRunActive(run, activeSession);
+    const page = await fetchSessionMailPage(activeSession, PAGE_SIZE, 0, run.controller.signal);
+    assertRunActive(run, activeSession);
     const parsed = await parseMailBatch(page.results);
+    assertRunActive(run, activeSession);
     const next = mergeMails([], parsed);
     setMails(next);
     setSelectedId((current) => current ?? next[0]?.id ?? null);
@@ -537,15 +659,17 @@ export default function App() {
       nextOffset: next.length,
       mails: next,
     });
+    assertRunActive(run, activeSession);
     setNextOffset(next.length);
     setHasMoreHistory(more);
     return next.length;
-  }, [fetchSessionMailPage]);
+  }, [assertRunActive, fetchSessionMailPage]);
 
   const syncIncremental = useCallback(
-    async (activeSession: WebmailSession, currentMails: ParsedMail[]) => {
+    async (activeSession: WebmailSession, currentMails: ParsedMail[], run: ActiveRun) => {
+      assertRunActive(run, activeSession);
       const sinceId = maxMailId(currentMails);
-      if (!sinceId) return await loadFirstPage(activeSession);
+      if (!sinceId) return await loadFirstPage(activeSession, run);
 
       const rawNew = [];
       let offset = 0;
@@ -554,7 +678,9 @@ export default function App() {
       let totalCount = currentMails.length;
 
       while (!reachedAnchor && !reachedEnd && offset < PAGE_SIZE * 100) {
-        const page = await fetchSessionMailPage(activeSession, PAGE_SIZE, offset);
+        assertRunActive(run, activeSession);
+        const page = await fetchSessionMailPage(activeSession, PAGE_SIZE, offset, run.controller.signal);
+        assertRunActive(run, activeSession);
         totalCount = page.count;
         if (page.results.length === 0) {
           reachedEnd = true;
@@ -569,11 +695,13 @@ export default function App() {
       }
 
       if (!rawNew.length) {
+        assertRunActive(run, activeSession);
         setHasMoreHistory(currentMails.length < totalCount);
         return 0;
       }
 
       const parsed = await parseMailBatch(rawNew);
+      assertRunActive(run, activeSession);
       const next = mergeMails(currentMails, parsed);
       setMails(next);
       setSelectedId((current) => current ?? next[0]?.id ?? null);
@@ -584,20 +712,23 @@ export default function App() {
         nextOffset: next.length,
         mails: next,
       });
+      assertRunActive(run, activeSession);
       setNextOffset(next.length);
       setHasMoreHistory(next.length < totalCount);
       return rawNew.length;
     },
-    [fetchSessionMailPage, loadFirstPage]
+    [assertRunActive, fetchSessionMailPage, loadFirstPage]
   );
 
   const hydrateAndSync = useCallback(
-    async (activeSession: WebmailSession) => {
-      if (syncRef.current) return syncRef.current;
+    async (activeSession: WebmailSession, run: ActiveRun) => {
+      if (syncRef.current?.runId === run.id) return syncRef.current.promise;
       const task = (async () => {
+        assertRunActive(run, activeSession);
         setLoading("sync");
         setError(null);
         const cached = await readMailboxCache(activeSession.cacheKey);
+        assertRunActive(run, activeSession);
         if (cached?.mails?.length) {
           let cachedMails = cached.mails;
           setMails(cachedMails);
@@ -615,6 +746,7 @@ export default function App() {
                 created_at: mail.createdAt,
               }))
             );
+            assertRunActive(run, activeSession);
             cachedMails = mergeMails(cachedMails, reparsed);
             setMails(cachedMails);
             await writeMailboxCache({
@@ -624,61 +756,66 @@ export default function App() {
               nextOffset: cached.nextOffset || cachedMails.length,
               mails: cachedMails,
             });
+            assertRunActive(run, activeSession);
           }
 
-          const added = await syncIncremental(activeSession, cachedMails);
+          const added = await syncIncremental(activeSession, cachedMails, run);
+          assertRunActive(run, activeSession);
           if (added > 0) showToast(copyRef.current.newMails(added));
         } else {
-          await loadFirstPage(activeSession);
+          await loadFirstPage(activeSession, run);
         }
+        assertRunActive(run, activeSession);
         setLoading("idle");
       })()
         .catch((err: Error) => {
+          if (isAbortLike(err) || !isRunActive(run, activeSession)) return;
           setError(err.message || copyRef.current.syncFailed);
           setLoading("idle");
         })
         .finally(() => {
-          syncRef.current = null;
+          if (syncRef.current?.runId === run.id) syncRef.current = null;
         });
-      syncRef.current = task;
+      syncRef.current = { runId: run.id, promise: task };
       return task;
     },
-    [loadFirstPage, showToast, syncIncremental]
+    [assertRunActive, isRunActive, loadFirstPage, showToast, syncIncremental]
   );
 
   const activateSession = useCallback(
-    async (jwt: string, address: string, settings?: SafeSettings) => {
+    async (jwt: string, address: string, settings?: SafeSettings, run = beginRun()) => {
       const activeSession: WebmailSession = {
         jwt,
         address: address || copyRef.current.currentAddress,
         settings,
         cacheKey: await hashToken(`${address || "current"}:${jwt}`),
       };
-    saveSession(activeSession);
-    setShareInfo(null);
-    setSession(activeSession);
-    setAutoRefreshEnabled(true);
-    setMobilePane("list");
-    await hydrateAndSync(activeSession);
+      attachRunSession(run, activeSession);
+      saveSession(activeSession);
+      setShareInfo(null);
+      resetMailboxState();
+      setActiveSession(activeSession);
+      setAutoRefreshEnabled(true);
+      setMobilePane("list");
+      await hydrateAndSync(activeSession, run);
     },
-    [hydrateAndSync]
+    [attachRunSession, beginRun, hydrateAndSync, resetMailboxState, setActiveSession]
   );
 
   const activateShareMailbox = useCallback(
-    async (token: string, info: ShareInfo, mailboxId: string) => {
+    async (token: string, info: ShareInfo, mailboxId: string, run = beginRun()) => {
       const mailbox = info.addresses.find((item) => item.id === mailboxId) || info.addresses[0];
       if (!mailbox) throw new Error(copyRef.current.noSharedMailbox);
       setLoading("login");
       setError(null);
       setLoginError(null);
-      syncRef.current = null;
-      clearImageMemoryCache();
-      setResolvedHtml(null);
-      setMails([]);
-      setSelectedId(null);
-      setNextOffset(0);
-      setHasMoreHistory(false);
-      const settings = await fetchShareSettings(token, mailbox.id).catch(() => undefined);
+      resetMailboxState();
+      const settings = await fetchShareSettings(token, mailbox.id, { signal: run.controller.signal }).catch((error) => {
+        if (isAbortLike(error)) throw error;
+        if (isRuntimeConfigError(error)) throw error;
+        return undefined;
+      });
+      assertRunActive(run);
       const activeSession: WebmailSession = {
         jwt: `share:${token}:${mailbox.id}`,
         address: settings?.address || mailbox.address || getMailboxLabel(mailbox, localeRef.current),
@@ -689,26 +826,28 @@ export default function App() {
         shareMailboxes: info.addresses,
         readonly: true,
       };
+      attachRunSession(run, activeSession);
       setShareInfo(info);
-      setSession(activeSession);
+      setActiveSession(activeSession);
       setAutoRefreshEnabled(true);
       setMobilePane("list");
-      await hydrateAndSync(activeSession);
+      await hydrateAndSync(activeSession, run);
     },
-    [hydrateAndSync]
+    [assertRunActive, attachRunSession, beginRun, hydrateAndSync, resetMailboxState, setActiveSession]
   );
 
   const loginWithJwt = useCallback(
-    async (jwt: string) => {
+    async (jwt: string, run = beginRun()) => {
       setLoading("login");
       setError(null);
       setLoginError(null);
-      const result = await createSession(jwt);
+      const result = await createSession(jwt, { signal: run.controller.signal });
+      assertRunActive(run);
       const activeJwt = result.jwt || jwt;
       const address = result.address || result.settings?.address || copyRef.current.currentAddress;
-      await activateSession(activeJwt, address, result.settings);
+      await activateSession(activeJwt, address, result.settings, run);
     },
-    [activateSession]
+    [activateSession, assertRunActive, beginRun]
   );
 
   const loginWithPassword = useCallback(
@@ -723,26 +862,30 @@ export default function App() {
         }, 0);
         return;
       }
+      const run = beginRun();
       setLoading("login");
       setError(null);
       setLoginError(null);
       try {
-        const result = await createSession({ email: cleanEmail, password });
+        const result = await createSession({ email: cleanEmail, password }, { signal: run.controller.signal });
+        assertRunActive(run);
         if (!result.jwt) throw new Error(copy.wrongPassword);
         const address = result.address || result.settings?.address || cleanEmail;
-        await activateSession(result.jwt, address, result.settings);
+        await activateSession(result.jwt, address, result.settings, run);
         setPassword("");
       } catch (err) {
+        if (isAbortLike(err) || !isRunActive(run)) return;
         setLoginError(err instanceof Error ? err.message : copy.wrongPassword);
         setLoading("idle");
         window.setTimeout(() => passwordInputRef.current?.focus(), 0);
       }
     },
-    [activateSession, copy.credentialsRequired, copy.wrongPassword, email, password]
+    [activateSession, assertRunActive, beginRun, copy.credentialsRequired, copy.wrongPassword, email, isRunActive, password]
   );
 
   useEffect(() => {
     let cancelled = false;
+    const run = beginRun();
     (async () => {
       const shareToken = readShareTokenFromPath();
       const urlJwt = readJwtFromUrl();
@@ -750,32 +893,38 @@ export default function App() {
       try {
         if (shareToken) {
           setLoading("login");
-          const info = await fetchShareInfo(shareToken);
-          if (!cancelled) await activateShareMailbox(shareToken, info, info.addresses[0]?.id || "");
+          const info = await fetchShareInfo(shareToken, { signal: run.controller.signal });
+          assertRunActive(run);
+          if (!cancelled) await activateShareMailbox(shareToken, info, info.addresses[0]?.id || "", run);
           return;
         }
         if (urlJwt) {
-          if (!cancelled) await loginWithJwt(urlJwt);
+          if (!cancelled) await loginWithJwt(urlJwt, run);
           return;
         }
         const stored = await loadStoredSession();
         if (cancelled) return;
+        assertRunActive(run);
         if (stored) {
-          setSession(stored);
+          attachRunSession(run, stored);
+          setActiveSession(stored);
           setMobilePane("list");
-          void fetchSessionSettings(stored)
+          void fetchSessionSettings(stored, run.controller.signal)
             .then((settings) => {
+              if (!isRunActive(run, stored)) return;
               const refreshed = { ...stored, address: settings.address || stored.address, settings };
               saveSession(refreshed);
-              setSession(refreshed);
+              setActiveSession(refreshed);
             })
-            .catch(() => undefined);
-          await hydrateAndSync(stored);
+            .catch((error) => {
+              if (isAbortLike(error)) return;
+            });
+          await hydrateAndSync(stored, run);
         } else {
-          setLoading("idle");
+          if (isRunActive(run)) setLoading("idle");
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && !isAbortLike(err) && isRunActive(run)) {
           setError(err instanceof Error ? err.message : copyRef.current.loginFailed);
           setLoginError(err instanceof Error ? err.message : copyRef.current.loginFailed);
           setLoading("idle");
@@ -784,6 +933,7 @@ export default function App() {
     })();
     return () => {
       cancelled = true;
+      cancelRun();
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
       if (refreshFeedbackTimerRef.current) window.clearTimeout(refreshFeedbackTimerRef.current);
       if (autoRefreshTimerRef.current) window.clearInterval(autoRefreshTimerRef.current);
@@ -791,7 +941,7 @@ export default function App() {
       if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
       clearImageMemoryCache();
     };
-  }, [activateShareMailbox, fetchSessionSettings, hydrateAndSync, loginWithJwt]);
+  }, [activateShareMailbox, assertRunActive, attachRunSession, beginRun, cancelRun, fetchSessionSettings, hydrateAndSync, isRunActive, loginWithJwt, setActiveSession]);
 
   useEffect(() => {
     const clear = () => clearImageMemoryCache();
@@ -805,7 +955,10 @@ export default function App() {
   }, []);
 
   const refresh = useCallback(async (options: { silent?: boolean } = {}) => {
-    if (!session || isRefreshingRef.current) return;
+    if (!session || loading === "sync" || isRefreshingRef.current) return;
+    const activeSession = session;
+    const run = getRunForSession(activeSession);
+    if (!isRunActive(run, activeSession)) return;
     isRefreshingRef.current = true;
     setIsRefreshing(true);
     setError(null);
@@ -815,18 +968,22 @@ export default function App() {
     }
     if (!options.silent) setRefreshFeedback(null);
     try {
-      const added = await syncIncremental(session, mails);
+      const added = await syncIncremental(activeSession, mails, run);
+      assertRunActive(run, activeSession);
       if (!options.silent) showRefreshFeedback(added > 0 ? copy.newShort(added) : copy.refreshed);
     } catch (err) {
+      if (isAbortLike(err) || !isRunActive(run, activeSession)) return;
       const message = err instanceof Error ? err.message : copy.refreshFailed;
       setError(message);
       if (!options.silent) showRefreshFeedback(copy.refreshFailed);
       showToast(message);
     } finally {
-      isRefreshingRef.current = false;
-      setIsRefreshing(false);
+      if (activeRunRef.current?.id === run.id) {
+        isRefreshingRef.current = false;
+        setIsRefreshing(false);
+      }
     }
-  }, [copy, mails, session, showRefreshFeedback, showToast, syncIncremental]);
+  }, [assertRunActive, copy, getRunForSession, isRunActive, loading, mails, session, showRefreshFeedback, showToast, syncIncremental]);
 
   useEffect(() => {
     if (autoRefreshTimerRef.current) {
@@ -850,68 +1007,87 @@ export default function App() {
 
   const loadMore = useCallback(async () => {
     if (!session || loading === "sync") return;
+    const activeSession = session;
+    const run = getRunForSession(activeSession);
+    if (!isRunActive(run, activeSession)) return;
     setLoading("sync");
     setError(null);
     try {
-      const page = await fetchSessionMailPage(session, PAGE_SIZE, nextOffset);
+      const page = await fetchSessionMailPage(activeSession, PAGE_SIZE, nextOffset, run.controller.signal);
+      assertRunActive(run, activeSession);
       const parsed = await parseMailBatch(page.results);
+      assertRunActive(run, activeSession);
       const next = mergeMails(mails, parsed);
       setMails(next);
-      await persist(next, next.length, page.results.length === PAGE_SIZE && next.length < page.count);
+      await persist(activeSession, next, next.length, page.results.length === PAGE_SIZE && next.length < page.count, run);
     } catch (err) {
+      if (isAbortLike(err) || !isRunActive(run, activeSession)) return;
       setError(err instanceof Error ? err.message : copy.loadFailedToast);
     } finally {
-      setLoading("idle");
+      if (isRunActive(run, activeSession)) setLoading("idle");
     }
-  }, [copy.loadFailedToast, fetchSessionMailPage, loading, mails, nextOffset, persist, session]);
+  }, [assertRunActive, copy.loadFailedToast, fetchSessionMailPage, getRunForSession, isRunActive, loading, mails, nextOffset, persist, session]);
 
   const removeMail = useCallback(
     async (mail: ParsedMail) => {
       if (!session) return;
-      if (isShareSession(session)) {
-        if (!shareInfo?.permissions?.hideMail) {
-          showToast(copy.hideNotAllowed);
+      const activeSession = session;
+      const run = getRunForSession(activeSession);
+      if (!isRunActive(run, activeSession)) return;
+      try {
+        if (isShareSession(activeSession)) {
+          if (!shareInfo?.permissions?.hideMail) {
+            showToast(copy.hideNotAllowed);
+            return;
+          }
+          if (!window.confirm(copy.hideConfirm(mail.subject))) return;
+          await hideSharedMail(activeSession.shareToken, activeSession.shareMailboxId, mail.id, { signal: run.controller.signal });
+          assertRunActive(run, activeSession);
+          const next = mails.filter((item) => item.id !== mail.id);
+          setMails(next);
+          setSelectedId(next[0]?.id ?? null);
+          if (!next.length) setMobilePane("list");
+          await persist(activeSession, next, Math.max(0, nextOffset - 1), hasMoreHistory, run);
+          assertRunActive(run, activeSession);
+          showToast(copy.hidden);
           return;
         }
-        if (!window.confirm(copy.hideConfirm(mail.subject))) return;
-        await hideSharedMail(session.shareToken, session.shareMailboxId, mail.id);
+        if (!window.confirm(copy.deleteConfirm(mail.subject))) return;
+        await deleteMail(activeSession.jwt, mail.id, { signal: run.controller.signal });
+        assertRunActive(run, activeSession);
         const next = mails.filter((item) => item.id !== mail.id);
         setMails(next);
         setSelectedId(next[0]?.id ?? null);
         if (!next.length) setMobilePane("list");
-        await persist(next, Math.max(0, nextOffset - 1), hasMoreHistory);
-        showToast(copy.hidden);
-        return;
+        await persist(activeSession, next, Math.max(0, nextOffset - 1), hasMoreHistory, run);
+        assertRunActive(run, activeSession);
+        showToast(copy.deleted);
+      } catch (err) {
+        if (isAbortLike(err) || !isRunActive(run, activeSession)) return;
+        const message = err instanceof Error ? err.message : copy.refreshFailed;
+        setError(message);
+        showToast(message);
       }
-      if (!window.confirm(copy.deleteConfirm(mail.subject))) return;
-      await deleteMail(session.jwt, mail.id);
-      const next = mails.filter((item) => item.id !== mail.id);
-      setMails(next);
-      setSelectedId(next[0]?.id ?? null);
-      if (!next.length) setMobilePane("list");
-      await persist(next, Math.max(0, nextOffset - 1), hasMoreHistory);
-      showToast(copy.deleted);
     },
-    [copy, hasMoreHistory, mails, nextOffset, persist, session, shareInfo?.permissions?.hideMail, showToast]
+    [assertRunActive, copy, getRunForSession, hasMoreHistory, isRunActive, mails, nextOffset, persist, session, shareInfo?.permissions?.hideMail, showToast]
   );
 
-  const logout = useCallback(async () => {
-    if (session && !isShareSession(session)) await clearMailboxCache(session.cacheKey).catch(() => undefined);
-    if (!isShareSession(session)) clearStoredSession();
-    setSession(null);
+  const logout = useCallback(() => {
+    const activeSession = session;
+    cancelRun();
+    if (activeSession && !isShareSession(activeSession)) void clearMailboxCache(activeSession.cacheKey).catch(() => undefined);
+    if (!isShareSession(activeSession)) clearStoredSession();
+    setActiveSession(null);
     setShareInfo(null);
     setAutoRefreshEnabled(true);
     setRefreshFeedback(null);
-    setResolvedHtml(null);
-    clearImageMemoryCache();
-    setMails([]);
-    setSelectedId(null);
-    setNextOffset(0);
-    setHasMoreHistory(false);
+    setIsRefreshing(false);
+    setLoading("idle");
+    resetMailboxState();
     setMobilePane("list");
     setError(null);
     setLoginError(null);
-  }, [session]);
+  }, [cancelRun, resetMailboxState, session, setActiveSession]);
 
   const switchSharedMailbox = useCallback(
     async (mailboxId: string) => {
@@ -919,6 +1095,7 @@ export default function App() {
       try {
         await activateShareMailbox(session.shareToken, shareInfo, mailboxId);
       } catch (err) {
+        if (isAbortLike(err)) return;
         const message = err instanceof Error ? err.message : copy.switchFailed;
         setError(message);
         showToast(message);
@@ -956,29 +1133,32 @@ export default function App() {
   const bodyText = selectedMail ? getMailBodyText(selectedMail) : "";
   const activeViewMode: MailViewMode = selectedMail?.html ? mailViewMode : mailViewMode === "source" ? "source" : "text";
   const selectedResolvedHtml = selectedMail?.html
-    ? (resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : selectedMail.html)
+    ? (resolvedHtml?.cacheKey === session?.cacheKey && resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : selectedMail.html)
     : "";
 
   useEffect(() => {
     let cancelled = false;
+    const cacheKey = session?.cacheKey || "";
     if (!selectedMail?.html || activeViewMode !== "html") {
       setResolvedHtml(null);
       return;
     }
 
-    setResolvedHtml((current) => (current?.mailId === selectedMail.id ? current : null));
-    resolveMailImageAssets(selectedMail.html)
+    const mailId = selectedMail.id;
+    const fallbackHtml = selectedMail.html || "";
+    setResolvedHtml((current) => (current?.cacheKey === cacheKey && current?.mailId === mailId ? current : null));
+    resolveMailImageAssets(fallbackHtml)
       .then((html) => {
-        if (!cancelled) setResolvedHtml({ mailId: selectedMail.id, html });
+        if (!cancelled && sessionRef.current?.cacheKey === cacheKey) setResolvedHtml({ cacheKey, mailId, html });
       })
       .catch(() => {
-        if (!cancelled) setResolvedHtml({ mailId: selectedMail.id, html: selectedMail.html || "" });
+        if (!cancelled && sessionRef.current?.cacheKey === cacheKey) setResolvedHtml({ cacheKey, mailId, html: fallbackHtml });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activeViewMode, selectedMail?.html, selectedMail?.id]);
+  }, [activeViewMode, selectedMail?.html, selectedMail?.id, session?.cacheKey]);
 
   if (!session && (loading === "boot" || loading === "login")) {
     return (
@@ -1086,26 +1266,59 @@ export default function App() {
 
         <div className="account-card">
           <span>{isShareSession(session) ? copy.sharedMailbox : copy.currentMailbox}</span>
-          {isShareSession(session) && (shareInfo?.addresses.length || 0) > 1 ? (
-            <label className="mailbox-switcher">
-              <span>{copy.selectMailbox}</span>
-              <select
-                value={session.shareMailboxId}
-                onChange={(event) => void switchSharedMailbox(event.target.value)}
-                disabled={loading === "login" || loading === "sync"}
-                aria-label={copy.selectMailbox}
-              >
-                {shareInfo?.addresses.map((mailbox) => (
-                  <option key={mailbox.id} value={mailbox.id}>{getMailboxLabel(mailbox, locale)}</option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <div className="account-address-row">
-            <button className="address-copy-button" type="button" onClick={copyCurrentAddress} title={copy.copyAddressTitle}>
-              {session.address}
+          <div
+            className={`account-address-row ${(isShareSession(session) && (shareInfo?.addresses.length || 0) > 1) ? "has-mailbox-menu" : ""}`}
+            ref={mailboxMenuRef}
+            data-current-mailbox-id={isShareSession(session) ? session.shareMailboxId : ""}
+          >
+            <button
+              className="address-copy-button"
+              type="button"
+              onClick={copyCurrentAddress}
+              title={copy.copyAddressTitle}
+            >
+              <span className="address-copy-text">{session.address}</span>
+              <span className="address-copy-affordance" aria-hidden="true">{copy.copyAddressAction}</span>
             </button>
+            {isShareSession(session) && (shareInfo?.addresses.length || 0) > 1 ? (
+              <button
+                className="mailbox-menu-button"
+                type="button"
+                aria-label={copy.selectMailbox}
+                aria-expanded={mailboxMenuOpen}
+                aria-controls="shared-mailbox-menu"
+                disabled={loading === "login" || loading === "sync"}
+                onClick={() => setMailboxMenuOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="M4.2 6.3 8 10l3.8-3.7" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            ) : null}
             <em className={`copy-hint ${addressCopied ? "visible" : ""}`} aria-live="polite">{copy.copied}</em>
+            {isShareSession(session) && (shareInfo?.addresses.length || 0) > 1 && mailboxMenuOpen ? (
+              <div className="mailbox-menu" id="shared-mailbox-menu" role="listbox" aria-label={copy.selectMailbox}>
+                {shareInfo?.addresses.map((mailbox) => {
+                  const label = getMailboxLabel(mailbox, locale);
+                  const selected = mailbox.id === session.shareMailboxId;
+                  return (
+                    <button
+                      key={mailbox.id}
+                      className={`mailbox-menu-option ${selected ? "active" : ""}`}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => {
+                        setMailboxMenuOpen(false);
+                        void switchSharedMailbox(mailbox.id);
+                      }}
+                    >
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -1214,7 +1427,10 @@ export default function App() {
           <section className="empty-state error-state">
             <h1>{copy.loadFailed}</h1>
             <p>{error}</p>
-            <button className="primary-button" onClick={() => hydrateAndSync(session)}>{copy.retry}</button>
+            <button className="primary-button" onClick={() => {
+              const run = getRunForSession(session);
+              void hydrateAndSync(session, run);
+            }}>{copy.retry}</button>
           </section>
         ) : selectedMail ? (
           <article className="mail-detail">

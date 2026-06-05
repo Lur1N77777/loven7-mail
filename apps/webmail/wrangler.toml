@@ -6,8 +6,10 @@ compatibility_date = "2026-05-11"
 #   binding: SHARE_KV
 #   namespace: 你自己创建的 KV Namespace
 #
-# 如果使用 Wrangler 部署，可取消下面注释并替换为你自己的 Namespace ID：
-# [[kv_namespaces]]
-# binding = "SHARE_KV"
-# id = "<your-share-kv-namespace-id>"
+# Wrangler Direct Upload 部署时需要在本地配置中保留绑定，否则新部署的
+# Pages Functions runtime 拿不到 SHARE_KV。
+[[kv_namespaces]]
+binding = "SHARE_KV"
+id = "a1fd701f2494426ca79721d3e2fa1734"
+preview_id = "00eb7279b460440bbc235f4bf4d136c2"
 

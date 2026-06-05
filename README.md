@@ -181,6 +181,14 @@ scripts/         发布、检查和辅助脚本
 
 如果你还没有部署上游后端，请先部署 Cloudflare Temp Mail / `cloudflare_temp_email` 官方 Worker。
 
+部署前建议先在仓库根目录运行一次本地预检：
+
+```bash
+npm run check:cloudflare
+```
+
+这个命令只检查 Cloudflare Pages 项目名、GitHub Actions、Webmail Pages Functions 检查脚本、运行时变量文档和 KV 绑定说明是否一致；不会连接 Cloudflare、不会部署，也不会读取或输出任何真实密钥。
+
 ### 第 1 步：部署管理后台
 
 在 Cloudflare Pages 新建项目，连接本 GitHub 仓库。
@@ -232,6 +240,28 @@ scripts/         发布、检查和辅助脚本
 | `MAIL_WORKER_BASE_URL` | 必填 | 你的 Cloudflare Temp Mail Worker/API 地址 |
 | `SITE_PASSWORD` | 可选 | 如果上游 Worker 开启了站点密码就填写 |
 | `SHARE_ENCRYPTION_SECRET` | 使用分享功能时必填 | 用于加密分享记录，建议 32 字符以上随机字符串 |
+| `SHARE_ADMIN_CORS_ORIGINS` | 分站管理分享时必填 | 管理后台页面的完整 origin，例如 `https://your-admin.pages.dev`；多个用逗号分隔 |
+| `SHARE_PUBLIC_CORS_ORIGINS` | 可选 | 公开分享 API 的额外跨源来源；默认留空，只允许同源分享页调用 |
+
+如果管理后台和用户站是两个 Cloudflare Pages 项目，必须在**用户站** Pages 运行时变量里设置 `SHARE_ADMIN_CORS_ORIGINS=<管理后台 origin>`，否则后台创建/管理分享链接会被浏览器 CORS 拦截。不要设置 `*`。
+
+如果你复用已有 Cloudflare Pages 项目，部署前请显式设置：
+
+```powershell
+$env:ADMIN_PAGES_PROJECT_NAME="你的管理后台 Pages 项目名"
+$env:WEBMAIL_PAGES_PROJECT_NAME="你的用户站 Pages 项目名"
+```
+
+如果部署到 `preview` 分支，Cloudflare Pages 的 Preview 环境需要单独配置运行时变量、secret 和 KV 绑定；Production 已配置不代表 Preview 自动可用。确认 Preview 已配置 `MAIL_WORKER_BASE_URL`、可选 `SITE_PASSWORD`、`SHARE_ENCRYPTION_SECRET`、`SHARE_ADMIN_CORS_ORIGINS` 和 `SHARE_KV` 后，可以设置 `WEBMAIL_PREVIEW_RUNTIME_CONFIRMED=1` 再运行预检。完整清单见 [`docs/CLOUDFLARE_PAGES.md`](docs/CLOUDFLARE_PAGES.md)。
+
+部署后可以运行线上 runtime 探针。新版用户站会先读取只读诊断接口 `/api/runtime`，只返回配置项是否存在、缺失项和修复提示；不会输出 `MAIL_WORKER_BASE_URL`、`SITE_PASSWORD`、`SHARE_ENCRYPTION_SECRET`、KV ID 或任何 secret 原文。若线上版本还没包含 `/api/runtime`，脚本会退回到无效分享 token 和假账号探针：
+
+```powershell
+$env:WEBMAIL_RUNTIME_URL="https://你的用户站-preview域名"
+npm run check:cloudflare:runtime
+```
+
+探针会确认页面可访问、`/api/runtime` 是否报告 Preview/Production 运行时已补齐，并在必要时继续确认分享 runtime 是否已绑定 `SHARE_KV` / `SHARE_ENCRYPTION_SECRET`，以及邮箱 API runtime 是否已配置 `MAIL_WORKER_BASE_URL`。
 
 分享功能还需要绑定 Cloudflare KV：
 
@@ -285,12 +315,12 @@ ADMIN_PAGES_PROJECT_NAME
 WEBMAIL_PAGES_PROJECT_NAME
 ```
 
-用户站的 `MAIL_WORKER_BASE_URL`、`SITE_PASSWORD`、`SHARE_ENCRYPTION_SECRET` 和 `SHARE_KV` 仍然建议在 Cloudflare Pages 项目设置里配置。详细步骤见 [`docs/GITHUB_ACTIONS.md`](docs/GITHUB_ACTIONS.md)。
+用户站的 `MAIL_WORKER_BASE_URL`、`SITE_PASSWORD`、`SHARE_ENCRYPTION_SECRET`、`SHARE_ADMIN_CORS_ORIGINS` 和 `SHARE_KV` 仍然建议在 Cloudflare Pages 项目设置里配置。详细步骤见 [`docs/GITHUB_ACTIONS.md`](docs/GITHUB_ACTIONS.md)。
 
 如果你想让 AI Agent 代你配置这套自动部署流程，可以把下面这段话复制给 Agent。不要把 Cloudflare Token、GitHub Token、管理员密码或 Worker API 密钥写进 Prompt，让 Agent 在需要时通过安全的 secrets/variables 输入流程读取。
 
 ```text
-请帮我为这个 GitHub 仓库配置 GitHub Actions 自动部署流程：https://github.com/Lur1N77777/loven7-mail-cloudflare-suite 。仓库里已经有 .github/workflows/ci.yml 和 .github/workflows/deploy-cloudflare-pages.yml。请先检查两个 workflow 是否存在并解释它们会做什么，然后在 GitHub 仓库的 Actions secrets/variables 中配置自动部署需要的 CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID、ADMIN_PAGES_PROJECT_NAME、WEBMAIL_PAGES_PROJECT_NAME。不要把任何 Token、密码、Worker API、KV ID 或个人域名写进代码、README、commit 或日志。配置完成后，请手动触发一次 Deploy to Cloudflare Pages workflow，确认管理后台 apps/admin 和用户站 apps/webmail 都构建成功；如果 Cloudflare Pages 项目不存在，请指导我先创建两个 Pages 项目或用 Cloudflare 控制台创建。最后返回 Actions 运行结果、两个 Pages 项目名、以及我还需要在 Cloudflare Pages 里配置的用户站运行时变量 MAIL_WORKER_BASE_URL、SITE_PASSWORD、SHARE_ENCRYPTION_SECRET 和 SHARE_KV。
+请帮我为这个 GitHub 仓库配置 GitHub Actions 自动部署流程：https://github.com/Lur1N77777/loven7-mail-cloudflare-suite 。仓库里已经有 .github/workflows/ci.yml 和 .github/workflows/deploy-cloudflare-pages.yml。请先检查两个 workflow 是否存在并解释它们会做什么，然后在 GitHub 仓库的 Actions secrets/variables 中配置自动部署需要的 CLOUDFLARE_API_TOKEN、CLOUDFLARE_ACCOUNT_ID、ADMIN_PAGES_PROJECT_NAME、WEBMAIL_PAGES_PROJECT_NAME。不要把任何 Token、密码、Worker API、KV ID 或个人域名写进代码、README、commit 或日志。配置完成后，请手动触发一次 Deploy to Cloudflare Pages workflow，确认管理后台 apps/admin 和用户站 apps/webmail 都构建成功；如果 Cloudflare Pages 项目不存在，请指导我先创建两个 Pages 项目或用 Cloudflare 控制台创建。最后返回 Actions 运行结果、两个 Pages 项目名、以及我还需要在 Cloudflare Pages 里配置的用户站运行时变量 MAIL_WORKER_BASE_URL、SITE_PASSWORD、SHARE_ENCRYPTION_SECRET、SHARE_ADMIN_CORS_ORIGINS 和 SHARE_KV。
 ```
 
 ---
@@ -317,7 +347,8 @@ npm run build
 npx wrangler pages dev dist \
   --compatibility-date=2026-05-11 \
   --binding MAIL_WORKER_BASE_URL=https://your-worker.example.workers.dev \
-  --binding SHARE_ENCRYPTION_SECRET=replace-with-a-long-random-secret
+  --binding SHARE_ENCRYPTION_SECRET=replace-with-a-long-random-secret \
+  --binding SHARE_ADMIN_CORS_ORIGINS=http://localhost:5173
 ```
 
 ---
@@ -349,9 +380,21 @@ npx wrangler pages dev dist \
 
 用户站 Pages 没有绑定 KV Namespace。请到 Cloudflare Pages 的 Functions / Bindings 里绑定 `SHARE_KV`。
 
+如果只有 Preview 报错，请切换到 Webmail Pages 项目的 Preview 环境绑定 `SHARE_KV`，并重新部署 Preview 分支；Production 的 KV 绑定不会自动应用到 Preview。
+
+### Preview 邮件接口提示“邮箱 API 未配置”
+
+检查 Webmail Pages 项目的 Preview 环境是否单独设置了 `MAIL_WORKER_BASE_URL`。如果上游 Worker 开启了站点密码，也要单独设置 Preview `SITE_PASSWORD`。修改后需要重新部署 Preview 分支。
+
+也可以直接打开或探测用户站的 `/api/runtime`。如果 `missing` 包含 `MAIL_WORKER_BASE_URL`，说明当前部署环境还没拿到邮箱 Worker 地址；如果只在 Preview 出现，优先检查 Cloudflare Pages 的 Preview variables/secrets，而不是 Production。
+
 ### 分享功能提示 `SHARE_ENCRYPTION_SECRET is not configured`
 
 用户站 Pages 没有设置分享加密密钥。添加 `SHARE_ENCRYPTION_SECRET` 后重新部署。
+
+### 后台创建/管理分享链接提示网络或 CORS 失败
+
+确认“系统设置 → 前端登录链接前缀”填写的是用户站 URL；然后在**用户站** Cloudflare Pages 运行时变量里设置 `SHARE_ADMIN_CORS_ORIGINS=<管理后台 origin>`，例如 `https://your-admin.pages.dev`。同时确认 `SHARE_KV` 和 `SHARE_ENCRYPTION_SECRET` 已配置。
 
 ---
 
@@ -359,7 +402,7 @@ npx wrangler pages dev dist \
 
 - 不要把 Worker API 密钥、管理员密码、站点密码、GitHub Token、Cloudflare Token 写进仓库。
 - 管理后台的连接信息默认保存在浏览器本地。
-- 用户站的 `SITE_PASSWORD` 和 `SHARE_ENCRYPTION_SECRET` 只应作为 Cloudflare Pages 运行时环境变量保存。
+- 用户站的 `SITE_PASSWORD` 和 `SHARE_ENCRYPTION_SECRET` 只应作为 Cloudflare Pages 运行时环境变量保存；`SHARE_ADMIN_CORS_ORIGINS` 只填写可信管理后台 origin，不要使用 `*`。
 - 本仓库不应包含 `node_modules/`、`dist/`、`.env.production`、`.wrangler/` 等本地或私有产物。
 
 ---

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { AlertTriangle, Loader2, Lock } from 'lucide-react';
+import { AlertTriangle, Loader2, Lock, LogOut } from 'lucide-react';
 import type { Requester } from '../lib/api';
 import { isAllowedApiBase, STORAGE_KEYS } from '../lib/constants';
 import { sha256Hex } from '../lib/crypto';
 import { getRuntimeLocale, localeText } from '../lib/locale';
-import { writeAuthCookieMirror, writeLocalStorage, writeSessionStorage } from '../lib/storage';
+import { normalizeAuthApiBase, readBoundAuth, writeBoundAuth, writeLocalStorage } from '../lib/storage';
 import { Modal, type Notify } from './Common';
 import { CredentialButton } from './Shell';
 
@@ -35,7 +35,7 @@ function isEnterCommit(event: KeyboardEvent<HTMLInputElement>): boolean {
   return true;
 }
 
-export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword, sitePassword, setSitePassword, userAccessToken, setUserAccessToken, turnstileSiteKey, turnstileRequired, request, notify, initialOpen: requestedInitialOpen }: {
+export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword, sitePassword, setSitePassword, userAccessToken, setUserAccessToken, addressJwt, setAddressJwt, turnstileSiteKey, turnstileRequired, request, notify, initialOpen: requestedInitialOpen, canForgetBrowser = false, onForgetBrowser }: {
   apiBase: string;
   setApiBase: (value: string) => void;
   adminPassword: string;
@@ -44,11 +44,15 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
   setSitePassword: (value: string) => void;
   userAccessToken: string;
   setUserAccessToken: (value: string) => void;
+  addressJwt: string;
+  setAddressJwt: (value: string) => void;
   turnstileSiteKey?: string;
   turnstileRequired?: boolean;
   request: Requester;
   notify: Notify;
   initialOpen?: boolean;
+  canForgetBrowser?: boolean;
+  onForgetBrowser?: () => void;
 }) {
   const initialOpen = requestedInitialOpen ?? (!adminPassword && !userAccessToken);
   const [open, setOpen] = useState(initialOpen);
@@ -61,6 +65,7 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
   const [unlockedHost, setUnlockedHost] = useState(false);
   const [turnstileReady, setTurnstileReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [baseSwitchHint, setBaseSwitchHint] = useState('');
   const turnstileRef = useRef<HTMLDivElement | null>(null);
   const widgetRef = useRef<string | null>(null);
   const locale = getRuntimeLocale();
@@ -73,7 +78,16 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
     setTmpBase(apiBase);
     setTmpAccessToken(userAccessToken);
     setUnlockedHost(false);
+    setBaseSwitchHint('');
   }, [adminPassword, apiBase, open, sitePassword, userAccessToken]);
+
+  useEffect(() => {
+    if (adminPassword || sitePassword || userAccessToken) return;
+    setTmpAdmin('');
+    setTmpSite('');
+    setTmpAccessToken('');
+    setCfToken('');
+  }, [adminPassword, sitePassword, userAccessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,10 +124,29 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
   const baseCheck = isAllowedApiBase(tmpBase);
   const baseAllowed = baseCheck.ok || unlockedHost;
 
+  const loadCredentialsForBase = (nextBase: string) => {
+    const normalizedNext = normalizeAuthApiBase(nextBase);
+    const normalizedCurrent = normalizeAuthApiBase(apiBase);
+    if (normalizedNext === normalizedCurrent) {
+      setTmpAdmin(adminPassword);
+      setTmpSite(sitePassword);
+      setTmpAccessToken(userAccessToken);
+      setBaseSwitchHint('');
+      return;
+    }
+    const bound = readBoundAuth(normalizedNext);
+    setTmpAdmin(bound.adminPassword);
+    setTmpSite(bound.sitePassword);
+    setTmpAccessToken(bound.userAccessToken);
+    setBaseSwitchHint(bound.adminPassword || bound.userAccessToken
+      ? t('已切换到此 Worker 地址在本浏览器保存的独立凭据。', 'Loaded the saved credentials for this Worker address on this browser.')
+      : t('Worker 地址已变化。为避免凭据泄漏，已清空旧地址的管理员密码和 Access Token，请重新验证。', 'Worker address changed. To avoid credential leakage, old admin password/access token was cleared; please verify again.'));
+  };
+
   const save = async () => {
     setLoading(true);
     try {
-      const normalizedBase = tmpBase.trim().replace(/\/$/, '');
+      const normalizedBase = normalizeAuthApiBase(tmpBase);
       if (!baseAllowed) throw new Error(baseCheck.reason || t('Worker API 地址不受信任', 'Worker API address is not trusted'));
       const withBase = (path: string) => (normalizedBase ? `${normalizedBase}${path}` : path);
       const trimmedAdmin = tmpAdmin.trim();
@@ -121,27 +154,40 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
       const trimmedAccessToken = tmpAccessToken.trim();
       if (!trimmedAdmin && !trimmedAccessToken) throw new Error(t('请填写管理员密码，或填写具备管理员角色的用户 access token', 'Enter an admin password, or provide a user access token with an admin role'));
       if (turnstileRequired && !cfToken && !trimmedAccessToken) throw new Error(t('当前 Worker 开启 Turnstile，请先完成校验或填写有效用户管理员 access token', 'Turnstile is enabled on this Worker. Complete verification or provide a valid admin user access token'));
-      if (trimmedSite) await request(withBase('/open_api/site_login'), { method: 'POST', sitePassword: trimmedSite, body: { password: await sha256Hex(trimmedSite), cf_token: cfToken || undefined } });
-      if (trimmedAdmin) await request(withBase('/open_api/admin_login'), { method: 'POST', sitePassword: trimmedSite, body: { password: await sha256Hex(trimmedAdmin), cf_token: cfToken || undefined } });
+      const verificationCredentials = {
+        adminPassword: '',
+        sitePassword: trimmedSite,
+        userAccessToken: '',
+        addressJwt: '',
+      };
+      if (trimmedSite) await request(withBase('/open_api/site_login'), { method: 'POST', ...verificationCredentials, body: { password: await sha256Hex(trimmedSite), cf_token: cfToken || undefined } });
+      if (trimmedAdmin) await request(withBase('/open_api/admin_login'), { method: 'POST', ...verificationCredentials, body: { password: await sha256Hex(trimmedAdmin), cf_token: cfToken || undefined } });
+      if (!trimmedAdmin && trimmedAccessToken) {
+        await request(withBase('/admin/statistics'), {
+          method: 'GET',
+          adminPassword: '',
+          sitePassword: trimmedSite,
+          userAccessToken: trimmedAccessToken,
+          addressJwt: '',
+          forceRefresh: true,
+          skipCache: true,
+        });
+      }
       setApiBase(normalizedBase);
       writeLocalStorage(STORAGE_KEYS.apiBase, normalizedBase);
       setAdminPassword(trimmedAdmin);
       setSitePassword(trimmedSite);
       setUserAccessToken(trimmedAccessToken);
-      writeLocalStorage(STORAGE_KEYS.adminPassword, trimmedAdmin);
-      writeLocalStorage(STORAGE_KEYS.sitePassword, trimmedSite);
-      writeLocalStorage(STORAGE_KEYS.userAccessToken, trimmedAccessToken);
-      writeLocalStorage(STORAGE_KEYS.authRememberedAt, String(Date.now()));
-      writeSessionStorage(STORAGE_KEYS.adminPassword, trimmedAdmin);
-      writeSessionStorage(STORAGE_KEYS.sitePassword, trimmedSite);
-      writeSessionStorage(STORAGE_KEYS.userAccessToken, trimmedAccessToken);
-      writeAuthCookieMirror({
-        apiBase: normalizedBase,
+      const bound = readBoundAuth(normalizedBase);
+      const rememberedAt = Date.now();
+      setAddressJwt(bound.addressJwt);
+      writeBoundAuth(normalizedBase, {
         adminPassword: trimmedAdmin,
         sitePassword: trimmedSite,
         userAccessToken: trimmedAccessToken,
-        rememberedAt: Date.now(),
-      });
+        addressJwt: bound.addressJwt,
+        rememberedAt,
+      }, rememberedAt);
       notify('success', trimmedAdmin ? t('管理员认证成功', 'Admin verified') : t('已保存用户管理员 access token', 'Admin user access token saved'));
       setOpen(false);
     } catch (error) {
@@ -165,7 +211,12 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
           <input
             className="form-input compact-control"
             value={tmpBase}
-            onChange={(event) => { setTmpBase(event.target.value); setUnlockedHost(false); }}
+            onChange={(event) => {
+              const value = event.target.value;
+              setTmpBase(value);
+              setUnlockedHost(false);
+              loadCredentialsForBase(value);
+            }}
             placeholder="https://your-worker.example.workers.dev"
             spellCheck={false}
             autoCapitalize="off"
@@ -181,6 +232,11 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
                   <button type="button" className="mt-1 underline" onClick={() => setUnlockedHost(true)}>{t('我确认这是受我管理的 Worker，允许使用', 'I confirm this is my Worker and allow using it')}</button>
                 </div>
               </div>
+            </div>
+          )}
+          {baseSwitchHint && (
+            <div className="mt-1 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-[11px] leading-4 text-sky-700">
+              {baseSwitchHint}
             </div>
           )}
         </div>
@@ -212,6 +268,16 @@ export function AuthPanel({ apiBase, setApiBase, adminPassword, setAdminPassword
           </div>
         </div>}
         <button onClick={save} disabled={loading || !baseAllowed} className="btn-primary w-full compact">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock size={16} />} {t('保存并验证', 'Save and verify')}</button>
+        {canForgetBrowser && onForgetBrowser ? (
+          <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-3">
+            <p className="mb-2 text-xs leading-5 text-rose-700">
+              {t('退出当前后台并清除本机保存的凭据、地址登录和管理数据缓存；Worker 地址、主题、语言等界面偏好会保留。', 'Sign out and clear saved credentials, address login, and local admin data caches on this browser. API base, theme, language, and UI preferences are kept.')}
+            </p>
+            <button type="button" onClick={onForgetBrowser} disabled={loading} className="btn-danger w-full compact">
+              <LogOut size={16} /> {t('退出并忘记此浏览器', 'Sign out and forget this browser')}
+            </button>
+          </div>
+        ) : null}
       </div>
     </Modal>}
   </>;

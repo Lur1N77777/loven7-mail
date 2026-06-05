@@ -2,6 +2,11 @@ export interface CloudmailEnv {
   MAIL_WORKER_BASE_URL?: string;
   SITE_PASSWORD?: string;
   SHARE_ENCRYPTION_SECRET?: string;
+  SHARE_ADMIN_CORS_ORIGINS?: string;
+  SHARE_PUBLIC_CORS_ORIGINS?: string;
+  SHARE_ADMIN_ALLOWED_ORIGINS?: string;
+  SHARE_PUBLIC_ALLOWED_ORIGINS?: string;
+  CORS_ALLOWED_ORIGINS?: string;
   SHARE_KV?: {
     get(key: string): Promise<string | null>;
     put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;

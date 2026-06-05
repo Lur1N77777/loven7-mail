@@ -15,8 +15,8 @@ function parseTokens(value: unknown): string[] {
   return [...new Set(value.map((item) => String(item || "").trim()).filter((item) => /^[A-Za-z0-9_-]{12,96}$/.test(item)))].slice(0, 100);
 }
 
-export const onRequestOptions: PagesHandler = ({ request }) => {
-  return new Response(null, { status: 204, headers: corsHeaders(request) });
+export const onRequestOptions: PagesHandler = ({ request, env }) => {
+  return new Response(null, { status: 204, headers: corsHeaders(request, env, "admin") });
 };
 
 export const onRequestPost: PagesHandler = async ({ request, env }) => {
@@ -24,10 +24,10 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
     const { workerEnv } = await assertShareAdmin(request, env);
     const body = (await request.json().catch(() => null)) as BatchBody | null;
     const tokens = parseTokens(body?.tokens);
-    if (!tokens.length) return withCors(errorJson(400, "请选择至少一个共享链接", "missing_tokens"), request);
+    if (!tokens.length) return withCors(errorJson(400, "请选择至少一个共享链接", "missing_tokens"), request, env, "admin");
     const action = String(body?.action || "").trim();
     const allowedActions = new Set(["revoke", "restore", "update", "refresh-index"]);
-    if (!allowedActions.has(action)) return withCors(errorJson(400, "批量操作无效", "bad_batch_action"), request);
+    if (!allowedActions.has(action)) return withCors(errorJson(400, "批量操作无效", "bad_batch_action"), request, env, "admin");
 
     const ttl = parseShareTtl(body?.expiresIn);
     const requestedVisibility: ShareMailVisibility | undefined = body?.mailVisibility === "new" || body?.mailVisibility === "all" ? body.mailVisibility : undefined;
@@ -70,8 +70,8 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       }
     }
 
-    return withCors(json({ ok: failures.length === 0, results, failures }), request);
+    return withCors(json({ ok: failures.length === 0, results, failures }), request, env, "admin");
   } catch (error) {
-    return withCors(shareError(error), request);
+    return withCors(shareError(error), request, env, "admin");
   }
 };

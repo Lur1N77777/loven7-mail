@@ -259,43 +259,23 @@ button {
 }
 
 .account-card {
+  position: relative;
+  z-index: 70;
   flex: 0 0 auto;
   padding: 15px;
   border: 1px solid rgba(101, 119, 148, 0.17);
   border-radius: 22px;
   background: linear-gradient(180deg, #ffffff, #f8fbff);
   margin-bottom: 12px;
+  overflow: visible;
 }
 
-.account-card span,
+.account-card > span,
 .account-card small {
   display: block;
   color: #6d7a90;
   font-size: 12px;
   line-height: 1.55;
-}
-
-.mailbox-switcher {
-  display: grid;
-  gap: 6px;
-  margin: 9px 0 8px;
-}
-
-.mailbox-switcher span {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.mailbox-switcher select {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid rgba(99, 116, 146, 0.2);
-  border-radius: 14px;
-  padding: 9px 11px;
-  color: #142033;
-  background: rgba(255, 255, 255, 0.96);
-  outline: none;
 }
 
 .account-card strong {
@@ -932,32 +912,167 @@ button:disabled {
 }
 
 .account-address-row {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  margin: 3px 0 7px;
+  margin: 5px 0 7px;
 }
 
 .address-copy-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  max-width: 100%;
+  flex: 1 1 auto;
+  max-width: min(100%, 19.5rem);
   border: 0;
-  padding: 0;
+  border-radius: 13px;
+  padding: 7px 8px;
   color: #12213a;
   background: transparent;
   font-size: 14px;
   font-weight: 850;
   line-height: 1.35;
   text-align: left;
-  word-break: break-all;
   cursor: pointer;
+  transition: background 0.18s cubic-bezier(.22, 1, .36, 1), color 0.18s cubic-bezier(.22, 1, .36, 1), transform 0.18s cubic-bezier(.22, 1, .36, 1);
+}
+
+.address-copy-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .address-copy-button:hover {
-  color: #1d4ed8;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.055);
+}
+
+.address-copy-button:active {
+  transform: translateY(1px);
+}
+
+.address-copy-affordance {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: rgba(15, 23, 42, 0.66);
+  background: rgba(15, 23, 42, 0.07);
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity 0.16s cubic-bezier(.22, 1, .36, 1), transform 0.16s cubic-bezier(.22, 1, .36, 1);
+}
+
+.address-copy-button:hover .address-copy-affordance,
+.address-copy-button:focus-visible .address-copy-affordance {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.mailbox-menu-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  color: rgba(15, 23, 42, 0.62);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.18s cubic-bezier(.22, 1, .36, 1), color 0.18s cubic-bezier(.22, 1, .36, 1), transform 0.18s cubic-bezier(.22, 1, .36, 1);
+}
+
+.mailbox-menu-button:hover,
+.mailbox-menu-button[aria-expanded="true"] {
+  color: #111827;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.mailbox-menu-button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.mailbox-menu-button:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.mailbox-menu-button svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.18s cubic-bezier(.22, 1, .36, 1);
+}
+
+.mailbox-menu {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 3px;
+  max-height: min(260px, 42vh);
+  overflow: auto;
+  border: 1px solid rgba(101, 119, 148, 0.18);
+  border-radius: 16px;
+  padding: 6px;
+  background: #fbfcff;
+  box-shadow: 0 18px 46px rgba(18, 33, 58, 0.16), 0 2px 10px rgba(18, 33, 58, 0.06);
+}
+
+.mailbox-menu-option {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: #172033;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mailbox-menu-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailbox-menu-option:hover {
+  background: rgba(15, 23, 42, 0.055);
+}
+
+.mailbox-menu-option.active {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.09);
+}
+
+.mailbox-menu-option.active::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-left: 9px;
+  border-radius: 999px;
+  background: #0f172a;
 }
 
 .copy-hint {
@@ -979,6 +1094,9 @@ button:disabled {
 
 .mail-row:focus-visible,
 .code-copy-button:focus-visible,
+.address-copy-button:focus-visible,
+.mailbox-menu-button:focus-visible,
+.mailbox-menu-option:focus-visible,
 .mail-view-tabs button:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.28);
   outline-offset: 2px;
@@ -1142,9 +1260,8 @@ body {
 
 .login-brand p,
 .boot-card p,
-.account-card span,
+.account-card > span,
 .account-card small,
-.mailbox-switcher span,
 .mail-row-from,
 .mail-row-preview,
 .detail-header p,
@@ -1180,19 +1297,49 @@ body {
   color: var(--lm-text);
 }
 
+.address-copy-button:hover {
+  color: var(--lm-text);
+  background: color-mix(in srgb, var(--lm-text) 7%, transparent);
+}
+
+.address-copy-affordance,
+.mailbox-menu-button {
+  color: var(--lm-text-soft);
+}
+
+.address-copy-affordance,
+.mailbox-menu-button:hover,
+.mailbox-menu-button[aria-expanded="true"],
+.mailbox-menu-option:hover,
+.mailbox-menu-option.active {
+  background: color-mix(in srgb, var(--lm-text) 8%, transparent);
+}
+
+.mailbox-menu {
+  border-color: var(--lm-border);
+  background: var(--lm-surface);
+  box-shadow: 0 18px 46px color-mix(in srgb, var(--lm-text) 14%, transparent), 0 2px 10px color-mix(in srgb, var(--lm-text) 7%, transparent);
+}
+
+.mailbox-menu-option {
+  color: var(--lm-text);
+}
+
+.mailbox-menu-option.active::after {
+  background: var(--lm-text);
+}
+
 .login-form label span {
   color: var(--lm-text-soft);
 }
 
-.login-form input,
-.mailbox-switcher select {
+.login-form input {
   border-color: var(--lm-border);
   color: var(--lm-text);
   background: var(--lm-surface);
 }
 
-.login-form input:focus,
-.mailbox-switcher select:focus {
+.login-form input:focus {
   border-color: color-mix(in srgb, var(--lm-accent) 42%, var(--lm-border));
   background: var(--lm-surface);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--lm-accent) 18%, transparent);
@@ -1375,7 +1522,6 @@ input {
 .detail-actions,
 .mail-body-shell,
 .mail-view-tabs,
-.account-card,
 .toolbar {
   contain: layout paint;
 }

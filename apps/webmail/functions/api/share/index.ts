@@ -125,21 +125,21 @@ async function resolveVerifiedJwtAddress(env: Parameters<PagesHandler>[0]["env"]
   return { address: normalizeAddress(fallbackAddress), verifiedBy: "unverified" as const };
 }
 
-export const onRequestOptions: PagesHandler = ({ request }) => {
-  return new Response(null, { status: 204, headers: corsHeaders(request) });
+export const onRequestOptions: PagesHandler = ({ request, env }) => {
+  return new Response(null, { status: 204, headers: corsHeaders(request, env, "admin") });
 };
 
 export const onRequestPost: PagesHandler = async ({ request, env }) => {
   try {
     const adminPassword = request.headers.get("x-admin-auth")?.trim() || "";
-    if (!adminPassword) return withCors(errorJson(401, "缺少管理员凭证", "missing_admin_auth"), request);
+    if (!adminPassword) return withCors(errorJson(401, "缺少管理员凭证", "missing_admin_auth"), request, env, "admin");
     const requestSitePassword = request.headers.get("x-custom-auth")?.trim() || "";
     const workerEnv = requestSitePassword && !env.SITE_PASSWORD ? { ...env, SITE_PASSWORD: requestSitePassword } : env;
 
     const body = (await request.json().catch(() => null)) as CreateShareBody | null;
     const addressIds = parseAddressIds(body?.addressIds);
     const addressHints = parseAddressHints(body?.addresses);
-    if (!addressIds.length) return withCors(errorJson(400, "请选择至少一个邮箱地址", "missing_addresses"), request);
+    if (!addressIds.length) return withCors(errorJson(400, "请选择至少一个邮箱地址", "missing_addresses"), request, env, "admin");
 
     const ttl = parseShareTtl(body?.expiresIn);
     const mailVisibility: ShareMailVisibility = body?.mailVisibility === "all" ? "all" : "new";
@@ -208,14 +208,16 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
         permissions: payload.permissions,
         addresses: addresses.map(({ id, address, mailCount }) => ({ id, address, mailCount })),
       }),
-      request
+      request,
+      env,
+      "admin"
     );
   } catch (error) {
     if (error instanceof Error && !(error as any).status) {
-      return withCors(errorJson(500, error.message || "创建共享链接失败", "share_create_failed"), request);
+      return withCors(errorJson(500, error.message || "创建共享链接失败", "share_create_failed"), request, env, "admin");
     }
     const response = shareError(error);
-    if (response.status !== 500) return withCors(response, request);
-    return withCors(mapUpstreamError(error), request);
+    if (response.status !== 500) return withCors(response, request, env, "admin");
+    return withCors(mapUpstreamError(error), request, env, "admin");
   }
 };

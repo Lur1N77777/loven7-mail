@@ -41,6 +41,9 @@ jobs:
         working-directory: apps/admin
         run: npm run lint
 
+      - name: Check Cloudflare Pages preflight
+        run: npm run check:cloudflare
+
       - name: Build admin
         working-directory: apps/admin
         env:
@@ -50,6 +53,13 @@ jobs:
       - name: Install webmail dependencies
         working-directory: apps/webmail
         run: npm ci
+
+      - name: Check webmail Pages Functions
+        working-directory: apps/webmail
+        run: |
+          npm run check:functions:headers
+          npm run check:functions:cors
+          npm run check:functions:image
 
       - name: Build webmail
         working-directory: apps/webmail

@@ -8,24 +8,24 @@ function clampNumber(value: string | null, fallback: number, min: number, max: n
   return Math.min(max, Math.max(min, parsed));
 }
 
-export const onRequestOptions: PagesHandler<{ token: string }> = ({ request }) => {
-  return new Response(null, { status: 204, headers: corsHeaders(request) });
+export const onRequestOptions: PagesHandler<{ token: string }> = ({ request, env }) => {
+  return new Response(null, { status: 204, headers: corsHeaders(request, env, "public") });
 };
 
 export const onRequestGet: PagesHandler<{ token: string }> = async ({ request, env, params }) => {
   try {
     const url = new URL(request.url);
     const resolved = await resolveSharedMailbox(env, params.token, url.searchParams.get("mailbox") || "");
-    if (!resolved) return withCors(errorJson(404, "共享邮箱不存在或链接已失效", "share_mailbox_not_found"), request);
+    if (!resolved) return withCors(errorJson(404, "共享邮箱不存在或链接已失效", "share_mailbox_not_found"), request, env, "public");
 
     const search = new URLSearchParams();
     search.set("limit", String(clampNumber(url.searchParams.get("limit"), 50, 1, 100)));
     search.set("offset", String(clampNumber(url.searchParams.get("offset"), 0, 0, 1000000)));
     const raw = await fetchWorkerJson<unknown>(env, "/api/mails", { jwt: resolved.mailbox.jwt, search });
-    return withCors(json(filterSharedMailPage(raw, resolved.mailbox, resolved.share)), request);
+    return withCors(json(filterSharedMailPage(raw, resolved.mailbox, resolved.share)), request, env, "public");
   } catch (error) {
     const response = shareError(error);
-    if (response.status !== 500) return withCors(response, request);
-    return withCors(mapUpstreamError(error), request);
+    if (response.status !== 500) return withCors(response, request, env, "public");
+    return withCors(mapUpstreamError(error), request, env, "public");
   }
 };

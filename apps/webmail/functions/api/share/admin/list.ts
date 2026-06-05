@@ -8,8 +8,8 @@ function clampNumber(value: string | null, fallback: number, min: number, max: n
   return Math.min(max, Math.max(min, parsed));
 }
 
-export const onRequestOptions: PagesHandler = ({ request }) => {
-  return new Response(null, { status: 204, headers: corsHeaders(request) });
+export const onRequestOptions: PagesHandler = ({ request, env }) => {
+  return new Response(null, { status: 204, headers: corsHeaders(request, env, "admin") });
 };
 
 export const onRequestGet: PagesHandler = async ({ request, env }) => {
@@ -23,11 +23,11 @@ export const onRequestGet: PagesHandler = async ({ request, env }) => {
       status: url.searchParams.get("status") || undefined,
       query: url.searchParams.get("query") || undefined,
     });
-    return withCors(json({ ok: true, ...result }), request);
+    return withCors(json({ ok: true, ...result }), request, env, "admin");
   } catch (error) {
     if (error instanceof Error && error.message === "缺少管理员凭证") {
-      return withCors(errorJson(401, "缺少管理员凭证", "missing_admin_auth"), request);
+      return withCors(errorJson(401, "缺少管理员凭证", "missing_admin_auth"), request, env, "admin");
     }
-    return withCors(shareError(error), request);
+    return withCors(shareError(error), request, env, "admin");
   }
 };

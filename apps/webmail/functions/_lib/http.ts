@@ -11,8 +11,35 @@ export class UpstreamError extends Error {
   }
 }
 
+export type RuntimeConfigErrorCode =
+  | "mail_worker_not_configured"
+  | "share_kv_not_configured"
+  | "share_secret_not_configured";
+
+const RUNTIME_CONFIG_MESSAGES: Record<RuntimeConfigErrorCode, string> = {
+  mail_worker_not_configured: "邮箱 API 未配置。请在 Cloudflare Pages 环境变量中填写 MAIL_WORKER_BASE_URL 后重新部署。",
+  share_kv_not_configured: "共享功能未完成配置。请在 Cloudflare Pages 为 Webmail 绑定 SHARE_KV 后重新部署。",
+  share_secret_not_configured: "共享功能未完成配置。请在 Cloudflare Pages 设置 SHARE_ENCRYPTION_SECRET 后重新部署。",
+};
+
+export class RuntimeConfigError extends UpstreamError {
+  code: RuntimeConfigErrorCode;
+
+  constructor(code: RuntimeConfigErrorCode) {
+    super(500, "", RUNTIME_CONFIG_MESSAGES[code]);
+    this.name = "RuntimeConfigError";
+    this.code = code;
+  }
+}
+
 const JSON_HEADERS = {
   "content-type": "application/json;charset=utf-8",
+};
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, private, max-age=0",
+  "Pragma": "no-cache",
+  "Expires": "0",
 };
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -36,14 +63,20 @@ export function withSecurityHeaders(response: Response): Response {
   });
 }
 
+function mergeHeaders(...sources: Array<HeadersInit | undefined>) {
+  const headers = new Headers();
+  for (const source of sources) {
+    if (!source) continue;
+    new Headers(source).forEach((value, key) => headers.set(key, value));
+  }
+  return headers;
+}
+
 export function json(data: unknown, init: ResponseInit = {}) {
   return withSecurityHeaders(
     new Response(JSON.stringify(data), {
       ...init,
-      headers: {
-        ...JSON_HEADERS,
-        ...(init.headers || {}),
-      },
+      headers: mergeHeaders(init.headers, JSON_HEADERS, NO_STORE_HEADERS),
     })
   );
 }
@@ -52,10 +85,22 @@ export function errorJson(status: number, message: string, code = "request_faile
   return json({ error: { code, message } }, { status });
 }
 
+export function runtimeConfigErrorJson(code: RuntimeConfigErrorCode) {
+  return errorJson(500, RUNTIME_CONFIG_MESSAGES[code], code);
+}
+
+export function runtimeConfigCodeFromMessage(message: string, body = ""): RuntimeConfigErrorCode | "" {
+  const text = `${message || ""}\n${body || ""}`;
+  if (/MAIL_WORKER_BASE_URL/i.test(text)) return "mail_worker_not_configured";
+  if (/SHARE_KV/i.test(text)) return "share_kv_not_configured";
+  if (/SHARE_ENCRYPTION_SECRET/i.test(text)) return "share_secret_not_configured";
+  return "";
+}
+
 export function getWorkerBaseUrl(env: CloudmailEnv) {
   const base = env.MAIL_WORKER_BASE_URL?.trim().replace(/\/+$/, "");
   if (!base) {
-    throw new UpstreamError(500, "", "MAIL_WORKER_BASE_URL is not configured");
+    throw new RuntimeConfigError("mail_worker_not_configured");
   }
   return base;
 }
@@ -85,20 +130,73 @@ export function buildAdminWorkerHeaders(env: CloudmailEnv, adminPassword: string
   return headers;
 }
 
-export function corsHeaders(request: Request) {
-  const origin = request.headers.get("origin") || "*";
-  return {
+type CorsMode = "public" | "admin";
+
+function normalizeOrigin(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    return `${url.protocol}//${url.host.toLowerCase()}`;
+  } catch {
+    return "";
+  }
+}
+
+function splitOrigins(value: string | undefined) {
+  return String(value || "")
+    .split(/[\s,]+/)
+    .map((item) => normalizeOrigin(item))
+    .filter(Boolean);
+}
+
+function isLocalDevOrigin(origin: string) {
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function allowedCorsOrigin(request: Request, env: CloudmailEnv | undefined, mode: CorsMode) {
+  const origin = normalizeOrigin(request.headers.get("origin"));
+  if (!origin) return "";
+
+  const requestOrigin = normalizeOrigin(new URL(request.url).origin);
+  if (origin === requestOrigin || (isLocalDevOrigin(origin) && isLocalDevOrigin(requestOrigin))) return origin;
+
+  const configuredOrigins = mode === "admin"
+    ? [
+        ...splitOrigins(env?.SHARE_ADMIN_CORS_ORIGINS),
+        ...splitOrigins(env?.SHARE_ADMIN_ALLOWED_ORIGINS),
+        ...splitOrigins(env?.CORS_ALLOWED_ORIGINS),
+      ]
+    : [
+        ...splitOrigins(env?.SHARE_PUBLIC_CORS_ORIGINS),
+        ...splitOrigins(env?.SHARE_PUBLIC_ALLOWED_ORIGINS),
+      ];
+
+  return configuredOrigins.includes(origin) ? origin : "";
+}
+
+export function corsHeaders(request: Request, env?: CloudmailEnv, mode: CorsMode = "public") {
+  const origin = allowedCorsOrigin(request, env, mode);
+  if (!origin) return { "Vary": "Origin" };
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "content-type,x-admin-auth,x-custom-auth,x-lang",
+    "Access-Control-Allow-Methods": mode === "admin" ? "GET,POST,PATCH,DELETE,OPTIONS" : "GET,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": mode === "admin" ? "content-type,x-admin-auth,x-custom-auth,x-lang" : "content-type,x-lang",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
+  return headers;
 }
 
-export function withCors(response: Response, request: Request) {
+export function withCors(response: Response, request: Request, env?: CloudmailEnv, mode: CorsMode = "public") {
   const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(corsHeaders(request))) headers.set(key, value);
+  for (const [key, value] of Object.entries(corsHeaders(request, env, mode))) headers.set(key, value);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -200,7 +298,10 @@ export function decodeJwtAddress(jwt: string) {
 }
 
 export function mapUpstreamError(error: unknown) {
+  if (error instanceof RuntimeConfigError) return runtimeConfigErrorJson(error.code);
   if (error instanceof UpstreamError) {
+    const configCode = error.status === 500 ? runtimeConfigCodeFromMessage(error.message, error.body) : "";
+    if (configCode) return runtimeConfigErrorJson(configCode);
     const status = error.status === 500 ? 500 : error.status || 502;
     return errorJson(status, status === 500 ? error.message : "邮箱服务请求失败", "upstream_error");
   }

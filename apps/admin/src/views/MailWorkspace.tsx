@@ -1,7 +1,7 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type TouchEvent } from 'react';
-import { ArrowLeft, CheckCheck, ChevronDown, Copy, Download, MoreHorizontal, Paperclip, RefreshCw, Reply, ReplyAll, Star, Trash2, X } from 'lucide-react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type TouchEvent, type UIEvent } from 'react';
+import { CheckCheck, ChevronDown, Copy, Download, MoreHorizontal, Paperclip, RefreshCw, Reply, ReplyAll, Star, Trash2, X } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
-import { ADDRESS_INPUT_DEBOUNCE_MS, CACHE_TTL, COPY_HINT_MS, DEFAULT_PAGE_SIZE, MAIL_READ_HISTORY_MAX, NEW_MAIL_FLASH_MS, STORAGE_KEYS, SWIPE } from '../lib/constants';
+import { ADDRESS_INPUT_DEBOUNCE_MS, CACHE_TTL, COPY_HINT_MS, DEFAULT_PAGE_SIZE, MAIL_READ_HISTORY_MAX, NEW_MAIL_FLASH_MS, STORAGE_KEYS } from '../lib/constants';
 import { cls, formatDateTime, formatShortDate, normalizeSearch } from '../lib/format';
 import { getRuntimeLocale, localeText } from '../lib/locale';
 import { copyText } from '../lib/clipboard';
@@ -27,10 +27,13 @@ type MailListCache = {
 type MailboxAddressRequest = { address: string; requestId: number };
 type FetchOptions = { addressOverride?: string; pageOverride?: number; forceRefresh?: boolean };
 type TranslateFn = (zh: string, en: string) => string;
+type PullRefreshLock = 'none' | 'pull' | 'scroll';
 
 const MAIL_LIST_CACHE_VERSION = 4;
 const MAIL_SEARCH_INDEX_PAGE_SIZE = 240;
 const MAIL_SEARCH_INDEX_MAX_PAGES = 90;
+const PULL_REFRESH_TRIGGER = 52;
+const PULL_REFRESH_MAX_OFFSET = 86;
 const isParsed = (mail: AnyMail): mail is ParsedMail => typeof (mail as ParsedMail).senderAddress === 'string';
 const storageId = (mode: MailMode, id: number) => `${mode}:${id}`;
 
@@ -57,6 +60,11 @@ function useCompactMailViewport(): boolean {
     };
   }, []);
   return compact;
+}
+
+function isBlockedPullRefreshTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return true;
+  return Boolean(target.closest('input, textarea, select, button, a, iframe, .mail-filter-menu, .modal-card, .mobile-mail-detail, [data-no-page-swipe="true"]'));
 }
 
 function getRecipient(mail: AnyMail): string {
@@ -304,14 +312,15 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const [isMobileDetail, setIsMobileDetail] = useState(false);
   const [mobileDetailDragX, setMobileDetailDragX] = useState(0);
   const [mobileDetailSettling, setMobileDetailSettling] = useState(false);
-  const [mobileDetailMenuOpen, setMobileDetailMenuOpen] = useState(false);
+  const [pullRefreshOffset, setPullRefreshOffset] = useState(0);
+  const [pullRefreshLabel, setPullRefreshLabel] = useState('');
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set(readJsonStorage<string[]>(STORAGE_KEYS.mailReadIds, [])));
   const [readAllBefore, setReadAllBefore] = useState<Record<string, number>>(() => readJsonStorage<Record<string, number>>(STORAGE_KEYS.mailReadAllBefore, {}));
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set(readJsonStorage<string[]>(STORAGE_KEYS.mailStarredIds, [])));
-  const [autoRefresh, setAutoRefresh] = useState(() => readStorage(STORAGE_KEYS.mailAutoRefreshEnabled, 'true') !== 'false');
-  const [autoSeconds, setAutoSeconds] = useState(() => Math.max(15, Number(readStorage(STORAGE_KEYS.mailAutoRefreshSeconds, '60')) || 60));
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoSeconds, setAutoSeconds] = useState(60);
   const [refreshCountdown, setRefreshCountdown] = useState(autoSeconds);
   const compactViewport = useCompactMailViewport();
   const consumedAddressRequestRef = useRef<number | null>(null);
@@ -324,6 +333,11 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const fetchAbortRef = useRef<AbortController | null>(null);
   const mobileLoadMoreSeqRef = useRef(0);
   const mobileLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const mailListPanelRef = useRef<HTMLDivElement | null>(null);
+  const mailListViewportRef = useRef<HTMLDivElement | null>(null);
+  const mobileChromeRef = useRef({ collapsed: false, lastScrollTop: 0, progress: 0 });
+  const mobileChromeRafRef = useRef<number | null>(null);
+  const mobileChromePendingRef = useRef(0);
   const searchIndexSeqRef = useRef(0);
   const searchIndexAbortRef = useRef<AbortController | null>(null);
   const searchIndexKeyRef = useRef('');
@@ -333,6 +347,10 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const mobileDetailHistoryRef = useRef(false);
   const attachmentUrlsRef = useRef<Set<string>>(new Set());
   const mailSwipeRef = useRef<{ active: boolean; startX: number; startY: number; lastX: number; lastY: number }>({ active: false, startX: 0, startY: 0, lastX: 0, lastY: 0 });
+  const pullRefreshRef = useRef({ active: false, pulling: false, lock: 'none' as PullRefreshLock, startX: 0, startY: 0, offset: 0 });
+  const pullRefreshRafRef = useRef<number | null>(null);
+  const pullRefreshResetTimerRef = useRef<number | null>(null);
+  const pullRefreshVisualRef = useRef({ offset: 0, label: '' });
   const searchQuery = normalizeSearch(globalQuery);
   const deferredQuery = useDeferredValue(searchQuery);
   const mailSearchQuery = normalizeSearch(addressInput);
@@ -341,11 +359,9 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
+  const immersiveMobileMail = mode === 'inbox' || mode === 'sent';
   const currentListCacheKey = useMemo(() => mailListCacheKey(mode, page, pageSize, address), [address, mode, page, pageSize]);
 
-  useEffect(() => {
-    setMobileDetailMenuOpen(false);
-  }, [isMobileDetail, selectedId]);
   useEffect(() => {
     setFilterMenuOpen(false);
   }, [activeTab, mode]);
@@ -426,13 +442,14 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
         return;
       }
 
-      setMobileLoadedPages(Math.max(1, targetPage));
+      if (!incremental) setMobileLoadedPages(Math.max(1, targetPage));
 
       if (incremental && currentMails.length > 0) {
         const existing = new Set(currentMails.map((mail) => mail.id));
         const added = parsed.filter((mail) => !existing.has(mail.id));
-        setMails(parsed);
-        saveListCache(parsed, nextCount, mailListCacheKey(mode, targetPage, pageSize, targetAddress));
+        const merged = mergeMailLists(parsed, currentMails);
+        setMails(merged);
+        saveListCache(merged, nextCount, mailListCacheKey(mode, targetPage, pageSize, targetAddress));
         if (added.length) {
           setNewIds(new Set(added.map((mail) => mail.id)));
           if (newIdsTimerRef.current !== null) window.clearTimeout(newIdsTimerRef.current);
@@ -547,6 +564,8 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   useEffect(() => () => {
     fetchAbortRef.current?.abort();
     searchIndexAbortRef.current?.abort();
+    if (pullRefreshRafRef.current !== null) window.cancelAnimationFrame(pullRefreshRafRef.current);
+    if (pullRefreshResetTimerRef.current !== null) window.clearTimeout(pullRefreshResetTimerRef.current);
     attachmentUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     attachmentUrlsRef.current.clear();
   }, []);
@@ -660,6 +679,178 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     setIsMobileDetail(false);
   }, [compactViewport, isMobileDetail]);
 
+  const setMobileMailChromeProgress = useCallback((progress: number, immediate = false) => {
+    if (typeof document === 'undefined') return;
+    const next = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
+    const collapsed = next >= 0.92;
+    mobileChromeRef.current.progress = next;
+    mobileChromeRef.current.collapsed = collapsed;
+    mobileChromePendingRef.current = next;
+    const applyProgress = () => {
+      mobileChromeRafRef.current = null;
+      const current = mobileChromePendingRef.current;
+      document.body.style.setProperty('--mobile-mail-chrome-progress', current.toFixed(3));
+      document.body.classList.toggle('mobile-mail-chrome-collapsed', current >= 0.92);
+    };
+    if (immediate) {
+      if (mobileChromeRafRef.current !== null) {
+        window.cancelAnimationFrame(mobileChromeRafRef.current);
+        mobileChromeRafRef.current = null;
+      }
+      applyProgress();
+      return;
+    }
+    if (mobileChromeRafRef.current === null) {
+      mobileChromeRafRef.current = window.requestAnimationFrame(applyProgress);
+    }
+  }, []);
+  const setMobileMailChromeCollapsed = useCallback((collapsed: boolean) => {
+    setMobileMailChromeProgress(collapsed ? 1 : 0, true);
+  }, [setMobileMailChromeProgress]);
+
+  useEffect(() => () => {
+    if (mobileChromeRafRef.current !== null) window.cancelAnimationFrame(mobileChromeRafRef.current);
+    document.body.style.setProperty('--mobile-mail-chrome-progress', '0');
+    document.body.classList.remove('mobile-mail-chrome-collapsed');
+  }, []);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    if (!immersiveMobileMail || !compactViewport || isMobileDetail) {
+      setMobileMailChromeCollapsed(false);
+      return undefined;
+    }
+    return () => setMobileMailChromeCollapsed(false);
+  }, [active, compactViewport, immersiveMobileMail, isMobileDetail, setMobileMailChromeCollapsed]);
+
+  const handleMailListScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    if (!active || !immersiveMobileMail || !compactViewport || isMobileDetail) return;
+    const scrollTop = event.currentTarget.scrollTop;
+    const previous = mobileChromeRef.current.lastScrollTop;
+    const delta = scrollTop - previous;
+    mobileChromeRef.current.lastScrollTop = Math.max(0, scrollTop);
+    if (scrollTop <= 18) {
+      if (mobileChromeRef.current.progress !== 0) setMobileMailChromeProgress(0);
+      return;
+    }
+    if (Math.abs(delta) < 0.5) return;
+    const travel = delta > 0 ? 112 : 96;
+    setMobileMailChromeProgress(mobileChromeRef.current.progress + (delta / travel));
+  }, [active, compactViewport, immersiveMobileMail, isMobileDetail, setMobileMailChromeProgress]);
+
+  const setPullRefreshVisual = useCallback((offset: number, label: string) => {
+    pullRefreshVisualRef.current = { offset, label };
+    if (pullRefreshRafRef.current !== null) return;
+    pullRefreshRafRef.current = window.requestAnimationFrame(() => {
+      pullRefreshRafRef.current = null;
+      const next = pullRefreshVisualRef.current;
+      setPullRefreshOffset(next.offset);
+      setPullRefreshLabel(next.label);
+    });
+  }, []);
+
+  const resetPullRefresh = useCallback((delay = 120) => {
+    if (pullRefreshResetTimerRef.current !== null) window.clearTimeout(pullRefreshResetTimerRef.current);
+    pullRefreshResetTimerRef.current = window.setTimeout(() => {
+      pullRefreshResetTimerRef.current = null;
+      pullRefreshRef.current = { active: false, pulling: false, lock: 'none', startX: 0, startY: 0, offset: 0 };
+      setPullRefreshVisual(0, '');
+    }, delay);
+  }, [setPullRefreshVisual]);
+
+  const runPullRefresh = useCallback(async () => {
+    if (loading || refreshing || fetchInFlightRef.current) {
+      resetPullRefresh();
+      return;
+    }
+    setPullRefreshVisual(54, t('正在刷新…', 'Refreshing...'));
+    if (page !== 1) {
+      suppressNextFetchRef.current = true;
+      setPage(1);
+    }
+    try {
+      await fetchData(true, { pageOverride: 1, forceRefresh: true });
+    } finally {
+      resetPullRefresh(220);
+    }
+  }, [fetchData, loading, page, refreshing, resetPullRefresh, setPullRefreshVisual, t]);
+
+  const handlePullRefreshStart = useCallback((event: globalThis.TouchEvent) => {
+    if (!active || !compactViewport || isMobileDetail || event.touches.length !== 1) return;
+    if (loading || refreshing || isBlockedPullRefreshTarget(event.target)) return;
+    if (pullRefreshResetTimerRef.current !== null) {
+      window.clearTimeout(pullRefreshResetTimerRef.current);
+      pullRefreshResetTimerRef.current = null;
+    }
+    const panel = mailListPanelRef.current;
+    const target = event.target;
+    if (!panel || !(target instanceof Node) || !panel.contains(target)) return;
+    const viewport = mailListViewportRef.current;
+    if (!viewport || viewport.scrollTop > 2) {
+      pullRefreshRef.current = { active: false, pulling: false, lock: 'none', startX: 0, startY: 0, offset: 0 };
+      return;
+    }
+    const touch = event.touches[0];
+    pullRefreshRef.current = { active: true, pulling: false, lock: 'none', startX: touch.clientX, startY: touch.clientY, offset: 0 };
+  }, [active, compactViewport, isMobileDetail, loading, refreshing]);
+
+  const handlePullRefreshMove = useCallback((event: globalThis.TouchEvent) => {
+    const state = pullRefreshRef.current;
+    if (!state.active || event.touches.length !== 1 || loading || refreshing) return;
+    const viewport = mailListViewportRef.current;
+    if (!viewport) return;
+    const touch = event.touches[0];
+    const dy = touch.clientY - state.startY;
+    const dx = Math.abs(touch.clientX - state.startX);
+    if (state.lock === 'none' && viewport.scrollTop > 2) {
+      state.lock = 'scroll';
+    }
+    if (state.lock === 'none' && (Math.abs(dy) > 6 || dx > 6)) {
+      state.lock = dy > 0 && dy > dx * 1.05 ? 'pull' : 'scroll';
+    }
+    if (state.lock !== 'pull' || dy <= 0) return;
+    event.preventDefault();
+    const offset = Math.min(PULL_REFRESH_MAX_OFFSET, Math.max(0, dy - 4) * .7);
+    state.pulling = true;
+    state.offset = offset;
+    setPullRefreshVisual(offset, offset >= PULL_REFRESH_TRIGGER ? t('松开刷新', 'Release to refresh') : t('下拉刷新', 'Pull to refresh'));
+  }, [loading, refreshing, setPullRefreshVisual, t]);
+
+  const handlePullRefreshEnd = useCallback(() => {
+    const state = pullRefreshRef.current;
+    if (!state.active) return;
+    if (state.pulling && state.offset >= PULL_REFRESH_TRIGGER) {
+      void runPullRefresh();
+      return;
+    }
+    resetPullRefresh(0);
+  }, [resetPullRefresh, runPullRefresh]);
+
+  useEffect(() => {
+    if (!active || !compactViewport || isMobileDetail) return undefined;
+    document.addEventListener('touchstart', handlePullRefreshStart, { capture: true, passive: true });
+    document.addEventListener('touchmove', handlePullRefreshMove, { capture: true, passive: false });
+    document.addEventListener('touchend', handlePullRefreshEnd, { capture: true, passive: true });
+    document.addEventListener('touchcancel', handlePullRefreshEnd, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('touchstart', handlePullRefreshStart, { capture: true });
+      document.removeEventListener('touchmove', handlePullRefreshMove, { capture: true });
+      document.removeEventListener('touchend', handlePullRefreshEnd, { capture: true });
+      document.removeEventListener('touchcancel', handlePullRefreshEnd, { capture: true });
+    };
+  }, [active, compactViewport, handlePullRefreshEnd, handlePullRefreshMove, handlePullRefreshStart, isMobileDetail]);
+
+  useEffect(() => {
+    if (!active || !compactViewport || !mailListViewportRef.current) return;
+    const viewport = mailListViewportRef.current;
+    if (!immersiveMobileMail || isMobileDetail || viewport.scrollTop <= 18) {
+      setMobileMailChromeProgress(0);
+      return;
+    }
+    mobileChromeRef.current.lastScrollTop = viewport.scrollTop;
+    setMobileMailChromeProgress(Math.min(1, viewport.scrollTop / 160));
+  }, [active, compactViewport, immersiveMobileMail, isMobileDetail, mode, setMobileMailChromeProgress]);
+
   const searchSource = useMemo(() => {
     if (!deferredQuery && !deferredAddressQuery) return mails;
     return mergeMailLists(searchIndex, mails);
@@ -679,7 +870,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     ? [['all', t('全部', 'All')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]]
     : [['all', t('全部', 'All')], ['unread', t('未读', 'Unread')], ['read', t('已读', 'Read')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]];
   const activeTabLabel = tabOptions.find(([key]) => key === activeTab)?.[1] || t('全部', 'All');
-  const mobileHasMore = mobileLoadedPages < totalPages && mails.length < count;
+  const mobileHasMore = mails.length < count;
   const toggleMailStack = useCallback((key: string) => {
     setExpandedMailStacks((current) => {
       const next = new Set(current);
@@ -692,16 +883,17 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const loadMoreMobile = useCallback(async () => {
     if (!compactViewport || mobileLoadingMore || loading || refreshing || !mobileHasMore) return;
     const nextPage = mobileLoadedPages + 1;
+    const nextOffset = latestMailsRef.current.length;
     const seq = ++mobileLoadMoreSeqRef.current;
     setMobileLoadingMore(true);
     try {
-      const { results, count: totalCount } = await loadPage((nextPage - 1) * pageSize, false, address);
+      const { results, count: totalCount } = await loadPage(nextOffset, false, address);
       if (seq !== mobileLoadMoreSeqRef.current) return;
       const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
       const existing = new Set(latestMailsRef.current.map((mail) => mail.id));
       const merged = [...latestMailsRef.current, ...parsed.filter((mail) => !existing.has(mail.id))];
       setMails(merged);
-      setCount(typeof totalCount === 'number' ? totalCount : Math.max(count, merged.length));
+      setCount(parsed.length === 0 ? merged.length : (typeof totalCount === 'number' ? totalCount : Math.max(count, merged.length)));
       setMobileLoadedPages(nextPage);
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('加载更多邮件失败', 'Failed to load more mail'));
@@ -713,12 +905,29 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   useEffect(() => {
     if (!compactViewport || !mobileLoadMoreRef.current) return undefined;
     const target = mobileLoadMoreRef.current;
+    const root = mailListViewportRef.current;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMoreMobile();
-    }, { root: null, rootMargin: '360px 0px 360px 0px', threshold: 0.01 });
+    }, { root, rootMargin: '520px 0px 520px 0px', threshold: 0.01 });
     observer.observe(target);
     return () => observer.disconnect();
   }, [compactViewport, loadMoreMobile, filtered.length]);
+
+  useEffect(() => {
+    if (!active || !compactViewport || !mailListViewportRef.current) return undefined;
+    const viewport = mailListViewportRef.current;
+    const checkNearBottom = () => {
+      if (!mobileHasMore || mobileLoadingMore || loading || refreshing) return;
+      const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      if (distance < 760) void loadMoreMobile();
+    };
+    viewport.addEventListener('scroll', checkNearBottom, { passive: true });
+    const timer = window.setTimeout(checkNearBottom, 90);
+    return () => {
+      viewport.removeEventListener('scroll', checkNearBottom);
+      window.clearTimeout(timer);
+    };
+  }, [active, compactViewport, loadMoreMobile, loading, mobileHasMore, mobileLoadingMore, refreshing, mails.length, filtered.length]);
 
   const clearAddressFilter = useCallback(() => {
     if (addressDebounceRef.current !== null) {
@@ -762,16 +971,6 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     setSelectedId(mail.id);
     if (compactViewport) setIsMobileDetail(true);
   }, [compactViewport, mode, persistReadIds, readIds]);
-  const openNextMobileMail = useCallback(() => {
-    const currentId = selected?.id ?? selectedId;
-    const currentIndex = filtered.findIndex((mail) => mail.id === currentId);
-    const nextMail = filtered[currentIndex >= 0 ? currentIndex + 1 : 0];
-    if (nextMail) {
-      markRead(nextMail);
-      return;
-    }
-    notify('info', t('已经是最后一封邮件', 'Already at the last message'));
-  }, [filtered, markRead, notify, selected?.id, selectedId, t]);
   const settleMobileDetailOffset = useCallback((offset: number, after?: () => void) => {
     setMobileDetailSettling(true);
     setMobileDetailDragX(offset);
@@ -781,13 +980,10 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       window.setTimeout(() => setMobileDetailSettling(false), 30);
     }, 150);
   }, []);
-  const closeMobileDetailWithMotion = useCallback(() => {
+  const closeMobileDetailWithMotion = useCallback((direction: 'left' | 'right' = 'right') => {
     const width = typeof window === 'undefined' ? 420 : Math.max(window.innerWidth, 360);
-    settleMobileDetailOffset(width, closeMobileDetail);
+    settleMobileDetailOffset(direction === 'left' ? -width : width, closeMobileDetail);
   }, [closeMobileDetail, settleMobileDetailOffset]);
-  const openNextMobileMailWithMotion = useCallback(() => {
-    settleMobileDetailOffset(-96, openNextMobileMail);
-  }, [openNextMobileMail, settleMobileDetailOffset]);
   const toggleStar = useCallback((mail: AnyMail) => {
     const key = storageId(mode, mail.id);
     const next = new Set(starredIds);
@@ -847,10 +1043,12 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       mailSwipeRef.current.lastY = event.touches[0].clientY;
       const dx = mailSwipeRef.current.lastX - mailSwipeRef.current.startX;
       const dy = Math.abs(mailSwipeRef.current.lastY - mailSwipeRef.current.startY);
-      if (Math.abs(dx) > SWIPE.startThreshold && Math.abs(dx) > dy * SWIPE.ratio) {
+      if (Math.abs(dx) > 10 && Math.abs(dx) > dy * .82) {
         event.preventDefault();
         setMobileDetailSettling(false);
-        setMobileDetailDragX(Math.max(-96, Math.min(dx, 140)));
+        const width = typeof window === 'undefined' ? 420 : Math.max(window.innerWidth, 360);
+        const limit = Math.min(width * .42, 180);
+        setMobileDetailDragX(Math.max(-limit, Math.min(limit, dx)));
       }
     };
     const handleNativeEnd = (event: globalThis.TouchEvent) => {
@@ -859,13 +1057,12 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       mailSwipeRef.current = { active: false, startX: 0, startY: 0, lastX: 0, lastY: 0 };
       const dx = swipe.lastX - swipe.startX;
       const dy = Math.abs(swipe.lastY - swipe.startY);
-      if (Math.abs(dx) < SWIPE.mailMinDistance || dy > SWIPE.mailMaxVertical) {
+      if (Math.abs(dx) < 46 || Math.abs(dx) < dy * .82 || dy > 150) {
         settleMobileDetailOffset(0);
         return;
       }
       event.preventDefault();
-      if (dx > 0) closeMobileDetailWithMotion();
-      else openNextMobileMailWithMotion();
+      closeMobileDetailWithMotion(dx < 0 ? 'left' : 'right');
     };
     const handleNativeCancel = () => {
       mailSwipeRef.current = { active: false, startX: 0, startY: 0, lastX: 0, lastY: 0 };
@@ -881,7 +1078,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       document.removeEventListener('touchend', handleNativeEnd, { capture: true });
       document.removeEventListener('touchcancel', handleNativeCancel, { capture: true });
     };
-  }, [closeMobileDetailWithMotion, isMobileDetail, openNextMobileMailWithMotion, settleMobileDetailOffset]);
+  }, [closeMobileDetailWithMotion, isMobileDetail, settleMobileDetailOffset]);
 
   useEffect(() => {
     if (!isMobileDetail) return undefined;
@@ -890,20 +1087,22 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       if (!data) return;
       if (data.type === 'loven7-mail-iframe-swipe-progress') {
         setMobileDetailSettling(false);
-        setMobileDetailDragX(Math.max(-96, Math.min(140, Number(data.dx || 0))));
+        const width = typeof window === 'undefined' ? 420 : Math.max(window.innerWidth, 360);
+        const limit = Math.min(width * .42, 180);
+        setMobileDetailDragX(Math.max(-limit, Math.min(limit, Number(data.dx || 0))));
         return;
       }
       if (data.type !== 'loven7-mail-iframe-swipe') return;
-      if (data.direction === 'right') closeMobileDetailWithMotion();
-      else if (data.direction === 'left') openNextMobileMailWithMotion();
+      if (data.direction === 'right') closeMobileDetailWithMotion('right');
+      else if (data.direction === 'left') closeMobileDetailWithMotion('left');
     };
     window.addEventListener('message', handleFrameSwipe);
     return () => window.removeEventListener('message', handleFrameSwipe);
-  }, [closeMobileDetailWithMotion, isMobileDetail, openNextMobileMailWithMotion]);
+  }, [closeMobileDetailWithMotion, isMobileDetail]);
 
   return (
     <div className="mail-workspace flex h-full min-h-0 overflow-hidden bg-white">
-      <div className={cls('mail-list-panel relative flex h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-100 lg:w-[430px] xl:w-[470px]', isMobileDetail ? 'hidden lg:flex' : 'flex')}>
+      <div ref={mailListPanelRef} className={cls('mail-list-panel relative flex h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-100 lg:w-[430px] xl:w-[470px]', isMobileDetail ? 'hidden lg:flex' : 'flex')}>
         <div className="mail-list-header shrink-0 px-2.5 py-2 md:p-4 md:pb-2">
           <div className="mail-toolbar flex flex-wrap items-center gap-2">
             <div className="mr-auto min-w-0">
@@ -912,10 +1111,9 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
                 <span className="mail-count-badge rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 md:text-sm">{locale === 'en-US' ? `${displayCount} mails` : `${displayCount} 封`}</span>
                 {unreadCount > 0 && <span className="mail-count-badge unread rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-800">{locale === 'en-US' ? `${unreadCount} unread` : `${unreadCount} 未读`}</span>}
               </div>
-              <div className="mt-1 text-[11px] font-medium text-slate-500">{autoRefresh ? (locale === 'en-US' ? `Auto refresh on · sync in ${refreshCountdown}s` : `自动刷新开启 · ${refreshCountdown}s 后同步`) : t('自动刷新关闭', 'Auto refresh off')}</div>
+              <div className="mail-auto-refresh-note mt-1 text-[11px] font-medium text-slate-500">{autoRefresh ? (locale === 'en-US' ? `Auto refresh on · sync in ${refreshCountdown}s` : `自动刷新开启 · ${refreshCountdown}s 后同步`) : t('自动刷新关闭', 'Auto refresh off')}</div>
             </div>
             <div className="mail-toolbar-actions" data-no-page-swipe="true">
-              {!(mode === 'inbox' || mode === 'sent') && <button className="mail-tool-btn primary" onClick={() => fetchData(true)} title={t('增量刷新', 'Refresh incrementally')} aria-label={t('增量刷新', 'Refresh incrementally')}><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">{t('刷新', 'Refresh')}</span></button>}
               <div className="mail-filter-popover" data-no-page-swipe="true">
                 <button
                   type="button"
@@ -950,7 +1148,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
               <button className="mail-tool-btn mail-read-btn" onClick={markAllRead} title={t('将当前邮箱已存在邮件全部标记为已读', 'Mark all existing mail in this mailbox as read')} aria-label={t('全部已读', 'Mark all read')}><CheckCheck size={15} /><span className="mail-tool-text">{t('全部已读', 'All read')}</span></button>
             </div>
           </div>
-          {(mode === 'inbox' || mode === 'sent') && <div className="mail-address-search-row mt-2" data-no-page-swipe="true">
+          <div className="mail-address-search-row mt-2" data-no-page-swipe="true">
             <div className="address-filter-wrap">
               <input
                 value={addressInput}
@@ -979,9 +1177,27 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
               )}
             </div>
             <button className="mail-tool-btn primary mail-search-refresh" onClick={() => fetchData(true)} title={t('增量刷新', 'Refresh incrementally')} aria-label={t('增量刷新', 'Refresh incrementally')}><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">{t('刷新', 'Refresh')}</span></button>
-          </div>}
+          </div>
         </div>
-        <div className="mail-list-viewport flex-1 overflow-y-auto px-2 pb-2 md:px-4 md:pb-4">
+        {compactViewport && (
+          <div
+            className={cls(
+              'mobile-pull-refresh-indicator',
+              pullRefreshOffset > 0 && 'show',
+              (pullRefreshOffset >= PULL_REFRESH_TRIGGER || pullRefreshLabel.includes('松开') || pullRefreshLabel.includes('Release')) && 'active',
+            )}
+            style={{ '--pull-refresh-offset': `${pullRefreshOffset}px` } as CSSProperties}
+            aria-hidden="true"
+          >
+            <RefreshCw size={15} className={cls(pullRefreshLabel.includes('正在') || pullRefreshLabel.includes('Refreshing') ? 'animate-spin' : '')} />
+            <span>{pullRefreshLabel}</span>
+          </div>
+        )}
+        <div
+          ref={mailListViewportRef}
+          onScroll={handleMailListScroll}
+          className="mail-list-viewport flex-1 overflow-y-auto px-2 pb-2 md:px-4 md:pb-4"
+        >
           {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={t('没有匹配的邮件', 'No matching mail')} body={isSearchMode ? t('搜索结果为空，继续输入或刷新后会自动补全更多结果。', 'No search results yet. Keep typing or refresh to broaden the result set.') : t('尝试刷新、修改地址筛选或调整当前筛选。', 'Try refreshing, changing the address filter, or adjusting the current filter.')} /> : mailListEntries.map((entry) => (
             entry.type === 'single' ? (
               <MailListItem
@@ -1027,41 +1243,6 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
           className={cls('mobile-mail-detail absolute inset-0 z-40 flex h-full min-h-0 flex-col bg-white lg:hidden', mobileDetailSettling && 'mobile-detail-settling')}
           style={{ transform: `translate3d(${mobileDetailDragX}px, 0, 0)` }}
         >
-          <div className="mobile-detail-topbar flex h-9 shrink-0 items-center border-b border-slate-100 px-2">
-            <button onClick={closeMobileDetailWithMotion} className="mobile-detail-back rounded-full p-1.5 text-slate-600 hover:bg-slate-100" aria-label={t('返回邮件列表', 'Back to mail list')}><ArrowLeft size={18} /></button>
-            <span className="mobile-detail-topbar-title min-w-0 flex-1 truncate px-2 text-sm font-semibold text-slate-800">{selected?.subject || t('邮件详情', 'Mail detail')}</span>
-            {selected && (
-              <div className="mobile-detail-topbar-actions" data-no-page-swipe="true">
-                <button
-                  onClick={() => toggleStar(selected)}
-                  className={cls('mobile-detail-icon-action', selected.isStarred ? 'active' : '')}
-                  title={t('星星代表收藏/标记，点击后可在列表“标注”里筛选', 'Starred mail can be filtered from the Starred list')}
-                  aria-label={selected.isStarred ? t('取消标注', 'Unstar mail') : t('标注邮件', 'Star mail')}
-                >
-                  <Star size={17} fill={selected.isStarred ? 'currentColor' : 'none'} />
-                </button>
-                <div className="mobile-detail-more-root">
-                  <button
-                    type="button"
-                    className={cls('mobile-detail-icon-action', mobileDetailMenuOpen && 'active')}
-                    onClick={() => setMobileDetailMenuOpen((open) => !open)}
-                    aria-haspopup="menu"
-                    aria-expanded={mobileDetailMenuOpen}
-                    aria-label={t('更多邮件操作', 'More mail actions')}
-                  >
-                    <MoreHorizontal size={18} />
-                  </button>
-                  {mobileDetailMenuOpen && (
-                    <div className="mobile-detail-action-menu" role="menu">
-                      <button type="button" role="menuitem" onClick={() => { setMobileDetailMenuOpen(false); composeFromMail(selected, 'reply'); }}><Reply size={15} />{t('回复', 'Reply')}</button>
-                      <button type="button" role="menuitem" onClick={() => { setMobileDetailMenuOpen(false); composeFromMail(selected, 'forward'); }}><MoreHorizontal size={15} />{t('转发', 'Forward')}</button>
-                      <button type="button" role="menuitem" className="danger" onClick={() => { setMobileDetailMenuOpen(false); deleteMail(selected); }}><Trash2 size={15} />{t('删除', 'Delete')}</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
           <MailDetail mail={selected} mode={mode} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} mobile />
         </div>
       )}
@@ -1101,7 +1282,9 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
       className={cls('mail-list-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', mail.isUnread && 'mail-row-unread', isNew && 'animate-mail-in')}
     >
       <div className="flex min-w-0 items-start gap-2.5">
-        <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
+        <div className="mail-avatar-wrap">
+          <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
+        </div>
         <div className="min-w-0 flex-1">
       <div className="mb-0.5 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -1112,7 +1295,10 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
           </div>
         </div>
         <div className="mail-list-side flex shrink-0 flex-col items-end gap-1">
-          <span className="mail-time text-[12px] font-semibold text-slate-600">{formatShortDate(mail.created_at)}</span>
+          <span className="mail-list-time-line">
+            <span className="mail-time text-[12px] font-semibold text-slate-600">{formatShortDate(mail.created_at)}</span>
+            {mail.isUnread && <span className="mail-unread-dot" aria-hidden="true" />}
+          </span>
           {primaryCode && <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(primaryCode, t('已复制验证码', 'Verification code copied')); }} className="verify-pill compact">{primaryCode}</button>}
         </div>
       </div>
@@ -1169,7 +1355,9 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
       className={cls('mail-list-item mail-stack-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', entry.unreadCount > 0 && 'mail-row-unread', isNew && 'animate-mail-in', expanded && 'mail-stack-expanded')}
     >
       <div className="flex min-w-0 items-start gap-2.5">
-        <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
+        <div className="mail-avatar-wrap">
+          <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
+        </div>
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -1182,7 +1370,10 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
               </div>
             </div>
             <div className="mail-list-side flex shrink-0 flex-col items-end gap-1">
-              <span className="mail-time text-[12px] font-semibold text-slate-600">{formatShortDate(mail.created_at)}</span>
+              <span className="mail-list-time-line">
+                <span className="mail-time text-[12px] font-semibold text-slate-600">{formatShortDate(mail.created_at)}</span>
+                {entry.unreadCount > 0 && <span className="mail-unread-dot" aria-hidden="true" />}
+              </span>
               <button
                 type="button"
                 className="mail-stack-expand-button"
@@ -1273,6 +1464,7 @@ function MailDetail({ mail, mode, onDelete, onReply, onForward, onCopy, onToggle
   const senderName = getSenderName(mail);
   const subtitle = parsed ? `<${mail.senderAddress}>` : t('发件记录', 'Sent record');
   const recipientAddress = getRecipient(mail);
+  const recipientLabel = mode === 'sent' ? t('收件人：', 'To:') : t('收件邮箱：', 'Inbox:');
   const verificationCodes = getVerificationCodes(mail);
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -1291,7 +1483,7 @@ function MailDetail({ mail, mode, onDelete, onReply, onForward, onCopy, onToggle
               </div>
               <button onClick={() => onToggleStar(mail)} className={cls('mail-detail-star rounded-full p-2 transition hover:bg-slate-100', mail.isStarred ? 'text-slate-800' : 'text-slate-300 hover:text-slate-600')} title={t('星星代表收藏/标记，点击后可在列表“标注”里筛选', 'Starred mail appears in the Starred filter')}><Star size={21} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
             </div>
-            <div className="mail-detail-sender-row mt-2.5 flex gap-2.5 md:mt-3"><BrandAvatar sender={senderAddress} senderName={senderName} size={40} className="mail-detail-brand-avatar" /><div className="min-w-0 flex-1"><div className="mail-detail-sender-main flex flex-wrap items-center gap-2"><span className="font-semibold text-slate-800">{parsed ? mail.senderName : mail.address}</span><span className="truncate text-sm text-slate-500">{subtitle}</span></div><div className="account-address-row mail-detail-recipient-row mt-0.5"><span className="text-sm text-slate-500">{t('收件人：', 'To:')}</span><button type="button" onClick={() => onCopy(recipientAddress, t('已复制收件人地址', 'Recipient address copied'), `detail-recipient-${mode}-${mail.id}`)} className="plain-copy-address" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipientAddress || t('未知收件地址', 'Unknown recipient')}</button></div></div><div className="hidden shrink-0 items-center gap-1.5 lg:flex"><button onClick={() => onReply(mail)} className="detail-action" title={t('回复', 'Reply')}><Reply size={16} /></button><button onClick={() => onReply(mail)} className="detail-action" title={t('回复全部', 'Reply all')}><ReplyAll size={16} /></button><button onClick={() => onForward(mail)} className="detail-action" title={t('转发', 'Forward')}><MoreHorizontal size={16} /></button><button onClick={() => onDelete(mail)} className="detail-action text-rose-500" title={t('删除', 'Delete')}><Trash2 size={16} /></button></div></div>
+            <div className="mail-detail-sender-row mt-2.5 flex gap-2.5 md:mt-3"><BrandAvatar sender={senderAddress} senderName={senderName} size={40} className="mail-detail-brand-avatar" /><div className="min-w-0 flex-1"><div className="mail-detail-sender-main flex flex-wrap items-center gap-2"><span className="font-semibold text-slate-800">{parsed ? mail.senderName : mail.address}</span><span className="truncate text-sm text-slate-500">{subtitle}</span></div><div className="account-address-row mail-detail-recipient-row mt-0.5"><span className="text-sm text-slate-500">{recipientLabel}</span><button type="button" onClick={() => onCopy(recipientAddress, t('已复制收件地址', 'Recipient address copied'), `detail-recipient-${mode}-${mail.id}`)} className="plain-copy-address" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipientAddress || t('未知收件地址', 'Unknown recipient')}</button></div></div><div className="hidden shrink-0 items-center gap-1.5 lg:flex"><button onClick={() => onReply(mail)} className="detail-action" title={t('回复', 'Reply')}><Reply size={16} /></button><button onClick={() => onReply(mail)} className="detail-action" title={t('回复全部', 'Reply all')}><ReplyAll size={16} /></button><button onClick={() => onForward(mail)} className="detail-action" title={t('转发', 'Forward')}><MoreHorizontal size={16} /></button><button onClick={() => onDelete(mail)} className="detail-action text-rose-500" title={t('删除', 'Delete')}><Trash2 size={16} /></button></div></div>
           </header>
           <div className="my-2 h-px shrink-0 bg-slate-100 md:my-2.5" />
           <div className="mail-detail-body min-h-0 flex-1 overflow-hidden">

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, Bell, Check, ChevronDown, Inbox, Loader2, X } from 'lucide-react';
 import { PAGE_SIZE_OPTIONS, TOAST_MS } from '../lib/constants';
@@ -22,7 +22,21 @@ export function useNotice() {
   return { notice, push };
 }
 
-export function Modal({ title, children, onClose, wide = false }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+export function Modal({
+  title,
+  children,
+  onClose,
+  wide = false,
+  cardClassName = '',
+  bodyClassName = '',
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  wide?: boolean;
+  cardClassName?: string;
+  bodyClassName?: string;
+}) {
   const locale = getRuntimeLocale();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -35,7 +49,7 @@ export function Modal({ title, children, onClose, wide = false }: { title: strin
         role="dialog"
         aria-modal="true"
         onClick={(event) => event.stopPropagation()}
-        className={cls('modal-card flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[1.25rem] border border-white/80 bg-white shadow-2xl shadow-slate-950/20 sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-[1.5rem]', wide ? 'max-w-5xl' : 'max-w-lg')}
+        className={cls('modal-card flex max-h-[calc(100dvh-1rem)] w-full flex-col overflow-hidden rounded-[1.25rem] border border-white/80 bg-white shadow-2xl shadow-slate-950/20 sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-[1.5rem]', wide ? 'max-w-5xl' : 'max-w-lg', cardClassName)}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-3.5">
           <h3 className="min-w-0 truncate text-base font-semibold text-slate-800 sm:text-lg">{title}</h3>
@@ -43,7 +57,7 @@ export function Modal({ title, children, onClose, wide = false }: { title: strin
             <X size={18} />
           </button>
         </div>
-        <div className="max-h-[calc(100dvh-5rem)] overflow-y-auto overflow-x-hidden p-4 sm:max-h-[calc(100dvh-7rem)] sm:p-5">{children}</div>
+        <div className={cls('modal-body max-h-[calc(100dvh-5rem)] overflow-y-auto overflow-x-hidden p-4 sm:max-h-[calc(100dvh-7rem)] sm:p-5', bodyClassName)}>{children}</div>
       </div>
     </div>
   );
@@ -150,13 +164,53 @@ export function PopoverSelect({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties | undefined>(undefined);
   const locale = getRuntimeLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const active = options.find((item) => item.value === value) || options[0];
+  const updateMenuPosition = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const visualViewport = window.visualViewport;
+    const viewportLeft = visualViewport?.offsetLeft || 0;
+    const viewportTop = visualViewport?.offsetTop || 0;
+    const viewportWidth = visualViewport?.width || window.innerWidth || document.documentElement.clientWidth || 0;
+    const viewportHeight = visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || 0;
+    const viewportRight = viewportLeft + viewportWidth;
+    const viewportBottom = viewportTop + viewportHeight;
+    const margin = 8;
+    const gap = 7;
+    const estimatedOptionHeight = 38;
+    const estimatedMenuHeight = Math.min(320, Math.max(96, options.length * estimatedOptionHeight + 14));
+    const availableBelow = Math.max(0, viewportBottom - rect.bottom - gap - margin);
+    const availableAbove = Math.max(0, rect.top - viewportTop - gap - margin);
+    const placement: 'bottom' | 'top' = availableBelow >= Math.min(estimatedMenuHeight, 220) || availableBelow >= availableAbove ? 'bottom' : 'top';
+    const available = placement === 'bottom' ? availableBelow : availableAbove;
+    const maxHeight = Math.max(112, Math.min(320, available || estimatedMenuHeight));
+    const menuHeight = Math.min(estimatedMenuHeight, maxHeight);
+    const width = Math.min(Math.max(rect.width, 176), Math.max(176, viewportWidth - margin * 2));
+    const left = Math.max(viewportLeft + margin, Math.min(rect.left, viewportRight - width - margin));
+    const top = placement === 'bottom'
+      ? Math.min(rect.bottom + gap, viewportBottom - margin - menuHeight)
+      : Math.max(viewportTop + margin, rect.top - gap - menuHeight);
+    setMenuStyle({
+      position: 'fixed',
+      left,
+      top,
+      width,
+      maxHeight,
+      zIndex: 1000,
+      transformOrigin: placement === 'bottom' ? 'top left' : 'bottom left',
+    });
+  }, [options.length]);
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
@@ -168,7 +222,43 @@ export function PopoverSelect({
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    updateMenuPosition();
+    const onScrollOrResize = () => updateMenuPosition();
+    window.addEventListener('resize', onScrollOrResize, { passive: true });
+    window.addEventListener('scroll', onScrollOrResize, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', onScrollOrResize, { capture: true });
+    };
+  }, [open, updateMenuPosition]);
   useEffect(() => setOpen(false), [value]);
+  const menu = open ? (
+    <div ref={menuRef} className="popover-select-menu popover-select-menu-portal" role="listbox" style={menuStyle ?? { position: 'fixed', left: -9999, top: -9999, zIndex: 1000 }}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="option"
+          aria-selected={option.value === value}
+          className={cls('popover-select-option', option.value === value && 'active', option.danger && 'danger')}
+          disabled={option.disabled}
+          onClick={() => {
+            if (option.disabled) return;
+            onChange(option.value);
+            setOpen(false);
+          }}
+        >
+          <span className="popover-select-option-main">
+            <strong>{option.label}</strong>
+            {option.description && <small>{option.description}</small>}
+          </span>
+          {option.count !== undefined && <span className="popover-select-option-count">{option.count}</span>}
+        </button>
+      ))}
+    </div>
+  ) : null;
   return (
     <div ref={rootRef} className={cls('popover-select', className)}>
       <button
@@ -186,31 +276,7 @@ export function PopoverSelect({
         </span>
         <ChevronDown size={15} className="popover-select-chevron" />
       </button>
-      {open && (
-        <div className="popover-select-menu" role="listbox">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={option.value === value}
-              className={cls('popover-select-option', option.value === value && 'active', option.danger && 'danger')}
-              disabled={option.disabled}
-              onClick={() => {
-                if (option.disabled) return;
-                onChange(option.value);
-                setOpen(false);
-              }}
-            >
-              <span className="popover-select-option-main">
-                <strong>{option.label}</strong>
-                {option.description && <small>{option.description}</small>}
-              </span>
-              {option.count !== undefined && <span className="popover-select-option-count">{option.count}</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      {menu && (typeof document === 'undefined' ? menu : createPortal(menu, document.body))}
     </div>
   );
 }

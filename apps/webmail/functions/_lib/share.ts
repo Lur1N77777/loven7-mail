@@ -1,4 +1,15 @@
-import { decodeJwtAddress, errorJson, fetchAdminWorkerJson, fetchWorkerJson, normalizeMailPage, sanitizeSettings, UpstreamError } from "./http";
+import {
+  decodeJwtAddress,
+  errorJson,
+  fetchAdminWorkerJson,
+  fetchWorkerJson,
+  normalizeMailPage,
+  RuntimeConfigError,
+  runtimeConfigCodeFromMessage,
+  runtimeConfigErrorJson,
+  sanitizeSettings,
+  UpstreamError,
+} from "./http";
 import type { CloudmailEnv } from "./types";
 
 export type ShareStatus = "active" | "expired" | "revoked";
@@ -145,8 +156,8 @@ async function importShareKey(secret: string) {
 }
 
 function requireShareEnv(env: CloudmailEnv) {
-  if (!env.SHARE_KV) throw new UpstreamError(500, "", "SHARE_KV is not configured");
-  if (!env.SHARE_ENCRYPTION_SECRET?.trim()) throw new UpstreamError(500, "", "SHARE_ENCRYPTION_SECRET is not configured");
+  if (!env.SHARE_KV) throw new RuntimeConfigError("share_kv_not_configured");
+  if (!env.SHARE_ENCRYPTION_SECRET?.trim()) throw new RuntimeConfigError("share_secret_not_configured");
   return { kv: env.SHARE_KV, secret: env.SHARE_ENCRYPTION_SECRET.trim() };
 }
 
@@ -462,12 +473,12 @@ export function shareInactiveError(status: ShareStatus) {
 }
 
 export function shareError(error: unknown) {
+  if (error instanceof RuntimeConfigError) return runtimeConfigErrorJson(error.code);
   if (error instanceof UpstreamError) {
     if (error.status === 401 && error.message === "缺少管理员凭证") return errorJson(401, "缺少管理员凭证", "missing_admin_auth");
     if (error.status === 401 || error.status === 403) return errorJson(401, "管理员凭证无效", "invalid_admin_auth");
-    if (error.status === 500 && /is not configured|未配置|MAIL_WORKER_BASE_URL|SHARE_KV|SHARE_ENCRYPTION_SECRET/i.test(error.message)) {
-      return errorJson(500, error.message, "share_not_configured");
-    }
+    const configCode = error.status === 500 ? runtimeConfigCodeFromMessage(error.message, error.body) : "";
+    if (configCode) return runtimeConfigErrorJson(configCode);
   }
   return errorJson(500, "共享链接处理失败", "share_failed");
 }

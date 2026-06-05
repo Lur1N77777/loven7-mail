@@ -19,18 +19,18 @@ function normalizeExplicitExpiresAt(value: unknown): string | null | undefined {
   return new Date(time).toISOString();
 }
 
-export const onRequestOptions: PagesHandler<{ token: string }> = ({ request }) => {
-  return new Response(null, { status: 204, headers: corsHeaders(request) });
+export const onRequestOptions: PagesHandler<{ token: string }> = ({ request, env }) => {
+  return new Response(null, { status: 204, headers: corsHeaders(request, env, "admin") });
 };
 
 export const onRequestGet: PagesHandler<{ token: string }> = async ({ request, env, params }) => {
   try {
     await assertShareAdmin(request, env);
     const share = await readShareRecord(env, params.token);
-    if (!share) return withCors(errorJson(404, "共享链接不存在", "share_not_found"), request);
-    return withCors(json({ ok: true, share: adminShare(request, params.token, share) }), request);
+    if (!share) return withCors(errorJson(404, "共享链接不存在", "share_not_found"), request, env, "admin");
+    return withCors(json({ ok: true, share: adminShare(request, params.token, share) }), request, env, "admin");
   } catch (error) {
-    return withCors(shareError(error), request);
+    return withCors(shareError(error), request, env, "admin");
   }
 };
 
@@ -62,10 +62,10 @@ export const onRequestPatch: PagesHandler<{ token: string }> = async ({ request,
       }),
       updatedAt: new Date().toISOString(),
     }));
-    if (!share) return withCors(errorJson(404, "共享链接不存在", "share_not_found"), request);
-    return withCors(json({ ok: true, share: adminShare(request, params.token, share) }), request);
+    if (!share) return withCors(errorJson(404, "共享链接不存在", "share_not_found"), request, env, "admin");
+    return withCors(json({ ok: true, share: adminShare(request, params.token, share) }), request, env, "admin");
   } catch (error) {
-    return withCors(shareError(error), request);
+    return withCors(shareError(error), request, env, "admin");
   }
 };
 
@@ -73,9 +73,9 @@ export const onRequestDelete: PagesHandler<{ token: string }> = async ({ request
   try {
     await assertShareAdmin(request, env);
     const share = await revokeShare(env, params.token);
-    if (!share) return withCors(errorJson(404, "共享链接不存在", "share_not_found"), request);
-    return withCors(json({ ok: true, share: adminShare(request, params.token, share) }), request);
+    if (!share) return withCors(errorJson(404, "共享链接不存在", "share_not_found"), request, env, "admin");
+    return withCors(json({ ok: true, share: adminShare(request, params.token, share) }), request, env, "admin");
   } catch (error) {
-    return withCors(shareError(error), request);
+    return withCors(shareError(error), request, env, "admin");
   }
 };

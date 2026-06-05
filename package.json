@@ -7,6 +7,8 @@
     "build:admin": "npm --prefix apps/admin run build",
     "build:webmail": "npm --prefix apps/webmail run build",
     "lint:admin": "npm --prefix apps/admin run lint",
+    "check:cloudflare": "node scripts/check-cloudflare-pages-preflight.mjs",
+    "check:cloudflare:runtime": "node scripts/check-cloudflare-runtime.mjs",
     "build": "npm run build:admin && npm run build:webmail"
   }
 }
