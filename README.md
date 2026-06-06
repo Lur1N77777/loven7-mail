@@ -80,7 +80,7 @@ Loven7 Mail Cloudflare Suite 是给 Cloudflare Temp Mail / `cloudflare_temp_emai
     <td width="50%" align="center">
       <a href="docs/screenshots/admin-inbox.png"><img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱" height="220" /></a>
       <br /><strong>管理后台 · 邮件工作台</strong>
-      <br /><sub>收件、发件和未知邮件统一管理，验证码与正文快速查看。</sub>
+      <br /><sub>发件人品牌头像、验证码和正文统一展示，收件处理更直观。</sub>
     </td>
     <td width="50%" align="center">
       <a href="docs/screenshots/mobile-address-actions.png"><img src="docs/screenshots/mobile-address-actions.png" alt="移动端地址管理" height="220" /></a>
@@ -97,7 +97,7 @@ Loven7 Mail Cloudflare Suite 是给 Cloudflare Temp Mail / `cloudflare_temp_emai
     <td width="50%" align="center">
       <a href="docs/screenshots/webmail-share.png"><img src="docs/screenshots/webmail-share.png" alt="用户站分享页" height="220" /></a>
       <br /><strong>用户站 · 分享访问</strong>
-      <br /><sub>分享链接可聚合多个邮箱，保留验证码复制和自动刷新。</sub>
+      <br /><sub>分享链接可聚合多个邮箱，保留品牌头像、验证码复制和自动刷新。</sub>
     </td>
   </tr>
 </table>
