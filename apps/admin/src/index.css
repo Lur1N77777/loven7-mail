@@ -9133,15 +9133,22 @@ main h2,
 }
 .admin-avatar-popover {
   position: absolute;
-  left: .75rem;
-  right: .75rem;
-  bottom: calc(100% + .58rem);
+  left: -.35rem;
+  right: -.35rem;
+  bottom: calc(100% + .64rem);
   z-index: 90;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--color-surface) 97%, transparent);
-  padding: .82rem;
+  border-radius: calc(var(--radius-xl) + 2px);
+  background: var(--color-surface);
+  padding: .78rem;
   box-shadow: var(--shadow-floating);
+  transform-origin: 1.55rem calc(100% + .38rem);
+  animation: adminAvatarPopoverIn 170ms var(--motion-ease) both;
+  will-change: opacity, transform;
+}
+.admin-avatar-popover.is-closing {
+  pointer-events: none;
+  animation: adminAvatarPopoverOut 150ms cubic-bezier(.4, 0, .2, 1) both;
 }
 .admin-avatar-popover::after {
   content: "";
@@ -9154,13 +9161,35 @@ main h2,
   border-bottom: 1px solid var(--color-border);
   background: inherit;
   transform: rotate(45deg);
+  pointer-events: none;
+}
+@keyframes adminAvatarPopoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.976);
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes adminAvatarPopoverOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(.982);
+  }
 }
 .admin-avatar-popover-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: .75rem;
-  margin-bottom: .66rem;
+  display: grid;
+  gap: .18rem;
+  margin-bottom: .62rem;
 }
 .admin-avatar-popover-head span {
   color: var(--color-text);
@@ -9171,16 +9200,17 @@ main h2,
 .admin-avatar-popover-head small {
   overflow: hidden;
   color: var(--color-muted);
-  font-size: .69rem;
+  font-size: .68rem;
   font-weight: 560;
-  line-height: 1.15;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .admin-avatar-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: .42rem;
+  grid-template-columns: repeat(auto-fit, minmax(2.15rem, 1fr));
+  gap: .5rem;
+  padding: .02rem;
 }
 .admin-avatar-option {
   position: relative;
@@ -9193,11 +9223,14 @@ main h2,
   border-radius: 999px;
   background: var(--color-surface);
   padding: 0;
-  transition: transform var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
+  transition: transform var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease);
 }
 .admin-avatar-option:hover {
   border-color: var(--color-border-strong);
-  transform: translateY(-1px);
+  transform: translateY(-1px) scale(1.02);
+}
+.admin-avatar-option:active {
+  transform: translateY(0) scale(.98);
 }
 .admin-avatar-option.active {
   border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
@@ -9230,11 +9263,22 @@ main h2,
   border-radius: 999px;
   background: #9A7D88;
   color: #FFFCF8;
+  animation: adminAvatarCheckIn 130ms var(--motion-ease) both;
+}
+@keyframes adminAvatarCheckIn {
+  from {
+    opacity: 0;
+    transform: translate(2px, 2px) scale(.72);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
 }
 .admin-profile-name-block {
   display: grid;
-  gap: .38rem;
-  margin-bottom: .72rem;
+  gap: .34rem;
+  margin-bottom: .66rem;
   color: var(--color-text-soft);
   font-size: .69rem;
   font-weight: 680;
@@ -9242,8 +9286,8 @@ main h2,
 }
 .admin-profile-name-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: .42rem;
+  grid-template-columns: minmax(0, 1fr) 2.08rem;
+  gap: .44rem;
   min-width: 0;
 }
 .admin-profile-name-input {
@@ -9256,6 +9300,7 @@ main h2,
   font-size: .72rem;
   font-weight: 560;
   letter-spacing: 0;
+  line-height: 1;
   outline: none;
   padding: 0 .62rem;
   transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
@@ -9272,24 +9317,26 @@ main h2,
 }
 .admin-profile-name-apply {
   display: inline-flex;
-  min-width: 3.25rem;
+  width: 2.08rem;
+  min-width: 2.08rem;
   height: 2.06rem;
   align-items: center;
   justify-content: center;
-  gap: .26rem;
   border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
   color: var(--color-text);
-  font-size: .72rem;
-  font-weight: 740;
-  line-height: 1;
-  white-space: nowrap;
-  transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+  padding: 0;
+  transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
 }
 .admin-profile-name-apply:hover {
   border-color: color-mix(in srgb, var(--color-primary) 52%, var(--color-border));
   background: color-mix(in srgb, var(--color-primary) 15%, var(--color-surface));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+.admin-profile-name-apply:active {
+  transform: translateY(0) scale(.96);
 }
 .admin-profile-name-apply svg {
   width: .86rem;
@@ -9298,8 +9345,8 @@ main h2,
 }
 .admin-avatar-url-block {
   display: grid;
-  gap: .38rem;
-  margin-top: .72rem;
+  gap: .34rem;
+  margin-top: .66rem;
   color: var(--color-text-soft);
   font-size: .69rem;
   font-weight: 680;
@@ -9307,8 +9354,8 @@ main h2,
 }
 .admin-avatar-url-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: .42rem;
+  grid-template-columns: minmax(0, 1fr) 2.08rem;
+  gap: .44rem;
   min-width: 0;
 }
 .admin-avatar-url-input {
@@ -9321,6 +9368,7 @@ main h2,
   font-size: .72rem;
   font-weight: 560;
   letter-spacing: 0;
+  line-height: 1;
   outline: none;
   padding: 0 .62rem;
   transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
@@ -9337,24 +9385,26 @@ main h2,
 }
 .admin-avatar-url-apply {
   display: inline-flex;
-  min-width: 3.25rem;
+  width: 2.08rem;
+  min-width: 2.08rem;
   height: 2.06rem;
   align-items: center;
   justify-content: center;
-  gap: .26rem;
   border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
   color: var(--color-text);
-  font-size: .72rem;
-  font-weight: 740;
-  line-height: 1;
-  white-space: nowrap;
-  transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+  padding: 0;
+  transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
 }
 .admin-avatar-url-apply:hover {
   border-color: color-mix(in srgb, var(--color-primary) 52%, var(--color-border));
   background: color-mix(in srgb, var(--color-primary) 15%, var(--color-surface));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+.admin-avatar-url-apply:active {
+  transform: translateY(0) scale(.96);
 }
 .admin-avatar-url-apply svg {
   width: .86rem;
@@ -9362,15 +9412,14 @@ main h2,
   flex: 0 0 auto;
 }
 .admin-avatar-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .46rem;
-  margin-top: .68rem;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: .62rem;
 }
 .admin-avatar-action {
   display: inline-flex;
   min-width: 0;
-  min-height: 2.06rem;
+  min-height: 1.92rem;
   align-items: center;
   justify-content: center;
   gap: .34rem;
@@ -9378,16 +9427,21 @@ main h2,
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   color: var(--color-text-soft);
-  font-size: .74rem;
+  font-size: .72rem;
   font-weight: 680;
   line-height: 1;
+  padding: 0 .66rem;
   white-space: nowrap;
-  transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+  transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
 .admin-avatar-action:hover {
   border-color: var(--color-border-strong);
   background: var(--color-surface-soft);
   color: var(--color-text);
+  transform: translateY(-1px);
+}
+.admin-avatar-action:active {
+  transform: translateY(0) scale(.98);
 }
 .admin-avatar-action svg {
   width: .92rem;
@@ -9403,6 +9457,17 @@ main h2,
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+  animation: adminAvatarNoticeIn 140ms var(--motion-ease) both;
+}
+@keyframes adminAvatarNoticeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .sidebar-mini-btn {
   min-width: 0 !important;
@@ -9506,6 +9571,28 @@ main h2,
   .admin-avatar-popover {
     padding: .68rem;
   }
+  .admin-avatar-popover-head {
+    margin-bottom: .5rem;
+  }
+  .admin-avatar-grid {
+    gap: .42rem;
+  }
+  .admin-profile-name-row,
+  .admin-avatar-url-row {
+    grid-template-columns: minmax(0, 1fr) 1.98rem;
+    gap: .38rem;
+  }
+  .admin-profile-name-input,
+  .admin-avatar-url-input,
+  .admin-profile-name-apply,
+  .admin-avatar-url-apply {
+    height: 1.98rem;
+  }
+  .admin-profile-name-apply,
+  .admin-avatar-url-apply {
+    width: 1.98rem;
+    min-width: 1.98rem;
+  }
   .admin-avatar-actions {
     margin-top: .54rem;
   }
@@ -9514,6 +9601,20 @@ main h2,
   }
   .admin-profile-name-block {
     margin-bottom: .58rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-avatar-popover,
+  .admin-avatar-popover.is-closing,
+  .admin-avatar-check,
+  .admin-avatar-notice {
+    animation: none !important;
+  }
+  .admin-avatar-option,
+  .admin-profile-name-apply,
+  .admin-avatar-url-apply,
+  .admin-avatar-action {
+    transition: none !important;
   }
 }
 
