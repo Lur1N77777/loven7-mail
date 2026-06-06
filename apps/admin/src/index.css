@@ -9112,23 +9112,8 @@ main h2,
   border-radius: 999px !important;
   background: var(--color-surface) !important;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-surface) 86%, transparent), 0 1px 2px rgba(15, 17, 21, .08);
-  color: var(--color-text-soft) !important;
+  color: transparent !important;
   letter-spacing: 0 !important;
-}
-.admin-profile-avatar-default {
-  background:
-    radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--color-surface) 92%, white) 0 28%, transparent 29%),
-    color-mix(in srgb, var(--color-primary) 13%, var(--color-surface)) !important;
-}
-.admin-profile-avatar-default > span {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  place-items: center;
-  color: var(--color-text);
-  font-size: 1rem;
-  font-weight: 780;
-  line-height: 1;
 }
 .admin-profile-avatar img {
   display: block;
@@ -9140,6 +9125,11 @@ main h2,
   border-radius: inherit;
   transform: none;
   transform-origin: 50% 50%;
+}
+.admin-profile-avatar-preset img {
+  object-position: 50% 58%;
+  transform: translateY(5%) scale(1.08);
+  transform-origin: 50% 58%;
 }
 .admin-avatar-popover {
   position: absolute;
@@ -9222,6 +9212,11 @@ main h2,
   border-radius: inherit;
   transform: none;
   transform-origin: 50% 50%;
+}
+.admin-avatar-preset-option img {
+  object-position: 50% 58%;
+  transform: translateY(5%) scale(1.08);
+  transform-origin: 50% 58%;
 }
 .admin-avatar-check {
   position: absolute;
