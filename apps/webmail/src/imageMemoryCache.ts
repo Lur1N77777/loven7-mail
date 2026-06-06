@@ -83,7 +83,7 @@ async function loadImageDataUrl(url: string) {
     return dataUrl;
   })().catch(() => {
     imageCache.delete(normalized);
-    return normalized;
+    return proxyUrl;
   }).finally(() => {
     const current = imageCache.get(normalized);
     if (current) current.promise = undefined;

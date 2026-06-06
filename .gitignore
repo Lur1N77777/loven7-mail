@@ -13,6 +13,9 @@ tmp/
 .env.*.local
 .env.production
 .env.production.local
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 *.log
 *.zip
 .DS_Store

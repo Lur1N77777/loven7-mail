@@ -6,10 +6,12 @@ compatibility_date = "2026-05-11"
 #   binding: SHARE_KV
 #   namespace: 你自己创建的 KV Namespace
 #
-# Wrangler Direct Upload 部署时需要在本地配置中保留绑定，否则新部署的
-# Pages Functions runtime 拿不到 SHARE_KV。
-[[kv_namespaces]]
-binding = "SHARE_KV"
-id = "a1fd701f2494426ca79721d3e2fa1734"
-preview_id = "00eb7279b460440bbc235f4bf4d136c2"
+# Wrangler Direct Upload 部署时，如果你明确设置了
+# WEBMAIL_USE_LOCAL_WRANGLER_CONFIG=1，需要把下面示例改成你自己的 KV ID
+# 并取消注释。公开仓库不能提交真实 KV Namespace ID。
+#
+# [[kv_namespaces]]
+# binding = "SHARE_KV"
+# id = "replace-with-your-production-kv-namespace-id"
+# preview_id = "replace-with-your-preview-kv-namespace-id"
 

@@ -1,0 +1,35 @@
+name: Deployment help
+description: Ask for help deploying to Cloudflare Pages.
+title: "[Deploy]: "
+labels: ["deployment"]
+body:
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-check
+      options:
+        - label: I already have a Cloudflare Temp Mail / cloudflare_temp_email upstream Worker.
+        - label: I have read docs/DEPLOYMENT_QUICKSTART.md.
+        - label: I will not paste tokens, passwords, JWTs, secrets, or real KV Namespace IDs.
+  - type: dropdown
+    id: deploy_mode
+    attributes:
+      label: Deployment mode
+      options:
+        - AI Agent automatic deployment
+        - Cloudflare Pages manual deployment
+        - GitHub Actions automatic deployment
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Where are you stuck?
+      description: Include the visible error message. Redact domains or secrets if needed.
+    validations:
+      required: true
+  - type: textarea
+    id: runtime
+    attributes:
+      label: Runtime check result
+      description: Paste the redacted output of npm run check:cloudflare or /api/runtime if available.
