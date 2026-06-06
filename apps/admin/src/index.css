@@ -10657,3 +10657,369 @@ button.interface-preference-action:hover {
     color: #9AAED8;
   }
 }
+
+/* --- FINAL V55 mobile page compositor: cached swipe deck with transform-only motion. --- */
+@media (max-width: 900px) {
+  .mobile-swipe-stage {
+    padding-bottom: 0 !important;
+  }
+
+  .mobile-swipe-cache {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--color-bg);
+    contain: layout paint style;
+    isolation: isolate;
+    touch-action: pan-y;
+    overscroll-behavior-x: contain;
+  }
+
+  .mobile-swipe-page {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    box-sizing: border-box;
+    overflow: hidden;
+    padding-bottom: calc(62px + env(safe-area-inset-bottom));
+    background: var(--color-bg);
+    pointer-events: none;
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+    backface-visibility: hidden;
+    contain: layout paint style;
+  }
+
+  .mobile-swipe-page.active {
+    z-index: 2;
+    pointer-events: auto;
+  }
+
+  .mobile-swipe-page.mobile-mail-shell {
+    padding-bottom: 0;
+  }
+
+  .mobile-swipe-page.mobile-mail-shell,
+  .mobile-swipe-page.mobile-mail-shell .mail-workspace,
+  .mobile-swipe-page.mobile-mail-shell .mail-list-panel,
+  .mobile-swipe-page.mobile-mail-shell .mail-list-viewport {
+    background: var(--color-bg) !important;
+  }
+
+  .mobile-swipe-page.mobile-page-settling {
+    transition: transform var(--mobile-page-settle-ms, 220ms) cubic-bezier(.22, .61, .36, 1) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-swipe-page.mobile-page-settling {
+    transition: none !important;
+  }
+}
+
+/* --- FINAL V56 mobile mail immersive chrome: hide the whole bottom layer on the compositor. --- */
+@media (max-width: 900px) {
+  .mobile-nav {
+    transform: translate3d(0, calc(var(--mobile-mail-chrome-progress, 0) * (116% + 1rem)), 0) !important;
+    opacity: calc(1 - var(--mobile-mail-chrome-progress, 0)) !important;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      box-shadow 140ms ease !important;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-nav {
+    transform: translate3d(0, calc(116% + 1rem), 0) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    border-top-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-more-menu {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translate3d(0, .72rem, 0) scale(.98) !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-viewport {
+    padding-bottom: calc(1.05rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobile-swipe-page.mobile-mail-shell .mail-list-header,
+  .mobile-swipe-page.mobile-mail-shell .mail-list-viewport,
+  .mobile-swipe-page.mobile-mail-shell .mobile-nav {
+    transform-style: preserve-3d;
+  }
+}
+
+/* --- FINAL V57 mobile swipe nav feedback: target highlight follows the gesture immediately. --- */
+@media (max-width: 900px) {
+  .mobile-nav-item {
+    transition:
+      background-color 90ms linear,
+      color 90ms linear,
+      transform 90ms linear !important;
+  }
+
+  .mobile-nav-item.active {
+    transition-duration: 60ms !important;
+  }
+}
+
+/* --- FINAL V58 mobile bottom chrome: remove full-width white veil. --- */
+@media (max-width: 900px) {
+  .mobile-swipe-page {
+    padding-bottom: 0 !important;
+  }
+
+  .mobile-swipe-page:not(.mobile-mail-shell) > .dashboard-view-shell,
+  .mobile-swipe-page:not(.mobile-mail-shell) > .stats-view-shell,
+  .mobile-swipe-page:not(.mobile-mail-shell) > .address-view-shell {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom)) !important;
+    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+
+  .mobile-nav {
+    background: transparent !important;
+    border-top-color: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none;
+  }
+
+  .mobile-nav-item,
+  .mobile-more-menu {
+    pointer-events: auto;
+  }
+
+  .mobile-nav-item:not(.active) {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .mobile-nav-item.active {
+    background: color-mix(in srgb, var(--color-surface) 82%, transparent) !important;
+    box-shadow: 0 8px 20px rgba(44, 54, 68, .08) !important;
+  }
+
+  .theme-dark .mobile-nav {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .theme-dark .mobile-nav-item.active {
+    background: color-mix(in srgb, var(--color-surface) 80%, transparent) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .24) !important;
+  }
+}
+
+/* --- FINAL V59 mobile immersive bottom + live swipe nav indicator. --- */
+@media (max-width: 900px) {
+  .mobile-nav {
+    --mobile-nav-slot-count: 5;
+    --mobile-nav-indicator-index: 0;
+    --mobile-nav-swipe-progress: 0;
+    --mobile-nav-settle-ms: 220ms;
+    isolation: isolate;
+  }
+
+  .mobile-page-swipe-zone,
+  .mobile-swipe-stage {
+    background: var(--color-bg) !important;
+  }
+
+  .mobile-nav-progress-pill {
+    position: absolute;
+    left: .5rem;
+    bottom: calc(.32rem + env(safe-area-inset-bottom));
+    z-index: 0;
+    width: calc((100% - 1rem) / var(--mobile-nav-slot-count, 5));
+    height: 2.9rem;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+    border-radius: .92rem;
+    background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+    box-shadow: 0 8px 18px rgba(44, 54, 68, .07);
+    opacity: calc(.76 + var(--mobile-nav-swipe-progress, 0) * .16);
+    pointer-events: none;
+    transform: translate3d(calc(var(--mobile-nav-indicator-index, 0) * 100%), 0, 0);
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+
+  .mobile-nav-settling .mobile-nav-progress-pill {
+    transition:
+      transform var(--mobile-nav-settle-ms, 220ms) cubic-bezier(.22, .61, .36, 1),
+      opacity 90ms linear !important;
+  }
+
+  .mobile-nav:not(.mobile-nav-settling) .mobile-nav-progress-pill {
+    transition: opacity 90ms linear, background-color 90ms linear !important;
+  }
+
+  .mobile-nav-item {
+    position: relative;
+    z-index: 1;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    transform: translateZ(0);
+    transition: color 80ms linear, opacity 80ms linear !important;
+  }
+
+  .mobile-nav-item.active {
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--color-text) !important;
+  }
+
+  .mobile-nav-item.active::after {
+    display: none !important;
+  }
+
+  .theme-dark .mobile-nav-progress-pill {
+    border-color: rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .08);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, .24);
+  }
+
+  .theme-dark .mobile-nav-item.active {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .mobile-mail-shell .mail-list-viewport {
+    padding-bottom: calc(3.05rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell > div.min-h-0 {
+    padding-bottom: 0 !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-viewport {
+    padding-bottom: max(.35rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-workspace,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-panel,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-viewport,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mobile-mail-load-more {
+    background: transparent !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mobile-mail-load-more {
+    min-height: 1.35rem !important;
+    padding: .08rem 0 calc(.16rem + env(safe-area-inset-bottom)) !important;
+    opacity: .58;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-nav,
+  body.mobile-mail-chrome-collapsed .mobile-nav-progress-pill,
+  body.mobile-mail-chrome-collapsed .mobile-nav-item,
+  body.mobile-mail-chrome-collapsed .mobile-nav-item.active {
+    border-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-nav-progress-pill {
+    opacity: 0 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-nav-progress-pill {
+    transition: none !important;
+  }
+}
+
+/* --- FINAL V60 mobile mail gesture-synced chrome: local progress, no flash on cached pages. --- */
+@media (max-width: 900px) {
+  .mobile-mail-shell .mail-workspace {
+    --mobile-mail-chrome-progress: 0;
+    background: var(--color-bg) !important;
+  }
+
+  .mobile-mail-shell .mail-list-panel,
+  .mobile-mail-shell .mail-list-viewport {
+    background: transparent !important;
+  }
+
+  .mobile-mail-shell .mail-list-header,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-header {
+    max-height: none !important;
+    overflow: visible !important;
+    padding: max(.78rem, calc(env(safe-area-inset-top) + .36rem)) .86rem .64rem !important;
+    background: var(--color-bg) !important;
+    opacity: calc(1 - var(--mobile-mail-chrome-progress, 0)) !important;
+    transform: translate3d(0, calc(var(--mobile-mail-chrome-progress, 0) * -8.05rem), 0) !important;
+    transition: none !important;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+
+  .mobile-mail-shell .mail-workspace.mobile-mail-chrome-collapsed-local .mail-list-header,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-header {
+    pointer-events: none !important;
+  }
+
+  .mobile-mail-shell .mail-list-viewport {
+    padding-top: 7.65rem !important;
+    padding-bottom: calc(3.05rem + env(safe-area-inset-bottom)) !important;
+    scrollbar-gutter: auto !important;
+  }
+
+  .mobile-mail-shell .mail-workspace.mobile-mail-chrome-collapsed-local .mail-list-viewport,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-viewport {
+    padding-bottom: max(.35rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobile-mail-shell .mobile-mail-load-more,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mobile-mail-load-more {
+    background: transparent !important;
+  }
+
+  body.mobile-mail-chrome-collapsed .mobile-nav {
+    transform: translate3d(0, calc(124% + 1rem), 0) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* --- FINAL V61 mobile mail immersive gutters: collapse the spaces, not only the bars. --- */
+@media (max-width: 900px) {
+  .mobile-page-swipe-zone > .mobile-swipe-stage {
+    padding-bottom: 0 !important;
+  }
+
+  .mobile-mail-shell .mail-workspace {
+    --mobile-mail-viewport-top-pad: 7.65rem;
+    --mobile-mail-viewport-bottom-pad: calc(3.05rem + env(safe-area-inset-bottom));
+  }
+
+  .mobile-mail-shell .mail-list-viewport,
+  .mobile-mail-shell .mail-workspace.mobile-mail-chrome-collapsed-local .mail-list-viewport,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mail-list-viewport {
+    padding-top: max(var(--mobile-mail-viewport-top-pad, 7.65rem), env(safe-area-inset-top)) !important;
+    padding-bottom: max(var(--mobile-mail-viewport-bottom-pad, calc(3.05rem + env(safe-area-inset-bottom))), env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobile-mail-shell .mail-workspace.mobile-mail-chrome-collapsed-local .mobile-mail-load-more,
+  body.mobile-mail-chrome-collapsed .mobile-mail-shell .mobile-mail-load-more {
+    min-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: max(.12rem, env(safe-area-inset-bottom)) !important;
+  }
+}

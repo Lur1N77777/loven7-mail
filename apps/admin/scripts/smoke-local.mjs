@@ -426,6 +426,7 @@ async function openApp({ width, height, dark = false, mobile, seedAuth = true, l
       localStorage.removeItem('loven7.mailReadIds');
       localStorage.removeItem('loven7.mailStarredIds');
       localStorage.removeItem('loven7.mailReadAllBefore');
+      Object.keys(localStorage).filter((key) => key.startsWith('loven7.mailReadIds.') || key.startsWith('loven7.mailStarredIds.') || key.startsWith('loven7.mailReadAllBefore.')).forEach((key) => localStorage.removeItem(key));
       localStorage.setItem('loven7.addressListCache.index:id:descend',${JSON.stringify(JSON.stringify(staleAddressIndex))});
       ${extraStorageScript}
       ${cookieScript}
@@ -456,6 +457,7 @@ async function openApp({ width, height, dark = false, mobile, seedAuth = true, l
       localStorage.removeItem('loven7.mailReadIds');
       localStorage.removeItem('loven7.mailStarredIds');
       localStorage.removeItem('loven7.mailReadAllBefore');
+      Object.keys(localStorage).filter((key) => key.startsWith('loven7.mailReadIds.') || key.startsWith('loven7.mailStarredIds.') || key.startsWith('loven7.mailReadAllBefore.')).forEach((key) => localStorage.removeItem(key));
       localStorage.setItem('loven7.addressListCache.index:id:descend',${JSON.stringify(JSON.stringify(staleAddressIndex))});
       ${extraStorageScript}
     `);
@@ -483,10 +485,16 @@ function isPrivateAdminStorageKey(key) {
     'loven7.authRememberedAt',
     'loven7.addressUserFilter',
     'loven7.shareAdminListCache',
+    'loven7.mailReadIds',
+    'loven7.mailStarredIds',
+    'loven7.mailReadAllBefore',
   ].includes(key)
     || key.startsWith('loven7.auth.v1.')
     || key.startsWith('loven7.mailListCache.')
     || key.startsWith('loven7.mailDetailSession.')
+    || key.startsWith('loven7.mailReadIds.')
+    || key.startsWith('loven7.mailStarredIds.')
+    || key.startsWith('loven7.mailReadAllBefore.')
     || key.startsWith('loven7.addressListCache.')
     || key.startsWith('loven7.senderAccessListCache.')
     || key.startsWith('loven7.userListCache.');
@@ -565,8 +573,8 @@ async function readAuthStorageSnapshot(ws) {
       localFrontendLoginBase: localStorage.getItem('loven7.frontendLoginBase') || '',
       localMailAutoRefreshEnabled: localStorage.getItem('loven7.mailAutoRefreshEnabled') || '',
       localMailAutoRefreshSeconds: localStorage.getItem('loven7.mailAutoRefreshSeconds') || '',
-      localMailReadIds: localStorage.getItem('loven7.mailReadIds') || '',
-      localMailStarredIds: localStorage.getItem('loven7.mailStarredIds') || '',
+      localMailReadIds: Object.keys(localStorage).filter((key) => key === 'loven7.mailReadIds' || key.startsWith('loven7.mailReadIds.')).map((key) => localStorage.getItem(key) || '').join('|'),
+      localMailStarredIds: Object.keys(localStorage).filter((key) => key === 'loven7.mailStarredIds' || key.startsWith('loven7.mailStarredIds.')).map((key) => localStorage.getItem(key) || '').join('|'),
       privateLocalKeys: Object.keys(localStorage).filter(${isPrivateAdminStorageKey.toString()}),
       privateSessionKeys: Object.keys(sessionStorage).filter(${isPrivateAdminStorageKey.toString()}),
       adminPasswordInputs: [...document.querySelectorAll('.modal-card input[type="password"]')].map((input) => input.value),
@@ -802,7 +810,7 @@ async function main() {
   assert(forgetSnapshot.privateLocalKeys.length === 0 && forgetSnapshot.privateSessionKeys.length === 0, `forget browser should clear private admin caches: ${JSON.stringify(forgetSnapshot)}`);
   assert(forgetSnapshot.localApiBase === appApiBase, `forget browser should keep API base: ${JSON.stringify(forgetSnapshot)}`);
   assert(forgetSnapshot.localLocale === 'en-US' && forgetSnapshot.localNewAddressDraft.includes('keep.') && forgetSnapshot.localFrontendLoginBase === 'https://webmail.example.test', `forget browser should keep UX settings: ${JSON.stringify(forgetSnapshot)}`);
-  assert(forgetSnapshot.localMailAutoRefreshEnabled === 'false' && forgetSnapshot.localMailAutoRefreshSeconds === '45' && forgetSnapshot.localMailReadIds.includes('inbox:9002') && forgetSnapshot.localMailStarredIds.includes('inbox:9002'), `forget browser should keep mail UX preferences: ${JSON.stringify(forgetSnapshot)}`);
+  assert(forgetSnapshot.localMailAutoRefreshEnabled === 'false' && forgetSnapshot.localMailAutoRefreshSeconds === '45' && !forgetSnapshot.localMailReadIds && !forgetSnapshot.localMailStarredIds, `forget browser should keep mail refresh preferences but clear account mail state: ${JSON.stringify(forgetSnapshot)}`);
   assert(forgetSnapshot.modalOpen, `credential modal should reopen after forget: ${JSON.stringify(forgetSnapshot)}`);
   assert(forgetSnapshot.adminPasswordInputs.every((value) => !value) && !forgetSnapshot.accessTokenValue, `credential inputs should not keep old secrets after forget: ${JSON.stringify(forgetSnapshot)}`);
   assert(!/已连接|Connected/.test(forgetSnapshot.bodySample), `UI should not show connected state after forget: ${forgetSnapshot.bodySample}`);
@@ -888,7 +896,7 @@ async function main() {
   assert(expiredAuthSnapshot.privateLocalKeys.length === 0 && expiredAuthSnapshot.privateSessionKeys.length === 0, `expired auth should clear private caches: ${JSON.stringify(expiredAuthSnapshot)}`);
   assert(expiredAuthSnapshot.localApiBase === appApiBase, `expired auth should keep API base: ${JSON.stringify(expiredAuthSnapshot)}`);
   assert(expiredAuthSnapshot.localLocale === 'en-US' && expiredAuthSnapshot.localNewAddressDraft.includes('keep-expired.') && expiredAuthSnapshot.localFrontendLoginBase === 'https://webmail.expired.example.test', `expired auth should keep UX settings: ${JSON.stringify(expiredAuthSnapshot)}`);
-  assert(expiredAuthSnapshot.localMailAutoRefreshEnabled === 'false' && expiredAuthSnapshot.localMailAutoRefreshSeconds === '45' && expiredAuthSnapshot.localMailReadIds.includes('inbox:expired') && expiredAuthSnapshot.localMailStarredIds.includes('inbox:expired'), `expired auth should keep mail UX preferences: ${JSON.stringify(expiredAuthSnapshot)}`);
+  assert(expiredAuthSnapshot.localMailAutoRefreshEnabled === 'false' && expiredAuthSnapshot.localMailAutoRefreshSeconds === '45' && !expiredAuthSnapshot.localMailReadIds && !expiredAuthSnapshot.localMailStarredIds, `expired auth should keep mail refresh preferences but clear account mail state: ${JSON.stringify(expiredAuthSnapshot)}`);
   assert(expiredAuthSnapshot.expiredNoticeVisible, `expired auth should show clear re-auth notice: ${JSON.stringify(expiredAuthSnapshot)}`);
   assert(expiredAuthSnapshot.adminPasswordInputs.every((value) => !value) && !expiredAuthSnapshot.accessTokenValue, `expired auth credential inputs should be empty: ${JSON.stringify(expiredAuthSnapshot)}`);
   assert(!/已连接|Connected/.test(expiredAuthSnapshot.bodySample), `expired auth UI should not show connected state: ${expiredAuthSnapshot.bodySample}`);
@@ -903,9 +911,21 @@ async function main() {
   await touchSwipe(mobile, 354, 360, 42, 360);
   const mobileSwipeStats = await collect(mobile, 'mobile-swipe-stats');
   assert(mobileSwipeStats.mobileHeaderText.includes('统计'), `full-screen left swipe should switch from dashboard to stats: ${mobileSwipeStats.mobileHeaderText}`);
+  await touchSwipe(mobile, 354, 360, 42, 360);
+  const mobileSwipeAddress = await collect(mobile, 'mobile-swipe-address');
+  assert(mobileSwipeAddress.mobileHeaderText.includes('地址管理'), `full-screen left swipe should follow mobile nav order to address: ${mobileSwipeAddress.mobileHeaderText}`);
+  await touchSwipe(mobile, 354, 360, 42, 360);
+  const mobileSwipeInbox = await collect(mobile, 'mobile-swipe-inbox');
+  assert(mobileSwipeInbox.mobileHeaderText.includes('收件箱'), `full-screen left swipe should follow mobile nav order to inbox: ${mobileSwipeInbox.mobileHeaderText}`);
+  await touchSwipe(mobile, 354, 360, 42, 360);
+  const mobileSwipeSent = await collect(mobile, 'mobile-swipe-sent');
+  assert(mobileSwipeSent.mobileHeaderText.includes('发件箱'), `full-screen left swipe should follow mobile nav order to sent: ${mobileSwipeSent.mobileHeaderText}`);
+  await touchSwipe(mobile, 354, 360, 42, 360);
+  const mobileSwipeWrapDashboard = await collect(mobile, 'mobile-swipe-wrap-dashboard');
+  assert(mobileSwipeWrapDashboard.mobileHeaderText.includes('仪表盘'), `full-screen left swipe should wrap from sent to dashboard: ${mobileSwipeWrapDashboard.mobileHeaderText}`);
   await touchSwipe(mobile, 42, 360, 354, 360);
-  const mobileSwipeDashboard = await collect(mobile, 'mobile-swipe-dashboard');
-  assert(mobileSwipeDashboard.mobileHeaderText.includes('仪表盘'), `full-screen right swipe should switch back to dashboard: ${mobileSwipeDashboard.mobileHeaderText}`);
+  const mobileSwipeReverseSent = await collect(mobile, 'mobile-swipe-reverse-sent');
+  assert(mobileSwipeReverseSent.mobileHeaderText.includes('发件箱'), `full-screen right swipe should return to the previous nav slot: ${mobileSwipeReverseSent.mobileHeaderText}`);
 
   await clickText(mobile, '收件箱');
   const mobileInbox = await collect(mobile, 'mobile-inbox');
@@ -1194,7 +1214,7 @@ async function main() {
   assert(Math.abs(maintenanceLayout.input.bottom - maintenanceLayout.button.bottom) <= 2, `cleanup button should align with select/input bottom edge: ${JSON.stringify(maintenanceLayout)}`);
   desktop.close();
 
-  const results = [mobileDashboard, mobileSwipeStats, mobileSwipeDashboard, mobileInbox, ...extraResults, mobileAddress, mobileDark, mobileLandscapeInbox, desktopDashboard];
+  const results = [mobileDashboard, mobileSwipeStats, mobileSwipeAddress, mobileSwipeInbox, mobileSwipeSent, mobileSwipeWrapDashboard, mobileSwipeReverseSent, mobileInbox, ...extraResults, mobileAddress, mobileDark, mobileLandscapeInbox, desktopDashboard];
   console.log(JSON.stringify({ ok: true, baseUrl, results, screenshots: shouldCapture ? shotDir : undefined }, null, 2));
 }
 

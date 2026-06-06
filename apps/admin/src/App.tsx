@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { clearApiCache, createApiClient } from './lib/api';
 import { API_BASE, STORAGE_KEYS, SWIPE } from './lib/constants';
 import { readJwtFromQuery } from './lib/clipboard';
@@ -9,11 +9,16 @@ import { applyRuntimeLocale, getBackendLang, getRuntimeLocale, localeText, readI
 import type { AddressUserFilter, ComposePayload, OpenSettings, Statistics } from './types/api';
 import { AuthPanel } from './components/AuthPanel';
 import { NoticeToast, useConfirm, useNotice } from './components/Common';
-import { Header, MobileNav, Sidebar, type MenuKey } from './components/Shell';
+import { Header, MobileNav, Sidebar, mobileSwipeMenus, type MenuKey } from './components/Shell';
+import { AddressView } from './views/AddressView';
 import { DashboardView, StatsView } from './views/DashboardView';
+import { MailWorkspace } from './views/MailWorkspace';
 
-const AddressView = lazy(() => import('./views/AddressView').then((mod) => ({ default: mod.AddressView })));
-const MailWorkspace = lazy(() => import('./views/MailWorkspace').then((mod) => ({ default: mod.MailWorkspace })));
+const MemoDashboardView = memo(DashboardView);
+const MemoStatsView = memo(StatsView);
+const MemoAddressView = memo(AddressView);
+const MemoMailWorkspace = memo(MailWorkspace);
+
 const ComposeView = lazy(() => import('./views/ComposeView').then((mod) => ({ default: mod.ComposeView })));
 const UsersView = lazy(() => import('./views/UsersView').then((mod) => ({ default: mod.UsersView })));
 const SettingsView = lazy(() => import('./views/SettingsMaintenance').then((mod) => ({ default: mod.SettingsView })));
@@ -26,13 +31,12 @@ type IdleWindow = Window & {
 
 const emptyStats: Statistics = { mailCount: 0, sendMailCount: 0, userCount: 0, addressCount: 0, activeAddressCount7days: 0, activeAddressCount30days: 0 };
 const keepAliveMenus: MenuKey[] = ['dashboard', 'stats', 'address', 'users', 'inbox', 'sent', 'unknown', 'compose', 'settings', 'maintenance'];
-const mobileSwipeMenus: MenuKey[] = ['dashboard', 'stats', 'address', 'users', 'inbox', 'sent', 'unknown', 'compose', 'settings', 'maintenance'];
 type MailboxAddressRequest = { address: string; requestId: number };
 type PageSwipeLock = 'none' | 'page' | 'scroll';
+type PageSwipeDirection = 1 | -1 | 0;
+type PageSwipeState = { active: boolean; lock: PageSwipeLock; direction: PageSwipeDirection; targetMenu: MenuKey | null; startX: number; startY: number; lastX: number; lastY: number; pendingX: number; rafId: number };
 
 function preloadAdminViewChunks() {
-  void import('./views/AddressView');
-  void import('./views/MailWorkspace');
   void import('./views/ComposeView');
   void import('./views/UsersView');
   void import('./views/SettingsMaintenance');
@@ -45,6 +49,80 @@ function isMobileViewport(): boolean {
 function shouldIgnorePageSwipe(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   return Boolean(target.closest('input, textarea, select, iframe, .modal-card, .mobile-mail-detail, .mail-frame, .code-area, [data-no-page-swipe="true"]'));
+}
+
+function getCircularOffset(menu: MenuKey, activeMenu: MenuKey): number {
+  const menuIndex = mobileSwipeMenus.indexOf(menu);
+  const activeIndex = mobileSwipeMenus.indexOf(activeMenu);
+  if (menuIndex < 0 || activeIndex < 0) return 0;
+  const count = mobileSwipeMenus.length;
+  let offset = menuIndex - activeIndex;
+  if (offset > count / 2) offset -= count;
+  if (offset < -count / 2) offset += count;
+  return offset;
+}
+
+function getCircularMotionDirection(current: MenuKey, next: MenuKey): 1 | -1 {
+  const currentIndex = mobileSwipeMenus.indexOf(current);
+  const nextIndex = mobileSwipeMenus.indexOf(next);
+  if (currentIndex < 0 || nextIndex < 0) return 1;
+  const count = mobileSwipeMenus.length;
+  const forwardDistance = (nextIndex - currentIndex + count) % count;
+  const backDistance = (currentIndex - nextIndex + count) % count;
+  return forwardDistance <= backDistance ? 1 : -1;
+}
+
+function hashStorageScope(value: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function getMailStateScope(apiBase: string, adminPassword: string, sitePassword: string, userAccessToken: string, addressJwt: string): string {
+  const normalizedBase = normalizeAuthApiBase(apiBase) || 'same-origin';
+  const authIdentity = addressJwt
+    ? `address:${addressJwt}`
+    : userAccessToken
+      ? `user:${userAccessToken}`
+      : adminPassword
+        ? `admin:${adminPassword}`
+        : sitePassword
+          ? `site:${sitePassword}`
+          : 'anonymous';
+  return `${hashStorageScope(normalizedBase)}.${hashStorageScope(authIdentity)}`;
+}
+
+function getPageRenderOffset(menu: MenuKey, activeMenu: MenuKey, targetMenu: MenuKey | null, dragX: number): number {
+  const offset = getCircularOffset(menu, activeMenu);
+  if (!targetMenu || menu === activeMenu || dragX === 0) return offset;
+  const side = dragX < 0 ? 1 : -1;
+  if (menu === targetMenu) return side;
+  if (offset === side) return side * 2;
+  return offset;
+}
+
+function getPageDragX(value: number, width: number): number {
+  const abs = Math.abs(value);
+  if (abs <= width) return value;
+  return Math.sign(value) * (width + (abs - width) * 0.18);
+}
+
+function getPageSettleMs(from: number, to: number, width: number): number {
+  const distanceRatio = Math.min(1.4, Math.abs(to - from) / Math.max(width, 1));
+  return Math.round(Math.min(300, Math.max(120, distanceRatio * 220)));
+}
+
+function getLockedSwipeDelta(deltaX: number, direction: PageSwipeDirection): number {
+  if (direction === 1) return Math.min(0, deltaX);
+  if (direction === -1) return Math.max(0, deltaX);
+  return deltaX;
+}
+
+function createPageSwipeState(): PageSwipeState {
+  return { active: false, lock: 'none', direction: 0, targetMenu: null, startX: 0, startY: 0, lastX: 0, lastY: 0, pendingX: 0, rafId: 0 };
 }
 
 function readInitialAddressUserFilter(): AddressUserFilter | null {
@@ -110,7 +188,10 @@ export default function App() {
   const [pageMotion, setPageMotion] = useState<'forward' | 'back' | ''>('');
   const [pageDragX, setPageDragX] = useState(0);
   const [pageSettling, setPageSettling] = useState(false);
+  const [pageSettleMs, setPageSettleMs] = useState(220);
+  const [pageSwipeTargetMenu, setPageSwipeTargetMenu] = useState<MenuKey | null>(null);
   const [visitedMenus, setVisitedMenus] = useState<Set<MenuKey>>(() => new Set(['dashboard']));
+  const [mobilePagesEnabled, setMobilePagesEnabled] = useState(() => isMobileViewport());
   const [globalQuery, setGlobalQuery] = useState('');
   const [apiBase, setApiBase] = useState(() => INITIAL_CONNECTION.apiBase);
   const [adminPassword, setAdminPassword] = useState(() => INITIAL_CONNECTION.adminPassword);
@@ -126,13 +207,25 @@ export default function App() {
   const [authExpiredNoticePending, setAuthExpiredNoticePending] = useState(() => INITIAL_AUTH_EXPIRY_CHECK.expired || Boolean(readStorage(STORAGE_KEYS.authExpiredNotice, '')));
   const [addressUserFilter, setAddressUserFilter] = useState<AddressUserFilter | null>(() => readInitialAddressUserFilter());
   const [mailboxAddressRequest, setMailboxAddressRequest] = useState<MailboxAddressRequest | null>(null);
-  const pageSwipeRef = useRef({ active: false, lock: 'none' as PageSwipeLock, startX: 0, startY: 0, lastX: 0, lastY: 0, pendingX: 0, rafId: 0 });
+  const pageSwipeRef = useRef<PageSwipeState>(createPageSwipeState());
+  const pageSwipeTargetMenuRef = useRef<MenuKey | null>(null);
+  const pageTransitionTimerRef = useRef<number | null>(null);
   const credentialFingerprintRef = useRef<string | null>(null);
   const authResetSeqRef = useRef(0);
   const { notice, push } = useNotice();
   const { ask, modal: confirmModal } = useConfirm();
   const client = useMemo(() => createApiClient(() => apiBase, () => ({ adminPassword, sitePassword, userAccessToken, addressJwt, lang: getBackendLang(locale) })), [addressJwt, adminPassword, apiBase, locale, sitePassword, userAccessToken]);
   const request = useCallback(<T,>(path: string, options?: Parameters<typeof client.request>[1]) => client.request<T>(path, options), [client]);
+  const connected = Boolean(adminPassword || userAccessToken || addressJwt);
+  const mailStateScope = useMemo(() => getMailStateScope(apiBase, adminPassword, sitePassword, userAccessToken, addressJwt), [addressJwt, adminPassword, apiBase, sitePassword, userAccessToken]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const query = window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)');
+    const update = () => setMobilePagesEnabled(query.matches);
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
   const loadStats = useCallback(async (forceRefresh = false) => {
     const seq = authResetSeqRef.current;
     setStatsLoading(true);
@@ -221,11 +314,22 @@ export default function App() {
         setStats(emptyStats);
         setStatsLoading(false);
         setVisitedMenus(new Set(['dashboard']));
+        if (pageTransitionTimerRef.current !== null) {
+          window.clearTimeout(pageTransitionTimerRef.current);
+          pageTransitionTimerRef.current = null;
+        }
         setActiveMenu('dashboard');
         setPageMotion('');
         setPageDragX(0);
         setPageSettling(false);
+        setPageSettleMs(220);
+        setPageSwipeTargetMenu(null);
+        pageSwipeTargetMenuRef.current = null;
         credentialFingerprintRef.current = null;
+        window.setTimeout(() => {
+          const hasFreshAuth = Boolean(readStorage(STORAGE_KEYS.adminPassword, '') || readStorage(STORAGE_KEYS.sitePassword, '') || readStorage(STORAGE_KEYS.userAccessToken, '') || readStorage(STORAGE_KEYS.addressJwt, ''));
+          if (!hasFreshAuth) forgetAuthBrowserStorage();
+        }, 900);
         push('success', localeText('已退出，并清除本机保存的敏感凭据和管理缓存。', 'Signed out and cleared saved sensitive credentials plus admin caches on this browser.', currentLocale));
       },
     });
@@ -241,21 +345,71 @@ export default function App() {
       if (current === menu) return current;
       const currentIndex = mobileSwipeMenus.indexOf(current);
       const nextIndex = mobileSwipeMenus.indexOf(menu);
-      if (currentIndex >= 0 && nextIndex >= 0) {
-        setPageMotion(nextIndex > currentIndex ? 'forward' : 'back');
+      if (currentIndex >= 0 && nextIndex >= 0 && mobilePagesEnabled && connected) {
+        if (pageTransitionTimerRef.current !== null) {
+          window.clearTimeout(pageTransitionTimerRef.current);
+          pageTransitionTimerRef.current = null;
+        }
+        const width = typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360);
+        const offset = getCircularOffset(menu, current);
+        const targetX = -offset * width;
+        const duration = getPageSettleMs(0, targetX, width);
+        const adjacentTarget = Math.abs(offset) === 1 ? menu : null;
+        setPageSettleMs(duration);
+        setPageSettling(true);
+        setPageMotion('');
+        pageSwipeTargetMenuRef.current = adjacentTarget;
+        setPageSwipeTargetMenu(adjacentTarget);
+        setVisitedMenus((visited) => {
+          if (visited.has(menu)) return visited;
+          const next = new Set(visited);
+          next.add(menu);
+          return next;
+        });
+        setPageDragX(targetX);
+        pageTransitionTimerRef.current = window.setTimeout(() => {
+          setActiveMenu(menu);
+          setPageSettling(false);
+          setPageDragX(0);
+          setPageSwipeTargetMenu(null);
+          pageSwipeTargetMenuRef.current = null;
+          setPageMotion('');
+          setPageSettleMs(220);
+          pageTransitionTimerRef.current = null;
+        }, duration);
+        return current;
+      } else if (currentIndex >= 0 && nextIndex >= 0) {
+        setPageMotion(getCircularMotionDirection(current, menu) === 1 ? 'forward' : 'back');
         window.setTimeout(() => setPageMotion(''), 260);
       } else {
         setPageMotion('');
       }
       return menu;
     });
-  }, []);
+  }, [connected, mobilePagesEnabled]);
+  const clearAddressUserFilter = useCallback(() => setAddressUserFilter(null), []);
+  const openAddressInbox = useCallback((address: string) => {
+    setMailboxAddressRequest((current) => ({ address, requestId: (current?.requestId || 0) + 1 }));
+    navigateMenu('inbox');
+  }, [navigateMenu]);
+  const filterUserAddresses = useCallback((filter: { userId: number; userEmail: string }) => {
+    setAddressUserFilter((current) => ({ userId: filter.userId, userEmail: filter.userEmail, requestId: (current?.requestId || 0) + 1 }));
+    setGlobalQuery('');
+    navigateMenu('address');
+  }, [navigateMenu]);
   const renderContent = (menu: MenuKey) => {
-    if (menu === 'dashboard') return <DashboardView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} setActiveMenu={navigateMenu} />;
-    if (menu === 'stats') return <StatsView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} />;
-    if (menu === 'address') return <AddressView request={request} notify={push} ask={ask} globalQuery={globalQuery} openSettings={openSettings} userFilter={addressUserFilter} userTotal={stats.userCount} onClearUserFilter={() => setAddressUserFilter(null)} onOpenInbox={(address) => { setMailboxAddressRequest((current) => ({ address, requestId: (current?.requestId || 0) + 1 })); navigateMenu('inbox'); }} />;
-    if (menu === 'users') return <UsersView request={request} notify={push} ask={ask} globalQuery={globalQuery} onFilterUserAddresses={(filter) => { setAddressUserFilter((current) => ({ userId: filter.userId, userEmail: filter.userEmail, requestId: (current?.requestId || 0) + 1 })); setGlobalQuery(''); navigateMenu('address'); }} />;
-    if (menu === 'inbox' || menu === 'sent' || menu === 'unknown') return <MailWorkspace mode={menu} active={activeMenu === menu} request={request} notify={push} ask={ask} globalQuery={globalQuery} addressRequest={menu === 'inbox' ? mailboxAddressRequest : null} setActiveMenu={navigateMenu} setComposeSeed={setComposeSeed} />;
+    if (menu === 'dashboard') return <MemoDashboardView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} setActiveMenu={navigateMenu} />;
+    if (menu === 'stats') return <MemoStatsView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} />;
+    if (menu === 'address') return <MemoAddressView request={request} notify={push} ask={ask} globalQuery={globalQuery} openSettings={openSettings} userFilter={addressUserFilter} userTotal={stats.userCount} onClearUserFilter={clearAddressUserFilter} onOpenInbox={openAddressInbox} />;
+    if (menu === 'users') return <UsersView request={request} notify={push} ask={ask} globalQuery={globalQuery} onFilterUserAddresses={filterUserAddresses} />;
+    if (menu === 'inbox' || menu === 'sent' || menu === 'unknown') {
+      const visualMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : activeMenu;
+      return (
+        <div key={`${menu}:${mailStateScope}`} className="h-full min-h-0">
+          <MemoMailWorkspace mode={menu} active={activeMenu === menu} visualActive={visualMenu === menu} request={request} notify={push} ask={ask} globalQuery={globalQuery} addressRequest={menu === 'inbox' ? mailboxAddressRequest : null} setActiveMenu={navigateMenu} setComposeSeed={setComposeSeed} mailStateScope={mailStateScope} />
+        </div>
+      );
+    }
     if (menu === 'compose') return <ComposeView request={request} notify={push} seed={composeSeed} clearSeed={() => setComposeSeed({})} />;
     if (menu === 'settings') return <SettingsView request={request} notify={push} locale={locale} setLocale={updateLocale} authPanel={<AuthPanel {...authProps} initialOpen={false} />} />;
     return <MaintenanceView request={request} notify={push} />;
@@ -268,24 +422,42 @@ export default function App() {
       setPageDragX(pageSwipeRef.current.pendingX);
     });
   }, []);
-  const resetPageSwipe = useCallback(() => {
+  const resetPageSwipe = useCallback((clearTarget = true) => {
     if (pageSwipeRef.current.rafId) {
       window.cancelAnimationFrame(pageSwipeRef.current.rafId);
     }
-    pageSwipeRef.current = { active: false, lock: 'none', startX: 0, startY: 0, lastX: 0, lastY: 0, pendingX: 0, rafId: 0 };
+    pageSwipeRef.current = createPageSwipeState();
+    if (clearTarget) {
+      pageSwipeTargetMenuRef.current = null;
+      setPageSwipeTargetMenu(null);
+    }
   }, []);
-  const switchMobileMenuBySwipe = useCallback((direction: 1 | -1) => {
+  const getMobileSwipeTarget = useCallback((direction: 1 | -1): MenuKey | null => {
+    const currentIndex = mobileSwipeMenus.indexOf(activeMenu);
+    if (currentIndex < 0) return null;
+    return mobileSwipeMenus[(currentIndex + direction + mobileSwipeMenus.length) % mobileSwipeMenus.length];
+  }, [activeMenu]);
+  const setGestureTargetMenu = useCallback((menu: MenuKey | null) => {
+    if (pageSwipeTargetMenuRef.current === menu) return;
+    pageSwipeTargetMenuRef.current = menu;
+    setPageSwipeTargetMenu(menu);
+  }, []);
+  const switchMobileMenuBySwipe = useCallback((direction: 1 | -1, targetOverride?: MenuKey | null, dragOverride?: number) => {
     const currentIndex = mobileSwipeMenus.indexOf(activeMenu);
     if (currentIndex < 0) return;
-    const nextMenu = mobileSwipeMenus[currentIndex + direction];
-    if (!nextMenu) {
-      setPageSettling(true);
-      setPageDragX(0);
-      window.setTimeout(() => setPageSettling(false), 160);
-      return;
-    }
+    const nextMenu = targetOverride || getMobileSwipeTarget(direction);
+    if (!nextMenu) return;
     const width = typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360);
+    const currentDragX = dragOverride ?? getPageDragX(getLockedSwipeDelta(pageSwipeRef.current.lastX - pageSwipeRef.current.startX, direction), width);
+    const targetX = direction === 1 ? -width : width;
+    const duration = getPageSettleMs(currentDragX, targetX, width);
+    if (pageTransitionTimerRef.current !== null) {
+      window.clearTimeout(pageTransitionTimerRef.current);
+      pageTransitionTimerRef.current = null;
+    }
+    setPageSettleMs(duration);
     setPageSettling(true);
+    setGestureTargetMenu(nextMenu);
     setPageMotion('');
     setVisitedMenus((current) => {
       if (current.has(nextMenu)) return current;
@@ -293,22 +465,27 @@ export default function App() {
       next.add(nextMenu);
       return next;
     });
-    setPageDragX(direction === 1 ? width : -width);
-    setActiveMenu(nextMenu);
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => setPageDragX(0));
-    });
-    window.setTimeout(() => {
+    setPageDragX(targetX);
+    pageTransitionTimerRef.current = window.setTimeout(() => {
+      setActiveMenu(nextMenu);
       setPageSettling(false);
+      setPageDragX(0);
+      setGestureTargetMenu(null);
       setPageMotion('');
-    }, 230);
-  }, [activeMenu]);
+      setPageSettleMs(220);
+      pageTransitionTimerRef.current = null;
+    }, duration);
+  }, [activeMenu, getMobileSwipeTarget, setGestureTargetMenu]);
+  useEffect(() => () => {
+    if (pageTransitionTimerRef.current !== null) window.clearTimeout(pageTransitionTimerRef.current);
+  }, []);
   useEffect(() => {
     const handleNativeTouchStart = (event: TouchEvent) => {
+      if (pageSettling) return;
       if (!isMobileViewport() || event.touches.length !== 1 || shouldIgnorePageSwipe(event.target)) return;
       const touch = event.touches[0];
       if (pageSwipeRef.current.rafId) window.cancelAnimationFrame(pageSwipeRef.current.rafId);
-      pageSwipeRef.current = { active: true, lock: 'none', startX: touch.clientX, startY: touch.clientY, lastX: touch.clientX, lastY: touch.clientY, pendingX: 0, rafId: 0 };
+      pageSwipeRef.current = { ...createPageSwipeState(), active: true, startX: touch.clientX, startY: touch.clientY, lastX: touch.clientX, lastY: touch.clientY };
     };
     const handleNativeTouchMove = (event: TouchEvent) => {
       const swipe = pageSwipeRef.current;
@@ -321,35 +498,58 @@ export default function App() {
       const absX = Math.abs(dx);
       if (swipe.lock === 'none' && (absX > SWIPE.startThreshold || dy > SWIPE.startThreshold)) {
         swipe.lock = absX > dy * SWIPE.ratio ? 'page' : 'scroll';
+        if (swipe.lock === 'page') {
+          swipe.direction = dx < 0 ? 1 : -1;
+          swipe.targetMenu = getMobileSwipeTarget(swipe.direction);
+          setGestureTargetMenu(swipe.targetMenu);
+        }
       }
       if (swipe.lock === 'scroll') return;
       if (swipe.lock === 'page') {
         event.preventDefault();
         setPageSettling(false);
-        const limit = Math.min(130, Math.max(72, window.innerWidth * 0.34));
-        schedulePageDragX(Math.max(-limit, Math.min(limit, dx)));
+        const width = Math.max(window.innerWidth, 360);
+        const visualDx = getLockedSwipeDelta(dx, swipe.direction);
+        setGestureTargetMenu(Math.abs(visualDx) > 2 ? swipe.targetMenu : null);
+        schedulePageDragX(getPageDragX(visualDx, width));
       }
     };
     const handleNativeTouchEnd = () => {
       const swipe = pageSwipeRef.current;
-      resetPageSwipe();
+      resetPageSwipe(false);
       if (!swipe.active) return;
       if (swipe.lock !== 'page') return;
       const dx = swipe.lastX - swipe.startX;
       const dy = Math.abs(swipe.lastY - swipe.startY);
-      if (Math.abs(dx) < SWIPE.pageMinDistance || Math.abs(dx) < dy * SWIPE.pageRatio || dy > SWIPE.pageMaxVertical) {
+      const width = typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360);
+      const direction = swipe.direction || (dx < 0 ? 1 : -1);
+      const lockedDx = getLockedSwipeDelta(dx, direction);
+      const dragX = getPageDragX(lockedDx, width);
+      if (Math.abs(lockedDx) < SWIPE.pageMinDistance || Math.abs(lockedDx) < dy * SWIPE.pageRatio || dy > SWIPE.pageMaxVertical) {
+        const settleMs = getPageSettleMs(dragX, 0, width);
         setPageSettling(true);
+        setPageSettleMs(settleMs);
         setPageDragX(0);
-        window.setTimeout(() => setPageSettling(false), 160);
+        window.setTimeout(() => {
+          setPageSettling(false);
+          setGestureTargetMenu(null);
+          setPageSettleMs(220);
+        }, settleMs);
         return;
       }
-      switchMobileMenuBySwipe(dx < 0 ? 1 : -1);
+      switchMobileMenuBySwipe(direction, swipe.targetMenu, dragX);
     };
     const handleNativeTouchCancel = () => {
-      resetPageSwipe();
+      resetPageSwipe(false);
+      const settleMs = getPageSettleMs(pageDragX, 0, typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360));
       setPageSettling(true);
+      setPageSettleMs(settleMs);
       setPageDragX(0);
-      window.setTimeout(() => setPageSettling(false), 160);
+      window.setTimeout(() => {
+        setPageSettling(false);
+        setGestureTargetMenu(null);
+        setPageSettleMs(220);
+      }, settleMs);
     };
     document.addEventListener('touchstart', handleNativeTouchStart, { capture: true, passive: true });
     document.addEventListener('touchmove', handleNativeTouchMove, { capture: true, passive: false });
@@ -361,7 +561,7 @@ export default function App() {
       document.removeEventListener('touchend', handleNativeTouchEnd, { capture: true });
       document.removeEventListener('touchcancel', handleNativeTouchCancel, { capture: true });
     };
-  }, [resetPageSwipe, schedulePageDragX, switchMobileMenuBySwipe]);
+  }, [getMobileSwipeTarget, pageDragX, pageSettling, resetPageSwipe, schedulePageDragX, setGestureTargetMenu, switchMobileMenuBySwipe]);
   const authProps = useMemo(() => ({
     apiBase,
     setApiBase,
@@ -380,19 +580,57 @@ export default function App() {
     canForgetBrowser: Boolean(adminPassword || sitePassword || userAccessToken || addressJwt),
     onForgetBrowser: forgetCurrentBrowser,
   }), [addressJwt, adminPassword, apiBase, forgetCurrentBrowser, openSettings?.cfTurnstileSiteKey, openSettings?.enableGlobalTurnstileCheck, push, request, sitePassword, userAccessToken]);
-  const isMailMenu = activeMenu === 'inbox' || activeMenu === 'sent';
+  const activeSwipeIndex = mobileSwipeMenus.indexOf(activeMenu);
+  const useMobileSwipeDeck = mobilePagesEnabled && connected && activeSwipeIndex >= 0;
+  const renderLegacyMenus = !useMobileSwipeDeck;
+  const isMailMenu = !useMobileSwipeDeck && (activeMenu === 'inbox' || activeMenu === 'sent');
+  const visualActiveMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : activeMenu;
+  const swipeViewportWidth = typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360);
+  const navSwipeTargetMenu = useMobileSwipeDeck ? pageSwipeTargetMenu : null;
+  const navSwipeProgress = navSwipeTargetMenu ? Math.min(1, Math.abs(pageDragX) / Math.max(swipeViewportWidth, 1)) : 0;
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (visualActiveMenu === 'inbox' || visualActiveMenu === 'sent') return;
+    document.body.style.setProperty('--mobile-mail-chrome-progress', '0');
+    document.body.classList.remove('mobile-mail-chrome-collapsed');
+  }, [visualActiveMenu]);
   return (
     <div className={cls('h-[100dvh] w-full overflow-hidden bg-[var(--color-bg)] font-sans text-slate-800', theme === 'dark' && 'theme-dark')}>
       <div className="flex h-full w-full min-w-0 overflow-hidden bg-[var(--color-bg)]">
-        <Sidebar activeMenu={activeMenu} setActiveMenu={navigateMenu} stats={stats} theme={theme} setTheme={setTheme} locale={locale} setLocale={updateLocale} refresh={refreshCurrent} apiBase={apiBase} connected={Boolean(adminPassword || userAccessToken || addressJwt)}>
+        <Sidebar activeMenu={activeMenu} setActiveMenu={navigateMenu} stats={stats} theme={theme} setTheme={setTheme} locale={locale} setLocale={updateLocale} refresh={refreshCurrent} apiBase={apiBase} connected={connected}>
           <AuthPanel {...authProps} initialOpen={!adminPassword && !userAccessToken} />
         </Sidebar>
         <main className={cls('mobile-page-swipe-zone relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-surface)]', isMailMenu && 'mobile-mail-shell')}>
-          <Header activeMenu={activeMenu} setActiveMenu={navigateMenu} query={globalQuery} setQuery={setGlobalQuery} refresh={refreshCurrent} apiBase={apiBase} locale={locale} />
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden pb-[calc(62px+env(safe-area-inset-bottom))] md:pb-0">
-            {keepAliveMenus.filter((menu) => menu === activeMenu || visitedMenus.has(menu)).map((menu) => (
+          <Header activeMenu={visualActiveMenu} setActiveMenu={navigateMenu} query={globalQuery} setQuery={setGlobalQuery} refresh={refreshCurrent} apiBase={apiBase} locale={locale} />
+          <div className={cls('min-h-0 min-w-0 flex-1 overflow-hidden md:pb-0', useMobileSwipeDeck ? 'mobile-swipe-stage pb-0' : 'pb-[calc(62px+env(safe-area-inset-bottom))]')}>
+            {useMobileSwipeDeck && (
+              <div className="mobile-swipe-cache h-full min-h-0 min-w-0">
+                {mobileSwipeMenus.map((menu) => {
+                  const offset = getPageRenderOffset(menu, activeMenu, pageSwipeTargetMenu, pageDragX);
+                  const active = menu === activeMenu;
+                  const isMailSwipeMenu = menu === 'inbox' || menu === 'sent';
+                  const pageStyle = {
+                    transform: `translate3d(calc(${offset * 100}% + ${pageDragX}px), 0, 0)`,
+                    '--mobile-page-settle-ms': `${pageSettleMs}ms`,
+                  } as CSSProperties;
+                  return (
+                    <section
+                      key={menu}
+                      data-menu={menu}
+                      aria-hidden={!active}
+                      className={cls('mobile-swipe-page h-full min-h-0 min-w-0', isMailSwipeMenu && 'mobile-mail-shell mobile-mail-swipe-page', active && 'mobile-page-current active', pageSettling && 'mobile-page-settling')}
+                      style={pageStyle}
+                    >
+                      {renderContent(menu)}
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+            {renderLegacyMenus && keepAliveMenus.filter((menu) => menu === activeMenu || visitedMenus.has(menu)).map((menu) => (
               <section
                 key={menu}
+                data-menu={menu}
                 aria-hidden={menu !== activeMenu}
                 className={cls('h-full min-h-0 min-w-0', menu === activeMenu ? 'block mobile-page-current' : 'hidden', menu === activeMenu && pageMotion === 'forward' && 'mobile-page-slide-forward', menu === activeMenu && pageMotion === 'back' && 'mobile-page-slide-back', menu === activeMenu && pageSettling && 'mobile-page-settling')}
                 style={menu === activeMenu ? { transform: `translate3d(${pageDragX}px, 0, 0)` } : undefined}
@@ -403,7 +641,16 @@ export default function App() {
               </section>
             ))}
           </div>
-          <MobileNav activeMenu={activeMenu} setActiveMenu={navigateMenu} locale={locale} />
+          <MobileNav
+            activeMenu={activeMenu}
+            visualActiveMenu={visualActiveMenu}
+            setActiveMenu={navigateMenu}
+            locale={locale}
+            swipeTargetMenu={navSwipeTargetMenu}
+            swipeProgress={navSwipeProgress}
+            settling={pageSettling}
+            settleMs={pageSettleMs}
+          />
         </main>
       </div>
       <NoticeToast notice={notice} />

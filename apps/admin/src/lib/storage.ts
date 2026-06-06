@@ -139,12 +139,18 @@ const AUTH_PRIVATE_STORAGE_KEYS = [
   STORAGE_KEYS.authExpiredNotice,
   STORAGE_KEYS.addressUserFilter,
   STORAGE_KEYS.shareAdminListCache,
+  STORAGE_KEYS.mailReadIds,
+  STORAGE_KEYS.mailStarredIds,
+  STORAGE_KEYS.mailReadAllBefore,
 ];
 
 const AUTH_PRIVATE_STORAGE_PREFIXES = [
   STORAGE_KEYS.authScopedPrefix,
   STORAGE_KEYS.mailListCachePrefix,
   STORAGE_KEYS.mailDetailSessionPrefix,
+  `${STORAGE_KEYS.mailReadIds}.`,
+  `${STORAGE_KEYS.mailStarredIds}.`,
+  `${STORAGE_KEYS.mailReadAllBefore}.`,
   STORAGE_KEYS.addressListCachePrefix,
   STORAGE_KEYS.senderAccessListCachePrefix,
   STORAGE_KEYS.userListCachePrefix,
@@ -353,6 +359,9 @@ function clearPrivateCaches(storages: Storage[]): void {
   storages.forEach((storage) => {
     removeStorageKey(storage, STORAGE_KEYS.addressUserFilter);
     removeStorageKey(storage, STORAGE_KEYS.shareAdminListCache);
+    removeStorageKey(storage, STORAGE_KEYS.mailReadIds);
+    removeStorageKey(storage, STORAGE_KEYS.mailStarredIds);
+    removeStorageKey(storage, STORAGE_KEYS.mailReadAllBefore);
     removeStoragePrefixes(storage, cachePrefixes);
   });
 }

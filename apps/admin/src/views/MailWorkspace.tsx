@@ -28,6 +28,11 @@ type MailboxAddressRequest = { address: string; requestId: number };
 type FetchOptions = { addressOverride?: string; pageOverride?: number; forceRefresh?: boolean };
 type TranslateFn = (zh: string, en: string) => string;
 type PullRefreshLock = 'none' | 'pull' | 'scroll';
+type MailStateStorageKeys = { readIds: string; readAllBefore: string; starredIds: string };
+type MobileMailChromePaddingVars = CSSProperties & {
+  '--mobile-mail-viewport-top-pad': string;
+  '--mobile-mail-viewport-bottom-pad': string;
+};
 
 const MAIL_LIST_CACHE_VERSION = 4;
 const MAIL_SEARCH_INDEX_PAGE_SIZE = 240;
@@ -39,6 +44,28 @@ const storageId = (mode: MailMode, id: number) => `${mode}:${id}`;
 
 function isCompactMailViewport(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px), (hover: none) and (pointer: coarse)').matches;
+}
+
+function clampMailChromeProgress(progress: number): number {
+  return Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
+}
+
+function easeOutQuart(progress: number): number {
+  return 1 - (1 - progress) ** 4;
+}
+
+function getMobileMailChromePaddingVars(progress: number): MobileMailChromePaddingVars {
+  const clamped = clampMailChromeProgress(progress);
+  const expandedTop = 122.4;
+  const collapsedTop = 5.6;
+  const expandedBottom = 48.8;
+  const collapsedBottom = 5.6;
+  const top = expandedTop + (collapsedTop - expandedTop) * clamped;
+  const bottom = expandedBottom + (collapsedBottom - expandedBottom) * clamped;
+  return {
+    '--mobile-mail-viewport-top-pad': `${top.toFixed(2)}px`,
+    '--mobile-mail-viewport-bottom-pad': `${bottom.toFixed(2)}px`,
+  } as MobileMailChromePaddingVars;
 }
 
 function useCompactMailViewport(): boolean {
@@ -242,6 +269,26 @@ function applyLocalState<T extends AnyMail>(items: T[], mode: MailMode, readIds:
   });
 }
 
+function mailStateStorageKey(baseKey: string, scope: string): string {
+  return `${baseKey}.${scope || 'default'}`;
+}
+
+function getMailStateStorageKeys(scope: string): MailStateStorageKeys {
+  return {
+    readIds: mailStateStorageKey(STORAGE_KEYS.mailReadIds, scope),
+    readAllBefore: mailStateStorageKey(STORAGE_KEYS.mailReadAllBefore, scope),
+    starredIds: mailStateStorageKey(STORAGE_KEYS.mailStarredIds, scope),
+  };
+}
+
+function readMailState(keys: MailStateStorageKeys) {
+  return {
+    readIds: new Set(readJsonStorage<string[]>(keys.readIds, [])),
+    readAllBefore: readJsonStorage<Record<string, number>>(keys.readAllBefore, {}),
+    starredIds: new Set(readJsonStorage<string[]>(keys.starredIds, [])),
+  };
+}
+
 function mailListCacheKey(mode: MailMode, page: number, pageSize: number, address: string): string {
   return `${STORAGE_KEYS.mailListCachePrefix}${mode}:${page}:${pageSize}:${encodeURIComponent(address.trim())}`;
 }
@@ -292,7 +339,7 @@ function writeSessionMailDetail(mode: MailMode, mail: AnyMail): void {
   }
 }
 
-export function MailWorkspace({ mode, active, request, notify, ask, globalQuery, addressRequest, setActiveMenu, setComposeSeed }: { mode: MailMode; active: boolean; request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; addressRequest?: MailboxAddressRequest | null; setActiveMenu: (menu: MenuKey) => void; setComposeSeed: (seed: Partial<ComposePayload>) => void }) {
+export function MailWorkspace({ mode, active, visualActive = active, request, notify, ask, globalQuery, addressRequest, setActiveMenu, setComposeSeed, mailStateScope }: { mode: MailMode; active: boolean; visualActive?: boolean; request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; addressRequest?: MailboxAddressRequest | null; setActiveMenu: (menu: MenuKey) => void; setComposeSeed: (seed: Partial<ComposePayload>) => void; mailStateScope: string }) {
   const [mails, setMails] = useState<AnyMail[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
@@ -316,9 +363,10 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const [pullRefreshLabel, setPullRefreshLabel] = useState('');
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set(readJsonStorage<string[]>(STORAGE_KEYS.mailReadIds, [])));
-  const [readAllBefore, setReadAllBefore] = useState<Record<string, number>>(() => readJsonStorage<Record<string, number>>(STORAGE_KEYS.mailReadAllBefore, {}));
-  const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set(readJsonStorage<string[]>(STORAGE_KEYS.mailStarredIds, [])));
+  const mailStateKeys = useMemo(() => getMailStateStorageKeys(mailStateScope), [mailStateScope]);
+  const [readIds, setReadIds] = useState<Set<string>>(() => readMailState(mailStateKeys).readIds);
+  const [readAllBefore, setReadAllBefore] = useState<Record<string, number>>(() => readMailState(mailStateKeys).readAllBefore);
+  const [starredIds, setStarredIds] = useState<Set<string>>(() => readMailState(mailStateKeys).starredIds);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [autoSeconds, setAutoSeconds] = useState(60);
   const [refreshCountdown, setRefreshCountdown] = useState(autoSeconds);
@@ -333,11 +381,15 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const fetchAbortRef = useRef<AbortController | null>(null);
   const mobileLoadMoreSeqRef = useRef(0);
   const mobileLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const mailWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const mailListPanelRef = useRef<HTMLDivElement | null>(null);
   const mailListViewportRef = useRef<HTMLDivElement | null>(null);
   const mobileChromeRef = useRef({ collapsed: false, lastScrollTop: 0, progress: 0 });
   const mobileChromeRafRef = useRef<number | null>(null);
+  const mobileChromeSettleRafRef = useRef<number | null>(null);
+  const mobileChromeSettleTimerRef = useRef<number | null>(null);
   const mobileChromePendingRef = useRef(0);
+  const ownsMobileChromeRef = useRef(false);
   const searchIndexSeqRef = useRef(0);
   const searchIndexAbortRef = useRef<AbortController | null>(null);
   const searchIndexKeyRef = useRef('');
@@ -360,7 +412,12 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
   const immersiveMobileMail = mode === 'inbox' || mode === 'sent';
+  const ownsMobileChrome = visualActive && immersiveMobileMail && compactViewport && !isMobileDetail;
   const currentListCacheKey = useMemo(() => mailListCacheKey(mode, page, pageSize, address), [address, mode, page, pageSize]);
+
+  useEffect(() => {
+    ownsMobileChromeRef.current = ownsMobileChrome;
+  }, [ownsMobileChrome]);
 
   useEffect(() => {
     setFilterMenuOpen(false);
@@ -368,19 +425,25 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   useEffect(() => {
     setExpandedMailStacks(new Set());
   }, [activeTab, address, searchQuery, mode, page]);
+  useEffect(() => {
+    const next = readMailState(mailStateKeys);
+    setReadIds(next.readIds);
+    setReadAllBefore(next.readAllBefore);
+    setStarredIds(next.starredIds);
+  }, [mailStateKeys]);
 
   const persistReadIds = useCallback((next: Set<string>) => {
     setReadIds(new Set(next));
-    writeJsonStorage(STORAGE_KEYS.mailReadIds, [...next].slice(-MAIL_READ_HISTORY_MAX));
-  }, []);
+    writeJsonStorage(mailStateKeys.readIds, [...next].slice(-MAIL_READ_HISTORY_MAX));
+  }, [mailStateKeys.readIds]);
   const persistReadAllBefore = useCallback((next: Record<string, number>) => {
     setReadAllBefore(next);
-    writeJsonStorage(STORAGE_KEYS.mailReadAllBefore, next);
-  }, []);
+    writeJsonStorage(mailStateKeys.readAllBefore, next);
+  }, [mailStateKeys.readAllBefore]);
   const persistStarredIds = useCallback((next: Set<string>) => {
     setStarredIds(new Set(next));
-    writeJsonStorage(STORAGE_KEYS.mailStarredIds, [...next].slice(-MAIL_READ_HISTORY_MAX));
-  }, []);
+    writeJsonStorage(mailStateKeys.starredIds, [...next].slice(-MAIL_READ_HISTORY_MAX));
+  }, [mailStateKeys.starredIds]);
 
   const saveListCache = useCallback((items: AnyMail[], totalCount: number, cacheKey = currentListCacheKey) => {
     writeJsonStorage(cacheKey, {
@@ -681,7 +744,7 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
 
   const setMobileMailChromeProgress = useCallback((progress: number, immediate = false) => {
     if (typeof document === 'undefined') return;
-    const next = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
+    const next = clampMailChromeProgress(progress);
     const collapsed = next >= 0.92;
     mobileChromeRef.current.progress = next;
     mobileChromeRef.current.collapsed = collapsed;
@@ -689,8 +752,18 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
     const applyProgress = () => {
       mobileChromeRafRef.current = null;
       const current = mobileChromePendingRef.current;
-      document.body.style.setProperty('--mobile-mail-chrome-progress', current.toFixed(3));
-      document.body.classList.toggle('mobile-mail-chrome-collapsed', current >= 0.92);
+      const value = current.toFixed(3);
+      const locallyCollapsed = current >= 0.92;
+      const root = mailWorkspaceRef.current;
+      root?.style.setProperty('--mobile-mail-chrome-progress', value);
+      const paddingVars = getMobileMailChromePaddingVars(current);
+      root?.style.setProperty('--mobile-mail-viewport-top-pad', String(paddingVars['--mobile-mail-viewport-top-pad']));
+      root?.style.setProperty('--mobile-mail-viewport-bottom-pad', String(paddingVars['--mobile-mail-viewport-bottom-pad']));
+      root?.classList.toggle('mobile-mail-chrome-collapsed-local', locallyCollapsed);
+      if (ownsMobileChromeRef.current) {
+        document.body.style.setProperty('--mobile-mail-chrome-progress', value);
+        document.body.classList.toggle('mobile-mail-chrome-collapsed', locallyCollapsed);
+      }
     };
     if (immediate) {
       if (mobileChromeRafRef.current !== null) {
@@ -704,39 +777,91 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       mobileChromeRafRef.current = window.requestAnimationFrame(applyProgress);
     }
   }, []);
-  const setMobileMailChromeCollapsed = useCallback((collapsed: boolean) => {
-    setMobileMailChromeProgress(collapsed ? 1 : 0, true);
+
+  const animateMobileMailChromeProgress = useCallback((target: number, duration = 190) => {
+    if (typeof window === 'undefined') return;
+    if (mobileChromeSettleRafRef.current !== null) {
+      window.cancelAnimationFrame(mobileChromeSettleRafRef.current);
+      mobileChromeSettleRafRef.current = null;
+    }
+    const from = mobileChromeRef.current.progress;
+    const to = clampMailChromeProgress(target);
+    if (Math.abs(to - from) < 0.012) {
+      setMobileMailChromeProgress(to, true);
+      return;
+    }
+    const start = window.performance.now();
+    const tick = (now: number) => {
+      const elapsed = Math.min(1, (now - start) / Math.max(duration, 1));
+      const eased = easeOutQuart(elapsed);
+      setMobileMailChromeProgress(from + (to - from) * eased, true);
+      if (elapsed < 1) {
+        mobileChromeSettleRafRef.current = window.requestAnimationFrame(tick);
+      } else {
+        mobileChromeSettleRafRef.current = null;
+      }
+    };
+    mobileChromeSettleRafRef.current = window.requestAnimationFrame(tick);
   }, [setMobileMailChromeProgress]);
 
   useEffect(() => () => {
     if (mobileChromeRafRef.current !== null) window.cancelAnimationFrame(mobileChromeRafRef.current);
-    document.body.style.setProperty('--mobile-mail-chrome-progress', '0');
-    document.body.classList.remove('mobile-mail-chrome-collapsed');
+    if (mobileChromeSettleRafRef.current !== null) window.cancelAnimationFrame(mobileChromeSettleRafRef.current);
+    if (mobileChromeSettleTimerRef.current !== null) window.clearTimeout(mobileChromeSettleTimerRef.current);
+    if (ownsMobileChromeRef.current) {
+      document.body.style.setProperty('--mobile-mail-chrome-progress', '0');
+      document.body.classList.remove('mobile-mail-chrome-collapsed');
+    }
   }, []);
 
   useEffect(() => {
-    if (!active) return undefined;
     if (!immersiveMobileMail || !compactViewport || isMobileDetail) {
-      setMobileMailChromeCollapsed(false);
+      setMobileMailChromeProgress(0, true);
       return undefined;
     }
-    return () => setMobileMailChromeCollapsed(false);
-  }, [active, compactViewport, immersiveMobileMail, isMobileDetail, setMobileMailChromeCollapsed]);
+    if (visualActive) setMobileMailChromeProgress(mobileChromeRef.current.progress, true);
+    return undefined;
+  }, [compactViewport, immersiveMobileMail, isMobileDetail, setMobileMailChromeProgress, visualActive]);
+
+  const settleMobileMailChromeAfterScroll = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (mobileChromeSettleTimerRef.current !== null) window.clearTimeout(mobileChromeSettleTimerRef.current);
+    mobileChromeSettleTimerRef.current = window.setTimeout(() => {
+      mobileChromeSettleTimerRef.current = null;
+      const current = mobileChromeRef.current.progress;
+      if (current <= 0.02 || current >= 0.98) return;
+      animateMobileMailChromeProgress(current >= 0.52 ? 1 : 0, 210);
+    }, 110);
+  }, [animateMobileMailChromeProgress]);
+
+  const cancelMobileMailChromeSettle = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (mobileChromeSettleTimerRef.current !== null) {
+      window.clearTimeout(mobileChromeSettleTimerRef.current);
+      mobileChromeSettleTimerRef.current = null;
+    }
+    if (mobileChromeSettleRafRef.current !== null) {
+      window.cancelAnimationFrame(mobileChromeSettleRafRef.current);
+      mobileChromeSettleRafRef.current = null;
+    }
+  }, []);
 
   const handleMailListScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     if (!active || !immersiveMobileMail || !compactViewport || isMobileDetail) return;
+    cancelMobileMailChromeSettle();
     const scrollTop = event.currentTarget.scrollTop;
     const previous = mobileChromeRef.current.lastScrollTop;
     const delta = scrollTop - previous;
     mobileChromeRef.current.lastScrollTop = Math.max(0, scrollTop);
-    if (scrollTop <= 18) {
+    if (scrollTop <= 10) {
       if (mobileChromeRef.current.progress !== 0) setMobileMailChromeProgress(0);
       return;
     }
     if (Math.abs(delta) < 0.5) return;
-    const travel = delta > 0 ? 112 : 96;
+    const travel = delta > 0 ? 176 : 148;
     setMobileMailChromeProgress(mobileChromeRef.current.progress + (delta / travel));
-  }, [active, compactViewport, immersiveMobileMail, isMobileDetail, setMobileMailChromeProgress]);
+    settleMobileMailChromeAfterScroll();
+  }, [active, cancelMobileMailChromeSettle, compactViewport, immersiveMobileMail, isMobileDetail, setMobileMailChromeProgress, settleMobileMailChromeAfterScroll]);
 
   const setPullRefreshVisual = useCallback((offset: number, label: string) => {
     pullRefreshVisualRef.current = { offset, label };
@@ -848,7 +973,9 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
       return;
     }
     mobileChromeRef.current.lastScrollTop = viewport.scrollTop;
-    setMobileMailChromeProgress(Math.min(1, viewport.scrollTop / 160));
+    const scrollProgress = Math.min(1, viewport.scrollTop / 190);
+    const preservedProgress = mobileChromeRef.current.progress;
+    setMobileMailChromeProgress(preservedProgress >= 0.9 && viewport.scrollTop > 48 ? preservedProgress : scrollProgress, true);
   }, [active, compactViewport, immersiveMobileMail, isMobileDetail, mode, setMobileMailChromeProgress]);
 
   const searchSource = useMemo(() => {
@@ -1101,7 +1228,11 @@ export function MailWorkspace({ mode, active, request, notify, ask, globalQuery,
   }, [closeMobileDetailWithMotion, isMobileDetail]);
 
   return (
-    <div className="mail-workspace flex h-full min-h-0 overflow-hidden bg-white">
+    <div
+      ref={mailWorkspaceRef}
+      className={cls('mail-workspace flex h-full min-h-0 overflow-hidden bg-white', mobileChromeRef.current.collapsed && 'mobile-mail-chrome-collapsed-local')}
+      style={{ '--mobile-mail-chrome-progress': mobileChromeRef.current.progress.toFixed(3), ...getMobileMailChromePaddingVars(mobileChromeRef.current.progress) } as CSSProperties}
+    >
       <div ref={mailListPanelRef} className={cls('mail-list-panel relative flex h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-100 lg:w-[430px] xl:w-[470px]', isMobileDetail ? 'hidden lg:flex' : 'flex')}>
         <div className="mail-list-header shrink-0 px-2.5 py-2 md:p-4 md:pb-2">
           <div className="mail-toolbar flex flex-wrap items-center gap-2">
