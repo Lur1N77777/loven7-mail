@@ -168,3 +168,8 @@ npm run check:cloudflare:runtime
 ## 开源
 
 MIT License。欢迎 Issue、PR 和部署反馈。提交前请先看 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [SECURITY.md](SECURITY.md)。
+
+## 友链 / Friendly Links
+
+- [LinuxDo 社区](https://linux.do/)：认可并感谢 LinuxDo 社区对开源交流、开发者互助和中文技术社区建设的支持。
+- [LinuxDo Community](https://linux.do/): recognized with appreciation for its support of open-source discussion, developer collaboration, and the Chinese tech community.
