@@ -57,6 +57,8 @@ Loven7 Mail Cloudflare Suite 是给 Cloudflare Temp Mail / `cloudflare_temp_emai
 
 更短的部署说明见 [部署速查](docs/DEPLOYMENT_QUICKSTART.md)，完整 Agent 指令见 [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md)。
 
+> Cloudflare 官方 `Deploy to Cloudflare` 按钮目前只支持 Workers，不支持本仓库的双 Pages 项目部署；建议先用上面的 Agent 指令或按下面步骤手动部署。
+
 ## 界面预览
 
 <table>
