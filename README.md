@@ -61,25 +61,43 @@ Loven7 Mail Cloudflare Suite 是给 Cloudflare Temp Mail / `cloudflare_temp_emai
 
 ## 界面预览
 
+点击图片可以查看大图。
+
 <table>
   <tr>
     <td width="50%" align="center">
       <a href="docs/screenshots/admin-dashboard.png"><img src="docs/screenshots/admin-dashboard.png" alt="管理后台仪表盘" height="220" /></a>
-      <br /><sub>管理后台 · 仪表盘</sub>
+      <br /><strong>管理后台 · 运营总览</strong>
+      <br /><sub>统计、快捷入口、能力覆盖和下一步操作集中展示。</sub>
     </td>
     <td width="50%" align="center">
-      <a href="docs/screenshots/admin-inbox.png"><img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱" height="220" /></a>
-      <br /><sub>管理后台 · 收件箱</sub>
+      <a href="docs/screenshots/admin-connection-settings.png"><img src="docs/screenshots/admin-connection-settings.png" alt="管理后台连接设置" height="220" /></a>
+      <br /><strong>连接设置 · 本地保存</strong>
+      <br /><sub>Worker API、管理员密码和站点密码只保存在当前浏览器。</sub>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <a href="docs/screenshots/webmail-share.png"><img src="docs/screenshots/webmail-share.png" alt="用户站分享页" height="220" /></a>
-      <br /><sub>用户站 / 分享站</sub>
+      <a href="docs/screenshots/admin-inbox.png"><img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱" height="220" /></a>
+      <br /><strong>管理后台 · 邮件工作台</strong>
+      <br /><sub>收件、发件和未知邮件统一管理，验证码与正文快速查看。</sub>
     </td>
     <td width="50%" align="center">
       <a href="docs/screenshots/mobile-address-actions.png"><img src="docs/screenshots/mobile-address-actions.png" alt="移动端地址管理" height="220" /></a>
-      <br /><sub>移动端 · 地址管理</sub>
+      <br /><strong>移动端 · 地址操作</strong>
+      <br /><sub>手机上也能复制、筛选、打开登录链接和分享动作。</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/webmail-login.png"><img src="docs/screenshots/webmail-login.png" alt="用户站登录页" height="220" /></a>
+      <br /><strong>用户站 · 登录入口</strong>
+      <br /><sub>邮箱地址和密码登录，支持中英切换，适合直接交给用户。</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="docs/screenshots/webmail-share.png"><img src="docs/screenshots/webmail-share.png" alt="用户站分享页" height="220" /></a>
+      <br /><strong>用户站 · 分享访问</strong>
+      <br /><sub>分享链接可聚合多个邮箱，保留验证码复制和自动刷新。</sub>
     </td>
   </tr>
 </table>
