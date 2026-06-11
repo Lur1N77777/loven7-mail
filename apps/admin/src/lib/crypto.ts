@@ -25,3 +25,14 @@ export function jwtExpired(value: string): boolean {
     return false;
   }
 }
+
+export function decodeJwtPayload(value: string): Record<string, unknown> | null {
+  if (!isLikelyJwt(value)) return null;
+  try {
+    const json = atob(value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(json);
+    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}

@@ -32,7 +32,10 @@ export const STORAGE_KEYS = {
   userListCachePrefix: 'loven7.userListCache.',
 };
 
-export const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+// 管理后台与 Worker API 同源部署，API_BASE 默认留空代表请求发到当前域名。
+// 如需使用独立 Worker 域名，可设置环境变量 VITE_API_BASE 覆盖。
+const BUILTIN_API_BASE = '';
+export const API_BASE = (import.meta.env.VITE_API_BASE || BUILTIN_API_BASE).replace(/\/$/, '');
 export const FRONTEND_LOGIN_BASE = (import.meta.env.VITE_FRONTEND_LOGIN_BASE || '').replace(/\/$/, '');
 
 export const CACHE_TTL = {
