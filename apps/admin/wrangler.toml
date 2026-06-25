@@ -1,0 +1,23 @@
+name = "loven7-mail-admin"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-05-11"
+
+# 管理后台邮件已读/星标状态可选使用 Cloudflare KV。建议在 Cloudflare Pages 控制台绑定：
+#   binding: MAIL_READ_STATE_KV
+#   namespace: 你自己创建的 KV Namespace
+#
+# 公开仓库不能提交真实 KV Namespace ID。Wrangler Direct Upload 部署时，如果你明确
+# 想用本地 wrangler.toml 声明绑定，请把下面示例改成你自己的 KV ID 并取消注释。
+#
+# [[kv_namespaces]]
+# binding = "MAIL_READ_STATE_KV"
+# id = "replace-with-your-production-kv-namespace-id"
+# preview_id = "replace-with-your-preview-kv-namespace-id"
+#
+# [env.production]
+# compatibility_date = "2026-05-11"
+#
+# [[env.production.kv_namespaces]]
+# binding = "MAIL_READ_STATE_KV"
+# id = "replace-with-your-production-kv-namespace-id"
+# preview_id = "replace-with-your-preview-kv-namespace-id"
