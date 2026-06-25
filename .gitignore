@@ -4,8 +4,10 @@ dist/
 dist-release/
 release-cloudflare-pages/
 .wrangler/
+wrangler.local.toml
 .omx/
 .playwright-mcp/
+.codex-dev-logs/
 qa-shots/
 tmp/
 .env
@@ -17,6 +19,8 @@ tmp/
 .dev.vars.*
 !.dev.vars.example
 *.log
+_backup_*.json
+_backup_*.log
 *.zip
 .DS_Store
 Thumbs.db
