@@ -24,6 +24,13 @@ type MailListCache = {
   savedAt: number;
   items: AnyMail[];
 };
+type RemoteMailState = {
+  mode?: MailMode;
+  readIds?: string[];
+  starredIds?: string[];
+  readAllBefore?: Record<string, number>;
+  updatedAt?: number;
+};
 type MailboxAddressRequest = { address: string; requestId: number };
 type FetchOptions = { addressOverride?: string; pageOverride?: number; forceRefresh?: boolean };
 type TranslateFn = (zh: string, en: string) => string;
@@ -37,10 +44,29 @@ type MobileMailChromePaddingVars = CSSProperties & {
 const MAIL_LIST_CACHE_VERSION = 4;
 const MAIL_SEARCH_INDEX_PAGE_SIZE = 240;
 const MAIL_SEARCH_INDEX_MAX_PAGES = 90;
+const MAIL_STATE_CHANGED_EVENT = 'loven7-mail-state-changed';
 const PULL_REFRESH_TRIGGER = 52;
 const PULL_REFRESH_MAX_OFFSET = 86;
+const MOBILE_MAIL_CHROME_COLLAPSE_TRAVEL = 360;
+const MOBILE_MAIL_CHROME_EXPAND_TRAVEL = 320;
+const MOBILE_MAIL_CHROME_SETTLE_DELAY = 220;
 const isParsed = (mail: AnyMail): mail is ParsedMail => typeof (mail as ParsedMail).senderAddress === 'string';
-const storageId = (mode: MailMode, id: number) => `${mode}:${id}`;
+const mailStateMode = (mode: MailMode): MailMode => (mode === 'unknown' ? 'inbox' : mode);
+const storageId = (mode: MailMode, id: number) => `${mailStateMode(mode)}:${id}`;
+
+function stateIdCandidates(mode: MailMode, id: number) {
+  const primary = storageId(mode, id);
+  if (mailStateMode(mode) !== 'inbox') return [primary];
+  return [primary, `unknown:${id}`];
+}
+
+function hasMailStateId(ids: Set<string>, mode: MailMode, id: number) {
+  return stateIdCandidates(mode, id).some((key) => ids.has(key));
+}
+
+function deleteMailStateId(ids: Set<string>, mode: MailMode, id: number) {
+  stateIdCandidates(mode, id).forEach((key) => ids.delete(key));
+}
 
 function isCompactMailViewport(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px), (hover: none) and (pointer: coarse)').matches;
@@ -263,9 +289,8 @@ function getAttachmentObjectUrls(items: AnyMail[]): Set<string> {
 
 function applyLocalState<T extends AnyMail>(items: T[], mode: MailMode, readIds: Set<string>, starredIds: Set<string>, readAllBefore: Record<string, number>): T[] {
   return items.map((mail) => {
-    const key = storageId(mode, mail.id);
-    const readByBulk = mail.id <= Number(readAllBefore[mode] || 0);
-    return { ...mail, isUnread: !(readIds.has(key) || readByBulk), isStarred: starredIds.has(key) };
+    const readByBulk = mail.id <= readAllBeforeValue(readAllBefore, mode);
+    return { ...mail, isUnread: !(hasMailStateId(readIds, mode, mail.id) || readByBulk), isStarred: hasMailStateId(starredIds, mode, mail.id) };
   });
 }
 
@@ -286,6 +311,54 @@ function readMailState(keys: MailStateStorageKeys) {
     readIds: new Set(readJsonStorage<string[]>(keys.readIds, [])),
     readAllBefore: readJsonStorage<Record<string, number>>(keys.readAllBefore, {}),
     starredIds: new Set(readJsonStorage<string[]>(keys.starredIds, [])),
+  };
+}
+
+function notifyMailStateChanged(keys: MailStateStorageKeys) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(MAIL_STATE_CHANGED_EVENT, {
+    detail: { readIdsKey: keys.readIds, readAllBeforeKey: keys.readAllBefore, starredIdsKey: keys.starredIds },
+  }));
+}
+
+function isSameMailStateScope(detail: unknown, keys: MailStateStorageKeys) {
+  const record = detail && typeof detail === 'object' ? detail as Partial<Record<'readIdsKey' | 'readAllBeforeKey' | 'starredIdsKey', unknown>> : {};
+  return record.readIdsKey === keys.readIds
+    && record.readAllBeforeKey === keys.readAllBefore
+    && record.starredIdsKey === keys.starredIds;
+}
+
+function mergeSets<T>(left: Set<T>, right: Iterable<T>) {
+  const next = new Set(left);
+  for (const item of right) next.add(item);
+  return next;
+}
+
+function readAllBeforeValue(value: Record<string, number>, mode: MailMode) {
+  const primary = mailStateMode(mode);
+  const legacyInbound = primary === 'inbox' ? Number(value.unknown || 0) || 0 : 0;
+  return Math.max(0, Number(value[primary] || 0) || 0, legacyInbound);
+}
+
+function withReadAllBeforeValue(value: Record<string, number>, mode: MailMode, nextValue: number) {
+  const primary = mailStateMode(mode);
+  const next = { ...value, [primary]: Math.max(0, Number(nextValue || 0) || 0) };
+  if (primary === 'inbox') next.unknown = next[primary];
+  return next;
+}
+
+function normalizeRemoteIds(ids: string[] | undefined, mode: MailMode) {
+  return new Set((ids || []).map((id) => {
+    const numeric = Number(String(id).split(':').pop() || 0);
+    return Number.isInteger(numeric) && numeric > 0 ? storageId(mode, numeric) : '';
+  }).filter(Boolean));
+}
+
+function normalizeRemoteMailState(remote: RemoteMailState | null | undefined, mode: MailMode) {
+  return {
+    readIds: normalizeRemoteIds(remote?.readIds, mode),
+    starredIds: normalizeRemoteIds(remote?.starredIds, mode),
+    readAllBefore: readAllBeforeValue(remote?.readAllBefore || {}, mode),
   };
 }
 
@@ -367,6 +440,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const [readIds, setReadIds] = useState<Set<string>>(() => readMailState(mailStateKeys).readIds);
   const [readAllBefore, setReadAllBefore] = useState<Record<string, number>>(() => readMailState(mailStateKeys).readAllBefore);
   const [starredIds, setStarredIds] = useState<Set<string>>(() => readMailState(mailStateKeys).starredIds);
+  const [remoteStateReady, setRemoteStateReady] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [autoSeconds, setAutoSeconds] = useState(60);
   const [refreshCountdown, setRefreshCountdown] = useState(autoSeconds);
@@ -430,20 +504,91 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     setReadIds(next.readIds);
     setReadAllBefore(next.readAllBefore);
     setStarredIds(next.starredIds);
-  }, [mailStateKeys]);
+    setRemoteStateReady(false);
+    let cancelled = false;
+    request<RemoteMailState>(`/api/mail-state${buildQuery({ mode })}`, {
+      forceRefresh: true,
+      skipCache: true,
+      timeoutMs: 6500,
+    })
+      .then((remote) => {
+        if (cancelled) return;
+        const remoteState = normalizeRemoteMailState(remote, mode);
+        const mergedReadIds = mergeSets(next.readIds, remoteState.readIds);
+        const mergedStarredIds = mergeSets(next.starredIds, remoteState.starredIds);
+        const mergedReadAllBefore = Math.max(readAllBeforeValue(next.readAllBefore, mode), remoteState.readAllBefore);
+        const mergedReadAllBeforeRecord = withReadAllBeforeValue(next.readAllBefore, mode, mergedReadAllBefore);
+
+        setReadIds(mergedReadIds);
+        setStarredIds(mergedStarredIds);
+        setReadAllBefore(mergedReadAllBeforeRecord);
+        writeJsonStorage(mailStateKeys.readIds, [...mergedReadIds].slice(-MAIL_READ_HISTORY_MAX));
+        writeJsonStorage(mailStateKeys.starredIds, [...mergedStarredIds].slice(-MAIL_READ_HISTORY_MAX));
+        writeJsonStorage(mailStateKeys.readAllBefore, mergedReadAllBeforeRecord);
+        notifyMailStateChanged(mailStateKeys);
+
+        const localHasExtraRead = [...next.readIds].some((id) => !remoteState.readIds.has(id));
+        const localHasExtraStar = [...next.starredIds].some((id) => !remoteState.starredIds.has(id));
+        const localHasNewerBulk = readAllBeforeValue(next.readAllBefore, mode) > remoteState.readAllBefore;
+        if (localHasExtraRead || localHasExtraStar || localHasNewerBulk) {
+          void request<RemoteMailState>('/api/mail-state', {
+            method: 'PATCH',
+            body: {
+              mode,
+              readIds: [...mergedReadIds],
+              starredIds: [...mergedStarredIds],
+              readAllBefore: mergedReadAllBefore,
+            },
+            timeoutMs: 6500,
+            invalidates: ['/api/mail-state'],
+          }).catch((error) => console.warn('mail state backfill failed', error));
+        }
+      })
+      .catch((error) => {
+        console.warn('mail state sync failed', error);
+      })
+      .finally(() => {
+        if (!cancelled) setRemoteStateReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mailStateKeys, mode, request]);
 
   const persistReadIds = useCallback((next: Set<string>) => {
     setReadIds(new Set(next));
     writeJsonStorage(mailStateKeys.readIds, [...next].slice(-MAIL_READ_HISTORY_MAX));
-  }, [mailStateKeys.readIds]);
+    notifyMailStateChanged(mailStateKeys);
+  }, [mailStateKeys]);
   const persistReadAllBefore = useCallback((next: Record<string, number>) => {
     setReadAllBefore(next);
     writeJsonStorage(mailStateKeys.readAllBefore, next);
-  }, [mailStateKeys.readAllBefore]);
+    notifyMailStateChanged(mailStateKeys);
+  }, [mailStateKeys]);
   const persistStarredIds = useCallback((next: Set<string>) => {
     setStarredIds(new Set(next));
     writeJsonStorage(mailStateKeys.starredIds, [...next].slice(-MAIL_READ_HISTORY_MAX));
-  }, [mailStateKeys.starredIds]);
+    notifyMailStateChanged(mailStateKeys);
+  }, [mailStateKeys]);
+  const patchRemoteMailState = useCallback((body: Record<string, unknown>) => {
+    void request<RemoteMailState>('/api/mail-state', {
+      method: 'PATCH',
+      body: { mode, ...body },
+      timeoutMs: 6500,
+      invalidates: ['/api/mail-state'],
+    }).catch((error) => console.warn('mail state persist failed', error));
+  }, [mode, request]);
+  useEffect(() => {
+    const onMailStateChanged = (event: Event) => {
+      if (!isSameMailStateScope((event as CustomEvent).detail, mailStateKeys)) return;
+      const next = readMailState(mailStateKeys);
+      setReadIds(next.readIds);
+      setReadAllBefore(next.readAllBefore);
+      setStarredIds(next.starredIds);
+    };
+    window.addEventListener(MAIL_STATE_CHANGED_EVENT, onMailStateChanged);
+    return () => window.removeEventListener(MAIL_STATE_CHANGED_EVENT, onMailStateChanged);
+  }, [mailStateKeys]);
 
   const saveListCache = useCallback((items: AnyMail[], totalCount: number, cacheKey = currentListCacheKey) => {
     writeJsonStorage(cacheKey, {
@@ -649,19 +794,21 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     return () => { window.clearTimeout(id); if (addressDebounceRef.current === id) addressDebounceRef.current = null; };
   }, [address, addressInput]);
   useEffect(() => {
+    if (!remoteStateReady) return;
     const cached = readJsonStorage<MailListCache | null>(currentListCacheKey, null);
     if (!cached || cached.version !== MAIL_LIST_CACHE_VERSION || !Array.isArray(cached.items)) return;
     setMails(applyLocalState(cached.items, mode, readIds, starredIds, readAllBefore));
     setCount(cached.count || cached.items.length);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentListCacheKey, mode]);
+  }, [currentListCacheKey, mode, remoteStateReady]);
   useEffect(() => {
+    if (!remoteStateReady) return;
     if (suppressNextFetchRef.current) {
       suppressNextFetchRef.current = false;
       return;
     }
     fetchData(false);
-  }, [mode, page, pageSize, address]);
+  }, [mode, page, pageSize, address, remoteStateReady]);
   useEffect(() => {
     if (mode !== 'inbox' || !addressRequest || consumedAddressRequestRef.current === addressRequest.requestId) return;
     consumedAddressRequestRef.current = addressRequest.requestId;
@@ -829,9 +976,9 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     mobileChromeSettleTimerRef.current = window.setTimeout(() => {
       mobileChromeSettleTimerRef.current = null;
       const current = mobileChromeRef.current.progress;
-      if (current <= 0.02 || current >= 0.98) return;
-      animateMobileMailChromeProgress(current >= 0.52 ? 1 : 0, 210);
-    }, 110);
+      if (current <= 0.18) animateMobileMailChromeProgress(0, 240);
+      else if (current >= 0.82) animateMobileMailChromeProgress(1, 280);
+    }, MOBILE_MAIL_CHROME_SETTLE_DELAY);
   }, [animateMobileMailChromeProgress]);
 
   const cancelMobileMailChromeSettle = useCallback(() => {
@@ -857,9 +1004,10 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       if (mobileChromeRef.current.progress !== 0) setMobileMailChromeProgress(0);
       return;
     }
-    if (Math.abs(delta) < 0.5) return;
-    const travel = delta > 0 ? 176 : 148;
-    setMobileMailChromeProgress(mobileChromeRef.current.progress + (delta / travel));
+    if (Math.abs(delta) < 0.75) return;
+    const travel = delta > 0 ? MOBILE_MAIL_CHROME_COLLAPSE_TRAVEL : MOBILE_MAIL_CHROME_EXPAND_TRAVEL;
+    const nextProgress = mobileChromeRef.current.progress + (delta / travel);
+    setMobileMailChromeProgress(mobileChromeRef.current.progress + (nextProgress - mobileChromeRef.current.progress) * 0.72);
     settleMobileMailChromeAfterScroll();
   }, [active, cancelMobileMailChromeSettle, compactViewport, immersiveMobileMail, isMobileDetail, setMobileMailChromeProgress, settleMobileMailChromeAfterScroll]);
 
@@ -973,7 +1121,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       return;
     }
     mobileChromeRef.current.lastScrollTop = viewport.scrollTop;
-    const scrollProgress = Math.min(1, viewport.scrollTop / 190);
+    const scrollProgress = Math.min(1, viewport.scrollTop / MOBILE_MAIL_CHROME_COLLAPSE_TRAVEL);
     const preservedProgress = mobileChromeRef.current.progress;
     setMobileMailChromeProgress(preservedProgress >= 0.9 && viewport.scrollTop > 48 ? preservedProgress : scrollProgress, true);
   }, [active, compactViewport, immersiveMobileMail, isMobileDetail, mode, setMobileMailChromeProgress]);
@@ -1077,9 +1225,11 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, [clearAddressFilter]);
 
   const markRead = useCallback((mail: AnyMail) => {
+    const key = storageId(mode, mail.id);
     const next = new Set(readIds);
-    next.add(storageId(mode, mail.id));
+    next.add(key);
     persistReadIds(next);
+    patchRemoteMailState({ readIdsToAdd: [key] });
     const cachedDetail = readSessionMailDetail(mode, mail.id);
     if (cachedDetail && !(isParsed(cachedDetail) && !cachedDetail.message && (cachedDetail.raw || (isParsed(mail) && mail.raw)))) {
       setMails((current) => current.map((item) => (item.id === mail.id ? { ...item, ...cachedDetail } : item)));
@@ -1097,7 +1247,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     }
     setSelectedId(mail.id);
     if (compactViewport) setIsMobileDetail(true);
-  }, [compactViewport, mode, persistReadIds, readIds]);
+  }, [compactViewport, mode, patchRemoteMailState, persistReadIds, readIds]);
   const settleMobileDetailOffset = useCallback((offset: number, after?: () => void) => {
     setMobileDetailSettling(true);
     setMobileDetailDragX(offset);
@@ -1113,11 +1263,13 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, [closeMobileDetail, settleMobileDetailOffset]);
   const toggleStar = useCallback((mail: AnyMail) => {
     const key = storageId(mode, mail.id);
-    const next = new Set(starredIds);
-    if (next.has(key)) next.delete(key);
+    const next = new Set<string>(starredIds);
+    const remove = hasMailStateId(next, mode, mail.id);
+    if (remove) deleteMailStateId(next, mode, mail.id);
     else next.add(key);
     persistStarredIds(next);
-  }, [mode, persistStarredIds, starredIds]);
+    patchRemoteMailState(remove ? { starredIdsToRemove: [key] } : { starredIdsToAdd: [key] });
+  }, [mode, patchRemoteMailState, persistStarredIds, starredIds]);
   const markVisibleRead = () => {
     const targets = filtered.filter((mail) => mail.isUnread);
     if (!targets.length) {
@@ -1127,6 +1279,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     const next = new Set(readIds);
     targets.forEach((mail) => next.add(storageId(mode, mail.id)));
     persistReadIds(next);
+    patchRemoteMailState({ readIdsToAdd: targets.map((mail) => storageId(mode, mail.id)) });
     notify('success', locale === 'en-US' ? `${targets.length} marked as read` : `已标记 ${targets.length} 封为已读`);
   };
   const markAllRead = () => {
@@ -1134,8 +1287,9 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       notify('info', t('当前邮箱没有可标记邮件', 'No mail to mark in this mailbox'));
       return;
     }
-    const maxId = Math.max(...mails.map((mail) => mail.id), Number(readAllBefore[mode] || 0));
-    persistReadAllBefore({ ...readAllBefore, [mode]: maxId });
+    const maxId = Math.max(...mails.map((mail) => mail.id), readAllBeforeValue(readAllBefore, mode));
+    persistReadAllBefore(withReadAllBeforeValue(readAllBefore, mode, maxId));
+    patchRemoteMailState({ readAllBefore: maxId });
     notify('success', t('已将当前邮箱现有邮件全部标记为已读', 'All existing mail in this mailbox marked as read'));
   };
   const copyValue = useCallback(async (value: string, label = t('已复制', 'Copied'), key?: string) => {

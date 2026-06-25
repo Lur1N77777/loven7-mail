@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, Filter, Link2, Lock, Plus, RefreshCw, Save, Shield, Trash2, UserRoundCog } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { CACHE_TTL, DEFAULT_PAGE_SIZE, STORAGE_KEYS } from '../lib/constants';
@@ -10,11 +10,37 @@ import type { AddressUserFilter, BoundAddressRecord, ListResponse, RoleRecord, U
 import { EmptyState, LoadingState, Modal, Pagination, type Notify, useConfirm } from '../components/Common';
 
 type CachedUserList = { version: number; count: number; savedAt: number; users: UserRecord[]; roles: RoleRecord[] };
+type InlineAddressCacheEntry = { data: BoundAddressRecord[]; loading: boolean; savedAt: number; requestId?: number };
 const USER_LIST_CACHE_VERSION = 1;
+const USER_INLINE_ANIMATION_MS = 240;
+const DESKTOP_USERS_QUERY = '(min-width: 768px)';
+
+function useMediaQuery(query: string) {
+  const getMatches = useCallback(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+    return window.matchMedia(query).matches;
+  }, [query]);
+  const [matches, setMatches] = useState(getMatches);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const media = window.matchMedia(query);
+    const onChange = () => setMatches(media.matches);
+    onChange();
+    if (typeof media.addEventListener === 'function') media.addEventListener('change', onChange);
+    else media.addListener(onChange);
+    return () => {
+      if (typeof media.removeEventListener === 'function') media.removeEventListener('change', onChange);
+      else media.removeListener(onChange);
+    };
+  }, [query]);
+
+  return matches;
+}
 
 export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddresses }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; onFilterUserAddresses?: (filter: AddressUserFilter) => void }) {
   const locale = getRuntimeLocale();
-  const t = (zh: string, en: string) => localeText(zh, en, locale);
+  const t = useCallback((zh: string, en: string) => localeText(zh, en, locale), [locale]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [roles, setRoles] = useState<RoleRecord[]>([]);
   const [count, setCount] = useState(0);
@@ -28,11 +54,35 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   const [resetTarget, setResetTarget] = useState<UserRecord | null>(null);
   const [expandedUser, setExpandedUser] = useState<UserRecord | null>(null);
   const [closingUserId, setClosingUserId] = useState<number | null>(null);
+  const [inlineAddressCache, setInlineAddressCache] = useState<Record<number, InlineAddressCacheEntry>>({});
   const [password, setPassword] = useState('');
   const deferredQuery = useDeferredValue(query || globalQuery);
+  const isDesktopUsers = useMediaQuery(DESKTOP_USERS_QUERY);
   const requestSeqRef = useRef(0);
   const closeTimerRef = useRef<number | null>(null);
+  const inlineAddressCacheRef = useRef<Record<number, InlineAddressCacheEntry>>({});
+  const inlineAddressRequestSeqRef = useRef(0);
+  const inlineAddressAbortRef = useRef<AbortController | null>(null);
   const listCacheKey = useMemo(() => `${STORAGE_KEYS.userListCachePrefix}${page}:${pageSize}:${encodeURIComponent(deferredQuery)}`, [deferredQuery, page, pageSize]);
+
+  const updateInlineAddressCache = useCallback((updater: (current: Record<number, InlineAddressCacheEntry>) => Record<number, InlineAddressCacheEntry>) => {
+    setInlineAddressCache((current) => {
+      const next = updater(current);
+      inlineAddressCacheRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const finishInlineAddressRequest = useCallback((userId: number, requestId: number) => {
+    updateInlineAddressCache((current) => {
+      const entry = current[userId];
+      if (!entry || entry.requestId !== requestId) return current;
+      return {
+        ...current,
+        [userId]: { ...entry, loading: false },
+      };
+    });
+  }, [updateInlineAddressCache]);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     const seq = ++requestSeqRef.current;
@@ -60,6 +110,7 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   useEffect(() => {
     const cached = readJsonStorage<CachedUserList | null>(listCacheKey, null);
     if (!cached || cached.version !== USER_LIST_CACHE_VERSION || !Array.isArray(cached.users)) return;
+    if (!cached.savedAt || Date.now() - cached.savedAt > CACHE_TTL.shortList) return;
     setUsers(cached.users);
     setCount(cached.count || cached.users.length);
     setRoles(Array.isArray(cached.roles) ? cached.roles : []);
@@ -90,24 +141,94 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
       notify('error', error instanceof Error ? error.message : t('创建用户失败', 'Failed to create user'));
     }
   };
+  const loadUserAddresses = useCallback(async (user: UserRecord, forceRefresh = false) => {
+    const cached = inlineAddressCacheRef.current[user.id];
+    if (!forceRefresh && cached?.loading) return;
+    if (!forceRefresh && cached && cached.savedAt > 0 && Date.now() - cached.savedAt < CACHE_TTL.list) return;
+    const seq = ++inlineAddressRequestSeqRef.current;
+    inlineAddressAbortRef.current?.abort();
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    inlineAddressAbortRef.current = controller;
+    updateInlineAddressCache((current) => ({
+      ...current,
+      [user.id]: { data: current[user.id]?.data || [], loading: true, savedAt: current[user.id]?.savedAt || 0, requestId: seq },
+    }));
+    try {
+      const res = await request<{ results: BoundAddressRecord[] }>(`/admin/users/bind_address/${user.id}`, {
+        forceRefresh,
+        signal: controller?.signal,
+        skipCache: true,
+      });
+      if (controller?.signal.aborted || seq !== inlineAddressRequestSeqRef.current) {
+        finishInlineAddressRequest(user.id, seq);
+        return;
+      }
+      updateInlineAddressCache((current) => ({
+        ...current,
+        [user.id]: { data: res.results || [], loading: false, savedAt: Date.now(), requestId: seq },
+      }));
+    } catch (error) {
+      if (controller?.signal.aborted || seq !== inlineAddressRequestSeqRef.current) {
+        finishInlineAddressRequest(user.id, seq);
+        return;
+      }
+      updateInlineAddressCache((current) => ({
+        ...current,
+        [user.id]: { data: current[user.id]?.data || [], loading: false, savedAt: current[user.id]?.savedAt || 0, requestId: seq },
+      }));
+      notify('error', error instanceof Error ? error.message : t('绑定地址加载失败', 'Failed to load bound addresses'));
+    } finally {
+      if (inlineAddressAbortRef.current === controller) inlineAddressAbortRef.current = null;
+    }
+  }, [finishInlineAddressRequest, notify, request, t, updateInlineAddressCache]);
+
+  const bindUserAddress = useCallback(async (user: UserRecord, address: string) => {
+    const trimmed = address.trim();
+    if (!trimmed) { notify('error', t('请填写邮箱地址', 'Enter an email address')); return false; }
+    try {
+      await request('/admin/users/bind_address', { method: 'POST', body: { user_id: user.id, user_email: user.user_email, address: trimmed } });
+      notify('success', t('地址已绑定', 'Address bound'));
+      await loadUserAddresses(user, true);
+      return true;
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : t('绑定失败', 'Bind failed'));
+      return false;
+    }
+  }, [loadUserAddresses, notify, request, t]);
+
+  useEffect(() => {
+    const target = expandedUser;
+    if (!target || closingUserId === target.id) return;
+    void loadUserAddresses(target);
+  }, [closingUserId, expandedUser, loadUserAddresses]);
+
   useEffect(() => () => {
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    inlineAddressAbortRef.current?.abort();
   }, []);
 
   const closeExpandedUser = useCallback(() => {
     const target = expandedUser;
     if (!target) return;
+    if (closingUserId === target.id) return;
     if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
     setClosingUserId(target.id);
     closeTimerRef.current = window.setTimeout(() => {
       setExpandedUser((current) => (current?.id === target.id ? null : current));
       setClosingUserId((current) => (current === target.id ? null : current));
       closeTimerRef.current = null;
-    }, 220);
-  }, [expandedUser]);
+    }, USER_INLINE_ANIMATION_MS);
+  }, [closingUserId, expandedUser]);
 
   const deleteUser = (user: UserRecord) => ask({ title: t(`删除用户 ${user.user_email}`, `Delete user ${user.user_email}`), body: t('将删除用户和地址绑定关系。', 'This deletes the user and address bindings.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(`/admin/users/${user.id}`, { method: 'DELETE' }); notify('success', t('用户已删除', 'User deleted')); setExpandedUser((current) => (current?.id === user.id ? null : current)); setClosingUserId((current) => (current === user.id ? null : current)); await fetchData(); } });
   const toggleUser = (user: UserRecord) => {
+    if (closingUserId === user.id) {
+      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+      setClosingUserId(null);
+      setExpandedUser(user);
+      return;
+    }
     if (expandedUser?.id === user.id) {
       closeExpandedUser();
       return;
@@ -118,6 +239,8 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
     setExpandedUser(user);
   };
   const jumpToAddressManagement = (user: UserRecord) => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
     setExpandedUser(null);
     setClosingUserId(null);
     onFilterUserAddresses?.({ userId: user.id, userEmail: user.user_email, requestId: Date.now() });
@@ -125,8 +248,11 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
 
   const renderMobileUser = (user: UserRecord) => {
     const expanded = expandedUser?.id === user.id;
+    const closing = closingUserId === user.id;
+    const renderInline = expanded || closing;
+    const addressEntry = inlineAddressCache[user.id] || { data: [], loading: false, savedAt: 0 };
     return <div key={user.id} className="user-inline-wrapper">
-      <article className={cls('user-mobile-card', expanded && 'expanded')} onClick={() => toggleUser(user)}>
+      <article className={cls('user-mobile-card', expanded && !closing && 'expanded')} onClick={() => toggleUser(user)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-800">{user.user_email}</p>
@@ -143,18 +269,38 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
           <button className="btn-danger compact col-span-2" onClick={(event) => { event.stopPropagation(); deleteUser(user); }}><Trash2 size={14} /> {t('删除', 'Delete')}</button>
         </div>
       </article>
-      {expanded && <div className={cls('user-inline-mobile-motion', closingUserId === user.id && 'is-closing')}><UserAddressInline user={user} request={request} notify={notify} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div>}
+      {renderInline && <div className={cls('user-inline-mobile-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><UserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
+    </div>;
+  };
+
+  const renderDesktopUser = (user: UserRecord) => {
+    const expanded = expandedUser?.id === user.id;
+    const closing = closingUserId === user.id;
+    const renderInline = expanded || closing;
+    const addressEntry = inlineAddressCache[user.id] || { data: [], loading: false, savedAt: 0 };
+    return <div key={user.id} className={cls('user-grid-item', expanded && !closing && 'is-expanded')}>
+      <div className="user-grid-row user-grid-body-row" role="button" tabIndex={0} onClick={() => toggleUser(user)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleUser(user); } }}>
+        <div className="font-mono text-xs text-slate-400">#{user.id}</div>
+        <div className="min-w-0"><span className="address-strong">{user.user_email}</span></div>
+        <div>{user.role_text || t('默认', 'Default')}</div>
+        <div>{user.address_count ?? 0}</div>
+        <div>{formatDateTime(user.updated_at || user.created_at)}</div>
+        <div className="flex justify-end gap-2">
+          <button className="table-action" onClick={(event) => { event.stopPropagation(); toggleUser(user); }} title={t('查看地址', 'View addresses')}>{expanded && !closing ? <ChevronUp size={15} /> : <Link2 size={15} />}</button>
+          <button className="table-action" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }} title={t('在地址管理筛选', 'Filter in address management')}><Filter size={15} /></button>
+          <button className="table-action" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }} title={t('角色', 'Role')}><Shield size={15} /></button>
+          <button className="table-action" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }} title={t('重置密码', 'Reset password')}><Lock size={15} /></button>
+          <button className="table-action danger" onClick={(event) => { event.stopPropagation(); deleteUser(user); }} title={t('删除', 'Delete')}><Trash2 size={15} /></button>
+        </div>
+      </div>
+      {renderInline && <div className={cls('user-inline-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><UserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
     </div>;
   };
 
   return <div className="h-full space-y-4 overflow-y-auto p-3 md:p-4 xl:p-6">
     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('用户管理', 'User management')}</h2><p className="mt-1 text-sm text-slate-400">{t('点击用户可直接展开其地址，也可跳转到地址管理批量筛选。', 'Click a user to expand their addresses, or jump to address management with that user filtered.')}</p></div><button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> {t('新建用户', 'New user')}</button></div>
     <div className="panel overflow-hidden"><div className="flex flex-col gap-3 border-b border-slate-100 p-3 md:flex-row"><input className="form-input compact-control" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder={t('搜索用户邮箱', 'Search user email')} /><button className="btn-secondary compact" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && users.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button></div>{loading && users.length === 0 ? <LoadingState /> : users.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={UserRoundCog} title={t('暂无用户', 'No users')} /></div> : <>
-      <div className="space-y-2 p-3 md:hidden">{users.map(renderMobileUser)}</div>
-      <div className="hidden overflow-auto md:block"><table className="data-table action-table"><thead><tr><th>ID</th><th>{t('邮箱', 'Email')}</th><th>{t('角色', 'Role')}</th><th>{t('地址数', 'Addresses')}</th><th>{t('更新时间', 'Updated')}</th><th className="text-right">{t('操作', 'Actions')}</th></tr></thead><tbody>{users.map((user) => {
-        const expanded = expandedUser?.id === user.id;
-        return <Fragment key={user.id}><tr className={cls('cursor-pointer', expanded && 'user-row-expanded')} onClick={() => toggleUser(user)}><td className="font-mono text-xs text-slate-400">#{user.id}</td><td><span className="address-strong">{user.user_email}</span></td><td>{user.role_text || t('默认', 'Default')}</td><td>{user.address_count ?? 0}</td><td>{formatDateTime(user.updated_at || user.created_at)}</td><td><div className="flex justify-end gap-2"><button className="table-action" onClick={(event) => { event.stopPropagation(); toggleUser(user); }} title={t('查看地址', 'View addresses')}>{expanded ? <ChevronUp size={15} /> : <Link2 size={15} />}</button><button className="table-action" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }} title={t('在地址管理筛选', 'Filter in address management')}><Filter size={15} /></button><button className="table-action" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }} title={t('角色', 'Role')}><Shield size={15} /></button><button className="table-action" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }} title={t('重置密码', 'Reset password')}><Lock size={15} /></button><button className="table-action danger" onClick={(event) => { event.stopPropagation(); deleteUser(user); }} title={t('删除', 'Delete')}><Trash2 size={15} /></button></div></td></tr>{expanded && <tr className={cls('user-inline-tr', closingUserId === user.id && 'is-closing')}><td className="user-address-inline-cell" colSpan={6}><UserAddressInline user={user} request={request} notify={notify} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></td></tr>}</Fragment>;
-      })}</tbody></table></div>
+      {isDesktopUsers ? <div className="user-grid-scroll"><div className="user-grid-list" role="table" aria-label={t('用户列表', 'User list')}><div className="user-grid-row user-grid-header" role="row"><div>ID</div><div>{t('邮箱', 'Email')}</div><div>{t('角色', 'Role')}</div><div>{t('地址数', 'Addresses')}</div><div>{t('更新时间', 'Updated')}</div><div className="text-right">{t('操作', 'Actions')}</div></div>{users.map(renderDesktopUser)}</div></div> : <div className="space-y-2 p-3">{users.map(renderMobileUser)}</div>}
     </>}<Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} /></div>
     {createOpen && <Modal title={t('新建用户', 'New user')} onClose={() => setCreateOpen(false)}><div className="space-y-4"><input className="form-input" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder={t('用户邮箱', 'User email')} /><input className="form-input" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder={t('用户密码', 'User password')} /><button className="btn-primary w-full" onClick={createUser}><Plus size={16} /> {t('创建', 'Create')}</button></div></Modal>}
     {roleTarget && <Modal title={t(`修改角色：${roleTarget.user_email}`, `Change role: ${roleTarget.user_email}`)} onClose={() => setRoleTarget(null)}><div className="space-y-3"><button className="btn-secondary w-full justify-start" onClick={async () => { await request('/admin/user_roles', { method: 'POST', body: { user_id: roleTarget.id, role_text: '' } }); notify('success', t('已恢复默认角色', 'Default role restored')); setRoleTarget(null); await fetchData(); }}>{t('默认角色', 'Default role')}</button>{roles.map((role) => <button key={role.role} className="btn-secondary w-full justify-start" onClick={async () => { await request('/admin/user_roles', { method: 'POST', body: { user_id: roleTarget.id, role_text: role.role } }); notify('success', t('角色已更新', 'Role updated')); setRoleTarget(null); await fetchData(); }}>{role.label || role.role}</button>)}</div></Modal>}
@@ -167,36 +313,14 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   </div>;
 }
 
-function UserAddressInline({ user, request, notify, onManage, onClose }: { user: UserRecord; request: Requester; notify: Notify; onManage: () => void; onClose: () => void }) {
+function UserAddressInline({ user, data, loading, onBind, onManage, onClose }: { user: UserRecord; data: BoundAddressRecord[]; loading: boolean; onBind: (address: string) => Promise<boolean>; onManage: () => void; onClose: () => void }) {
   const locale = getRuntimeLocale();
-  const t = (zh: string, en: string) => localeText(zh, en, locale);
-  const [data, setData] = useState<BoundAddressRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const t = useCallback((zh: string, en: string) => localeText(zh, en, locale), [locale]);
   const [address, setAddress] = useState('');
 
-  const fetchData = useCallback(async (forceRefresh = false) => {
-    setLoading(true);
-    try {
-      const res = await request<{ results: BoundAddressRecord[] }>(`/admin/users/bind_address/${user.id}`, { forceRefresh, cacheTtlMs: CACHE_TTL.list });
-      setData(res.results || []);
-    } catch (error) {
-      notify('error', error instanceof Error ? error.message : t('绑定地址加载失败', 'Failed to load bound addresses'));
-    } finally {
-      setLoading(false);
-    }
-  }, [notify, request, t, user.id]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   const bind = async () => {
-    try {
-      await request('/admin/users/bind_address', { method: 'POST', body: { user_id: user.id, user_email: user.user_email, address: address.trim() } });
-      notify('success', t('地址已绑定', 'Address bound'));
-      setAddress('');
-      await fetchData(true);
-    } catch (error) {
-      notify('error', error instanceof Error ? error.message : t('绑定失败', 'Bind failed'));
-    }
+    const ok = await onBind(address);
+    if (ok) setAddress('');
   };
 
   return <div className="user-address-inline">

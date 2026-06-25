@@ -67,6 +67,24 @@ type ShareListResponse = {
   hasMore?: boolean;
 };
 
+type AddressViewProps = {
+  request: Requester;
+  notify: Notify;
+  ask: ReturnType<typeof useConfirm>['ask'];
+  globalQuery: string;
+  openSettings?: OpenSettings | null;
+  userFilter?: AddressUserFilter | null;
+  userTotal?: number;
+  onClearUserFilter?: () => void;
+  onOpenInbox?: (address: string) => void;
+  accountUserToken?: string;
+  accountUserEmail?: string;
+  accountUserRoleLabel?: string;
+  accountDomains?: string[];
+  adminAccessToken?: string;
+  onAccountAddressRowsChange?: (rows: AddressRecord[]) => void;
+};
+
 const ADDRESS_SORT_OPTIONS = [
   { value: 'id', label: 'ID' },
   { value: 'name', label: '地址' },
@@ -402,6 +420,19 @@ function boundToAddressRecord(row: BoundAddressRecord, filter: AddressUserFilter
   return { ...row, user_id: filter.userId, user_email: filter.userEmail };
 }
 
+function boundToAccountAddressRecord(row: BoundAddressRecord, userEmail = '', roleLabel = ''): AddressRecord {
+  return {
+    ...row,
+    id: Number(row.id || 0),
+    name: String(row.name || ''),
+    mail_count: Number(row.mail_count || 0),
+    send_count: Number(row.send_count || 0),
+    user_email: userEmail,
+    owner: userEmail,
+    source_meta: roleLabel,
+  };
+}
+
 function addressSortValue(row: AddressRecord, sortBy: string): string | number {
   if (sortBy === 'name') return row.name || '';
   if (sortBy === 'created_at') return row.created_at || '';
@@ -465,8 +496,25 @@ function buildBatchMailHaystack(item: RawMailRecord): string {
   return normalizeBatchMailSearch(directFields.map(stringifyMailField).filter(Boolean).join(' '));
 }
 
-export function AddressView({ request, notify, ask, globalQuery, openSettings, userFilter, userTotal = 0, onClearUserFilter, onOpenInbox }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; openSettings?: OpenSettings | null; userFilter?: AddressUserFilter | null; userTotal?: number; onClearUserFilter?: () => void; onOpenInbox?: (address: string) => void }) {
+export function AddressView({
+  request,
+  notify,
+  ask,
+  globalQuery,
+  openSettings,
+  userFilter,
+  userTotal = 0,
+  onClearUserFilter,
+  onOpenInbox,
+  accountUserToken = '',
+  accountUserEmail = '',
+  accountUserRoleLabel = '',
+  accountDomains = [],
+  adminAccessToken = '',
+  onAccountAddressRowsChange,
+}: AddressViewProps) {
   const { locale, t } = useLocaleCopy();
+  const isAccountScoped = Boolean(accountUserToken);
   const [data, setData] = useState<AddressRecord[]>([]);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -532,11 +580,16 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   const allAddressIndexReadyRef = useRef(false);
   const allAddressIndexCompleteRef = useRef(false);
   const manualQuery = (query || globalQuery).trim();
-  const effectiveUserFilter = selectedUserFilter && selectedUserFilter.userId > 0 ? selectedUserFilter : null;
+  const effectiveUserFilter = !isAccountScoped && selectedUserFilter && selectedUserFilter.userId > 0 ? selectedUserFilter : null;
   const effectiveUserId = effectiveUserFilter?.userId || 0;
   const effectiveUserEmail = effectiveUserFilter?.userEmail || '';
   const effectiveQuery = manualQuery;
-  const effectiveSettings = openSettings || fallbackOpenSettings;
+  const accountDomainList = useMemo(() => accountDomains.map((domain) => String(domain || '').trim()).filter(Boolean), [accountDomains]);
+  const effectiveSettings = useMemo<OpenSettings | null>(() => {
+    const base = openSettings || fallbackOpenSettings;
+    if (!isAccountScoped || accountDomainList.length === 0) return base;
+    return { ...(base || {}), domains: accountDomainList, defaultDomains: accountDomainList };
+  }, [accountDomainList, fallbackOpenSettings, isAccountScoped, openSettings]);
   const domainOptions = useMemo(() => normalizeDomainOptions(effectiveSettings), [effectiveSettings]);
   const domainSelectOptions = useMemo(() => [
     { value: RANDOM_DOMAIN_VALUE, label: t('随机域名', 'Random domain'), description: t('提交前自动挑选', 'Pick automatically before submit') },
@@ -630,7 +683,10 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
       ? `${row.addressCount} mailbox${row.addressCount === 1 ? '' : 'es'}`
       : `${row.addressCount} 个邮箱`;
   }, [locale]);
-  const listCacheKey = useMemo(() => `${STORAGE_KEYS.addressListCachePrefix}${page}:${pageSize}:user:${effectiveUserId}:${encodeURIComponent(effectiveUserEmail)}:${encodeURIComponent(manualQuery)}:${sortBy}:${sortOrder}`, [effectiveUserEmail, effectiveUserId, manualQuery, page, pageSize, sortBy, sortOrder]);
+  const addressScopeKey = isAccountScoped
+    ? `account:${encodeURIComponent(accountUserEmail || accountUserToken.slice(0, 12))}`
+    : `admin:user:${effectiveUserId}:${encodeURIComponent(effectiveUserEmail)}`;
+  const listCacheKey = useMemo(() => `${STORAGE_KEYS.addressListCachePrefix}${addressScopeKey}:${page}:${pageSize}:${encodeURIComponent(manualQuery)}:${sortBy}:${sortOrder}`, [addressScopeKey, manualQuery, page, pageSize, sortBy, sortOrder]);
   const addressIndexCacheKey = useMemo(() => `${STORAGE_KEYS.addressListCachePrefix}index:${sortBy}:${sortOrder}`, [sortBy, sortOrder]);
 
   const applyAddressIndexSearch = useCallback((rows: AddressRecord[], searchText: string, targetPage = page) => {
@@ -645,6 +701,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   }, [listCacheKey, page, pageSize, sortBy, sortOrder]);
 
   const loadAllAddressIndex = useCallback(async (forceRefresh = false) => {
+    if (isAccountScoped) return;
     if (allAddressIndexLoadingRef.current) return;
     if (!forceRefresh && allAddressIndexCompleteRef.current && allAddressRowsRef.current.length > 0) return;
     allAddressIndexLoadingRef.current = true;
@@ -680,11 +737,11 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     } finally {
       allAddressIndexLoadingRef.current = false;
     }
-  }, [addressIndexCacheKey, request, sortBy, sortOrder]);
+  }, [addressIndexCacheKey, isAccountScoped, request, sortBy, sortOrder]);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     const seq = ++requestSeqRef.current;
-    const canUseAddressIndex = !effectiveUserFilter && Boolean(effectiveQuery) && allAddressRowsRef.current.length > 0;
+    const canUseAddressIndex = !isAccountScoped && !effectiveUserFilter && Boolean(effectiveQuery) && allAddressRowsRef.current.length > 0;
     if (canUseAddressIndex && !forceRefresh) {
       // 先用本地索引即时响应输入，但不要把本地索引当作最终真相：
       // 地址很多时，历史缓存或未完成索引可能漏掉很早创建的地址。
@@ -696,7 +753,20 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     try {
       let results: AddressRecord[] = [];
       let nextCount = 0;
-      if (effectiveUserFilter) {
+      if (isAccountScoped) {
+        const res = await request<{ results?: BoundAddressRecord[] } | BoundAddressRecord[]>('/user_api/bind_address', { forceRefresh, cacheTtlMs: CACHE_TTL.list });
+        if (seq !== requestSeqRef.current) return;
+        const rawRows = Array.isArray(res) ? res : Array.isArray(res?.results) ? res.results : [];
+        const allRows = rawRows
+          .map((row) => boundToAccountAddressRecord(row, accountUserEmail, accountUserRoleLabel))
+          .filter((row) => row.id > 0 && Boolean(row.name));
+        onAccountAddressRowsChange?.(allRows);
+        const search = normalizeSearch(manualQuery);
+        const filtered = allRows.filter((row) => !search || normalizeSearch(`${row.name} ${row.source_meta || ''} ${row.user_email || row.owner || ''}`).includes(search));
+        const sorted = sortAddressRows(filtered, sortBy, sortOrder);
+        nextCount = sorted.length;
+        results = sorted.slice((page - 1) * pageSize, page * pageSize);
+      } else if (effectiveUserFilter) {
         const res = await request<{ results: BoundAddressRecord[] }>(`/admin/users/bind_address/${effectiveUserFilter.userId}`, { forceRefresh, cacheTtlMs: CACHE_TTL.list });
         if (seq !== requestSeqRef.current) return;
         const search = normalizeSearch(manualQuery);
@@ -729,7 +799,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     } finally {
       if (seq === requestSeqRef.current) setLoading(false);
     }
-  }, [applyAddressIndexSearch, effectiveQuery, effectiveUserFilter, listCacheKey, loadAllAddressIndex, manualQuery, notify, page, pageSize, request, sortBy, sortOrder]);
+  }, [accountUserEmail, accountUserRoleLabel, applyAddressIndexSearch, effectiveQuery, effectiveUserFilter, isAccountScoped, listCacheKey, loadAllAddressIndex, manualQuery, notify, onAccountAddressRowsChange, page, pageSize, request, sortBy, sortOrder]);
 
   useEffect(() => {
     const cached = readJsonStorage<CachedList<AddressRecord> | null>(listCacheKey, null);
@@ -738,6 +808,15 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     setCount(cached.count || cached.results.length);
   }, [listCacheKey]);
   useEffect(() => {
+    if (isAccountScoped) {
+      allAddressRowsRef.current = [];
+      allAddressIndexReadyRef.current = false;
+      allAddressIndexCompleteRef.current = false;
+      setAllAddressRows([]);
+      setAllAddressIndexReady(false);
+      setAllAddressIndexComplete(false);
+      return;
+    }
     const cached = readJsonStorage<CachedList<AddressRecord> | null>(addressIndexCacheKey, null);
     if (cached?.version === LIST_CACHE_VERSION && Array.isArray(cached.results) && cached.results.length > 0) {
       allAddressRowsRef.current = cached.results;
@@ -755,11 +834,11 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
       setAllAddressIndexComplete(false);
     }
     void loadAllAddressIndex(false);
-  }, [addressIndexCacheKey, loadAllAddressIndex]);
+  }, [addressIndexCacheKey, isAccountScoped, loadAllAddressIndex]);
   useEffect(() => {
-    if (effectiveUserFilter || !manualQuery || allAddressRows.length === 0) return;
+    if (isAccountScoped || effectiveUserFilter || !manualQuery || allAddressRows.length === 0) return;
     applyAddressIndexSearch(allAddressRows, manualQuery, page);
-  }, [allAddressRows, applyAddressIndexSearch, effectiveUserFilter, manualQuery, page]);
+  }, [allAddressRows, applyAddressIndexSearch, effectiveUserFilter, isAccountScoped, manualQuery, page]);
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => {
     if (userFilter === undefined) return;
@@ -878,6 +957,12 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     if (mobileMenuCloseTimerRef.current !== null) window.clearTimeout(mobileMenuCloseTimerRef.current);
   }, []);
   useEffect(() => {
+    if (isAccountScoped) {
+      setUsers([]);
+      setUsersTotal(1);
+      setUsersLoading(false);
+      return;
+    }
     const cached = readJsonStorage<CachedUserOptions | null>(USER_OPTIONS_CACHE_KEY, null);
     if (cached?.version === USER_OPTIONS_CACHE_VERSION && Array.isArray(cached.users)) {
       const cachedCount = Math.max(Number(cached.count || 0), cached.users.length);
@@ -902,7 +987,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
       })
       .finally(() => { if (!cancelled) setUsersLoading(false); });
     return () => { cancelled = true; };
-  }, [notify, request]);
+  }, [isAccountScoped, locale, notify, request]);
   useEffect(() => {
     if (openSettings || fallbackOpenSettings || settingsLoading || settingsAttempted) return;
     setSettingsAttempted(true);
@@ -928,11 +1013,16 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   }, [newAddress.customPrefix, newAddress.domain, newAddress.enablePrefix, newAddress.enableRandomSubdomain]);
   useEffect(() => {
     if (!createOpen || workerConfigAttempted) return;
+    if (isAccountScoped) {
+      setWorkerAddressRegex(null);
+      setWorkerConfigAttempted(true);
+      return;
+    }
     setWorkerConfigAttempted(true);
     request<Record<string, unknown>>('/admin/worker/configs', { cacheTtlMs: CACHE_TTL.settings })
       .then((res) => setWorkerAddressRegex(typeof res.ADDRESS_REGEX === 'string' ? res.ADDRESS_REGEX : ''))
       .catch(() => setWorkerAddressRegex(null));
-  }, [createOpen, request, workerConfigAttempted]);
+  }, [createOpen, isAccountScoped, request, workerConfigAttempted]);
   useEffect(() => {
     if (data.length === 0) return;
     setSelectedAddressMap((current) => {
@@ -998,7 +1088,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   };
   const copyLoginUrl = async (row: AddressRecord) => {
     try {
-      const res = await request<{ jwt: string }>(`/admin/show_password/${row.id}`, { forceRefresh: true });
+      const res = await request<{ jwt: string }>(isAccountScoped ? `/user_api/bind_address_jwt/${row.id}` : `/admin/show_password/${row.id}`, { forceRefresh: true });
       await copyText(buildAddressLoginUrl(res.jwt, frontendBase()));
       notify('success', locale === 'en-US' ? `Login link for ${row.name} copied` : `已复制 ${row.name} 的登录链接`);
     } catch (error) {
@@ -1007,7 +1097,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   };
   const copyMailboxPassword = async (row: AddressRecord) => {
     try {
-      const res = await request<{ jwt?: string; password?: string; credential?: string }>(`/admin/show_password/${row.id}`, { forceRefresh: true });
+      const res = await request<{ jwt?: string; password?: string; credential?: string }>(isAccountScoped ? `/user_api/bind_address_jwt/${row.id}` : `/admin/show_password/${row.id}`, { forceRefresh: true });
       const secret = String(res.password || res.credential || res.jwt || '').trim();
       if (!secret) throw new Error(t('接口没有返回可复制的邮箱密码/JWT', 'The API did not return a mailbox password/JWT to copy'));
       await copyText(secret);
@@ -1019,17 +1109,30 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   const shareAdminRequest = useCallback(async <T,>(path: string, init: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {}): Promise<T> => {
     const base = frontendBase().replace(/\/+$/, '');
     if (!base) throw new Error(t('请先在系统设置里配置前端登录链接前缀', 'Configure the frontend login link prefix in Settings first'));
-    const adminPassword = readStorage(STORAGE_KEYS.adminPassword, '');
-    if (!adminPassword) throw new Error(t('请先登录管理员后台', 'Sign in to the admin console first'));
     const headers: Record<string, string> = {
       'content-type': 'application/json',
-      'x-admin-auth': adminPassword,
     };
-    const sitePassword = readStorage(STORAGE_KEYS.sitePassword, '');
-    if (sitePassword) headers['x-custom-auth'] = sitePassword;
+    const apiPrefix = isAccountScoped ? '/api/share/user' : '/api/share/admin';
+    if (isAccountScoped) {
+      if (!accountUserToken) throw new Error(t('请先登录账号', 'Sign in first'));
+      headers.Authorization = `Bearer ${accountUserToken}`;
+      headers['x-user-token'] = accountUserToken;
+    } else {
+      const adminPassword = readStorage(STORAGE_KEYS.adminPassword, '');
+      const adminToken = adminAccessToken || readStorage(STORAGE_KEYS.userAccessToken, '');
+      if (!adminPassword && !adminToken) throw new Error(t('请先登录管理员后台', 'Sign in to the admin console first'));
+      if (adminPassword) headers['x-admin-auth'] = adminPassword;
+      if (adminToken) {
+        headers.Authorization = `Bearer ${adminToken}`;
+        headers['x-user-access-token'] = adminToken;
+        headers['x-user-token'] = adminToken;
+      }
+      const sitePassword = readStorage(STORAGE_KEYS.sitePassword, '');
+      if (sitePassword) headers['x-custom-auth'] = sitePassword;
+    }
     let response: Response;
     try {
-      response = await fetch(`${base}/api/share/admin${path}`, {
+      response = await fetch(`${base}${apiPrefix}${path}`, {
         method: init.method || 'GET',
         headers,
         body: init.body === undefined ? undefined : JSON.stringify(init.body),
@@ -1042,7 +1145,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     try { data = text ? JSON.parse(text) : null; } catch { data = { message: text }; }
     if (!response.ok) throw new Error(data?.error?.message || data?.message || t('共享链接管理请求失败', 'Share-link management request failed'));
     return data as T;
-  }, []);
+  }, [accountUserToken, adminAccessToken, isAccountScoped, locale]);
   const loadShareList = useCallback(async (reset = true) => {
     setShareListLoading(true);
     try {
@@ -1202,7 +1305,8 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
       return null;
     }
     const adminPassword = readStorage(STORAGE_KEYS.adminPassword, '');
-    if (!adminPassword) {
+    const adminToken = adminAccessToken || readStorage(STORAGE_KEYS.userAccessToken, '');
+    if (!isAccountScoped && !adminPassword && !adminToken) {
       notify('error', t('请先登录管理员后台，再创建共享链接', 'Sign in to the admin console before creating a share link'));
       return null;
     }
@@ -1211,17 +1315,36 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     try {
       const headers: Record<string, string> = {
         'content-type': 'application/json',
-        'x-admin-auth': adminPassword,
       };
-      const sitePassword = readStorage(STORAGE_KEYS.sitePassword, '');
-      if (sitePassword) headers['x-custom-auth'] = sitePassword;
+      if (isAccountScoped) {
+        if (!accountUserToken) throw new Error(t('请先登录账号', 'Sign in first'));
+        headers.Authorization = `Bearer ${accountUserToken}`;
+        headers['x-user-token'] = accountUserToken;
+      } else {
+        if (adminPassword) headers['x-admin-auth'] = adminPassword;
+        if (adminToken) {
+          headers.Authorization = `Bearer ${adminToken}`;
+          headers['x-user-access-token'] = adminToken;
+          headers['x-user-token'] = adminToken;
+        }
+        const sitePassword = readStorage(STORAGE_KEYS.sitePassword, '');
+        if (sitePassword) headers['x-custom-auth'] = sitePassword;
+      }
+      const addressCredentials = isAccountScoped
+        ? await Promise.all(rows.map(async (row) => {
+          const res = await request<{ jwt?: string }>(`/user_api/bind_address_jwt/${row.id}`, { forceRefresh: true });
+          const jwt = String(res.jwt || '').trim();
+          if (!jwt) throw new Error(locale === 'en-US' ? `Mailbox credential for ${row.name} is empty` : `${row.name} 的邮箱凭据为空`);
+          return { id: String(row.id), address: row.name, jwt };
+        }))
+        : undefined;
       let response: Response;
       try {
         response = await fetch(`${base}/api/share`, {
           method: 'POST',
           headers,
           body: JSON.stringify({
-            addressIds: rows.map((row) => row.id),
+            ...(isAccountScoped ? { addressCredentials } : { addressIds: rows.map((row) => row.id) }),
             addresses: rows.map((row) => ({ id: row.id, address: row.name })),
             expiresIn,
             mailVisibility: visibility,
@@ -1257,6 +1380,10 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     await createShareForRows([row], '30d', `create:${row.id}`, 'new');
   };
   const runBatch = async (label: string, urlOf: (row: AddressRecord) => string) => {
+    if (isAccountScoped) {
+      notify('error', t('普通用户不能执行该管理员操作', 'Members cannot run this admin action'));
+      return;
+    }
     let ok = 0;
     const failures: string[] = [];
     for (const row of selectedRows) {
@@ -1301,6 +1428,10 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     notify('info', t('已取消批量检测', 'Batch detection cancelled'));
   };
   const batchFilterSelectedByMailKeyword = async () => {
+    if (isAccountScoped) {
+      notify('error', t('普通用户不能执行该管理员检测', 'Members cannot run this admin scan'));
+      return;
+    }
     const normalizedKeyword = normalizeBatchMailSearch(batchKeyword);
     if (!normalizedKeyword) {
       notify('error', t('请先输入要检测的邮件关键词', 'Enter a mail keyword to detect first'));
@@ -1366,8 +1497,9 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const name = attempt === 0 && manualName ? manualName : makeRealisticMailboxName(effectiveSettings, newAddress.customPrefix);
       try {
-        const res = await request<{ address: string; jwt: string; address_id: number }>('/admin/new_address', {
+        const res = await request<{ address: string; jwt: string; address_id: number }>(isAccountScoped ? '/api/new_address' : '/admin/new_address', {
           method: 'POST',
+          headers: isAccountScoped ? { Authorization: `Bearer ${accountUserToken}`, 'x-user-token': accountUserToken } : undefined,
           body: {
             name,
             domain: selectedDomain,
@@ -1375,6 +1507,13 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
             enableRandomSubdomain: requestedRandomSubdomain,
           },
         });
+        if (isAccountScoped && res.jwt) {
+          await request('/user_api/bind_address', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${res.jwt}`, 'x-user-token': accountUserToken },
+            body: {},
+          });
+        }
         notify('success', locale === 'en-US' ? `Created ${res.address}` : `已创建 ${res.address}`);
         setCredential({ address: res.address, jwt: res.jwt });
         setCreateOpen(false);
@@ -1392,15 +1531,33 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
   };
   const showJwt = async (row: AddressRecord) => {
     try {
-      const res = await request<{ jwt: string }>(`/admin/show_password/${row.id}`);
+      const res = await request<{ jwt: string }>(isAccountScoped ? `/user_api/bind_address_jwt/${row.id}` : `/admin/show_password/${row.id}`);
       setCredential({ address: row.name, jwt: res.jwt });
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('获取 JWT 失败', 'Failed to get JWT'));
     }
   };
-  const actionDelete = (row: AddressRecord) => ask({ title: locale === 'en-US' ? `Delete address ${row.name}` : `删除地址 ${row.name}`, body: t('会同时删除该地址关联邮件、发件权限和用户绑定。', 'This also deletes related mail, sender access, and user bindings for this address.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(`/admin/delete_address/${row.id}`, { method: 'DELETE' }); notify('success', t('地址已删除', 'Address deleted')); await fetchData(); } });
-  const actionClearInbox = (row: AddressRecord) => ask({ title: locale === 'en-US' ? `Clear inbox for ${row.name}` : `清空 ${row.name} 收件箱`, body: t('将删除该地址全部收件。', 'This deletes all inbox mail for this address.'), actionLabel: t('清空', 'Clear'), onConfirm: async () => { await request(`/admin/clear_inbox/${row.id}`, { method: 'DELETE' }); notify('success', t('收件箱已清空', 'Inbox cleared')); await fetchData(); } });
-  const actionClearSent = (row: AddressRecord) => ask({ title: locale === 'en-US' ? `Clear sent mail for ${row.name}` : `清空 ${row.name} 发件箱`, body: t('将删除该地址全部发件记录。', 'This deletes all sent-mail records for this address.'), actionLabel: t('清空', 'Clear'), onConfirm: async () => { await request(`/admin/clear_sent_items/${row.id}`, { method: 'DELETE' }); notify('success', t('发件箱已清空', 'Sent mail cleared')); await fetchData(); } });
+  const actionDelete = (row: AddressRecord) => {
+    if (isAccountScoped) {
+      notify('error', t('普通用户不能删除地址', 'Members cannot delete addresses'));
+      return;
+    }
+    ask({ title: locale === 'en-US' ? `Delete address ${row.name}` : `删除地址 ${row.name}`, body: t('会同时删除该地址关联邮件、发件权限和用户绑定。', 'This also deletes related mail, sender access, and user bindings for this address.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(`/admin/delete_address/${row.id}`, { method: 'DELETE' }); notify('success', t('地址已删除', 'Address deleted')); await fetchData(); } });
+  };
+  const actionClearInbox = (row: AddressRecord) => {
+    if (isAccountScoped) {
+      notify('error', t('普通用户不能清空收件箱', 'Members cannot clear inboxes'));
+      return;
+    }
+    ask({ title: locale === 'en-US' ? `Clear inbox for ${row.name}` : `清空 ${row.name} 收件箱`, body: t('将删除该地址全部收件。', 'This deletes all inbox mail for this address.'), actionLabel: t('清空', 'Clear'), onConfirm: async () => { await request(`/admin/clear_inbox/${row.id}`, { method: 'DELETE' }); notify('success', t('收件箱已清空', 'Inbox cleared')); await fetchData(); } });
+  };
+  const actionClearSent = (row: AddressRecord) => {
+    if (isAccountScoped) {
+      notify('error', t('普通用户不能清空发件箱', 'Members cannot clear sent mail'));
+      return;
+    }
+    ask({ title: locale === 'en-US' ? `Clear sent mail for ${row.name}` : `清空 ${row.name} 发件箱`, body: t('将删除该地址全部发件记录。', 'This deletes all sent-mail records for this address.'), actionLabel: t('清空', 'Clear'), onConfirm: async () => { await request(`/admin/clear_sent_items/${row.id}`, { method: 'DELETE' }); notify('success', t('发件箱已清空', 'Sent mail cleared')); await fetchData(); } });
+  };
   const copyAddressValue = async (value: string, label: string) => {
     try {
       await copyText(value);
@@ -1455,10 +1612,10 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
                 <button role="menuitem" onClick={() => runMobileAction(() => copyMailboxPassword(row))}><KeyRound size={15} />{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
                 <button role="menuitem" onClick={() => runMobileAction(() => onOpenInbox?.(row.name))}><MailOpen size={15} />{t("查看收件箱", "View inbox")}</button>
                 <button role="menuitem" disabled={shareActionBusy === `create:${row.id}`} onClick={() => runMobileAction(() => createSingleShareLink(row))}><Share2 size={15} className={cls(shareActionBusy === `create:${row.id}` && 'animate-pulse')} />{t("创建分享", "Create share")}</button>
-                <button role="menuitem" onClick={() => runMobileAction(() => { setResetTarget(row); setResetPassword(''); })}><Lock size={15} />{t("重置密码", "Reset password")}</button>
-                <button role="menuitem" onClick={() => runMobileAction(() => actionClearInbox(row))}><Inbox size={15} />{t("清空收件", "Clear inbox")}</button>
-                <button role="menuitem" onClick={() => runMobileAction(() => actionClearSent(row))}><Send size={15} />{t("清空发件", "Clear sent")}</button>
-                <button role="menuitem" className="danger" onClick={() => runMobileAction(() => actionDelete(row))}><Trash2 size={15} />{t("删除地址", "Delete address")}</button>
+                {!isAccountScoped && <button role="menuitem" onClick={() => runMobileAction(() => { setResetTarget(row); setResetPassword(''); })}><Lock size={15} />{t("重置密码", "Reset password")}</button>}
+                {!isAccountScoped && <button role="menuitem" onClick={() => runMobileAction(() => actionClearInbox(row))}><Inbox size={15} />{t("清空收件", "Clear inbox")}</button>}
+                {!isAccountScoped && <button role="menuitem" onClick={() => runMobileAction(() => actionClearSent(row))}><Send size={15} />{t("清空发件", "Clear sent")}</button>}
+                {!isAccountScoped && <button role="menuitem" className="danger" onClick={() => runMobileAction(() => actionDelete(row))}><Trash2 size={15} />{t("删除地址", "Delete address")}</button>}
               </div>
             )}
           </div>
@@ -1480,13 +1637,22 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
         <div className="address-page-title">
           <h2 className="text-2xl font-bold text-slate-800">{t("地址管理", "Address management")}</h2>
           <p className="mt-1 text-sm text-slate-400">{t("创建、搜索、复制登录链接、批量管理收件箱/发件箱和删除地址。", "Create, search, copy login links, batch-manage inbox/sent, and delete addresses.")}</p>
-          {effectiveUserFilter && <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}<button onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="text-slate-400 hover:text-slate-900">{t('清除', 'Clear')}</button></div>}
+          {!isAccountScoped && effectiveUserFilter && <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="filter-inline-clear text-slate-400 hover:text-slate-900">{t('清除', 'Clear')}</button></div>}
         </div>
         <div className="address-page-actions flex flex-wrap gap-2"><button className="btn-primary" onClick={() => { setNewAddress((current) => ({ ...current, domain: current.domain || defaultDomain })); setCreateOpen(true); }}><Plus size={16} /> <span>{t("新建地址", "New address")}</span></button><button className="btn-secondary" onClick={openShareManager}><Share2 size={16} /> <span>{t("共享链接管理", "Share links")}</span></button><button className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button></div>
       </div>
 
       <div className={cls('panel overflow-hidden', desktopActionMenuId !== null && 'address-panel-menu-open')}>
         <div className="address-toolbar">
+          {isAccountScoped ? (
+            <div className="toolbar-field user-filter-trigger">
+              <UserRound size={15} className="toolbar-icon" />
+              <span className="user-filter-copy">
+                <span className="user-filter-label">{accountUserEmail || t('当前用户', 'Current user')}</span>
+                <span className="user-filter-count">{accountUserRoleLabel || (locale === 'en-US' ? `${count} addresses` : `${count} 个地址`)}</span>
+              </span>
+            </div>
+          ) : (
           <div className="user-filter-dropdown" ref={userDropdownRef}>
             <button
               type="button"
@@ -1503,11 +1669,29 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
               </span>
               <ChevronDown size={15} className={cls('user-filter-chevron', userDropdownOpen && 'rotate-180')} />
             </button>
-            {effectiveUserFilter && (
-              <button type="button" className="user-filter-clear" onClick={() => pickUserFilter(null)} aria-label={t("清除用户筛选", "Clear user filter")} title={t("清除用户筛选", "Clear user filter")}>
-                <X size={13} />
-              </button>
-            )}
+            <button
+              type="button"
+              className={cls('user-filter-clear', !effectiveUserFilter && 'is-hidden')}
+              disabled={!effectiveUserFilter}
+              aria-hidden={!effectiveUserFilter}
+              tabIndex={effectiveUserFilter ? 0 : -1}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                pickUserFilter(null);
+              }}
+              aria-label={t("清除用户筛选", "Clear user filter")}
+              title={t("清除用户筛选", "Clear user filter")}
+            >
+              <X size={13} />
+            </button>
             {userDropdownOpen && (
               <div className="user-filter-menu" role="listbox">
                 <button type="button" className={cls('user-filter-option', !effectiveUserId && 'active')} onClick={() => pickUserFilter(null)}>
@@ -1533,6 +1717,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
               </div>
             )}
           </div>
+          )}
           <label className="toolbar-field address-search-field" aria-label={t("搜索地址", "Search addresses")}>
             <Search size={15} className="toolbar-icon" />
             <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder={t("搜索地址", "Search addresses")} />
@@ -1568,12 +1753,12 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
             <div className="address-bulk-menu-surface">
               <div className="address-bulk-summary">
                 <strong>{locale === 'en-US' ? `${selectedRows.length} addresses selected` : `已选择 ${selectedRows.length} 个地址`}</strong>
-                <span>{t('在已选地址内自动分页检测收件主题/正文，命中后自动重选。', 'Scan selected mailboxes by subject/body and reselect matches automatically.')}</span>
+                <span>{isAccountScoped ? t('可批量创建多邮箱共享链接。', 'Create a multi-mailbox share link in one action.') : t('在已选地址内自动分页检测收件主题/正文，命中后自动重选。', 'Scan selected mailboxes by subject/body and reselect matches automatically.')}</span>
               </div>
-              <button type="button" className="mobile-bulk-search-toggle" onClick={() => setMobileBulkSearchOpen((open) => !open)}>
+              {!isAccountScoped && <button type="button" className="mobile-bulk-search-toggle" onClick={() => setMobileBulkSearchOpen((open) => !open)}>
                 <Search size={14} /> {mobileBulkSearchOpen || batchKeyword ? t('收起检测', 'Hide scan') : t('搜索检测', 'Search scan')}
-              </button>
-              <label className={cls('address-bulk-search', mobileBulkSearchOpen && 'is-open', batchKeyword && 'has-value')} aria-label={t('检测已选地址中的邮件关键词', 'Detect mail keywords in selected addresses')}>
+              </button>}
+              {!isAccountScoped && <label className={cls('address-bulk-search', mobileBulkSearchOpen && 'is-open', batchKeyword && 'has-value')} aria-label={t('检测已选地址中的邮件关键词', 'Detect mail keywords in selected addresses')}>
                 <Search size={14} />
                 <input
                   value={batchKeyword}
@@ -1583,22 +1768,22 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
                   disabled={batchScanRunning}
                 />
                 {batchKeyword && !batchScanRunning && <button type="button" onClick={() => setBatchKeyword('')} aria-label={t('清空关键词', 'Clear keyword')}><X size={13} /></button>}
-              </label>
+              </label>}
               {batchScanRunning && (
                 <span className="address-bulk-progress">
                   {locale === 'en-US' ? `Scanning ${batchScanProgress.done}/${batchScanProgress.total} · ${batchScanProgress.matched} matched` : `检测中 ${batchScanProgress.done}/${batchScanProgress.total} · 命中 ${batchScanProgress.matched}`}
                 </span>
               )}
               <div className="address-bulk-actions">
-                <button className="btn-secondary compact" disabled={batchScanRunning || !batchKeyword.trim()} onClick={batchFilterSelectedByMailKeyword}>
+                {!isAccountScoped && <button className="btn-secondary compact" disabled={batchScanRunning || !batchKeyword.trim()} onClick={batchFilterSelectedByMailKeyword}>
                   <Search size={15} /> {t('检测并重选', 'Scan and reselect')}
-                </button>
+                </button>}
                 {batchScanRunning && <button className="btn-secondary compact" onClick={cancelBatchScan}><X size={15} /> {t('取消', 'Cancel')}</button>}
                 <button className="btn-secondary compact" disabled={batchScanRunning} onClick={openShareDialog}><Share2 size={15} /> {t('创建共享链接', 'Create share link')}</button>
                 <button className="btn-secondary compact" disabled={batchScanRunning} onClick={openShareManager}><ListFilter size={15} /> {t('管理共享', 'Manage shares')}</button>
-                <button className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearInbox}><Inbox size={15} /> {t('清空收件', 'Clear inbox')}</button>
-                <button className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearSent}><Send size={15} /> {t('清空发件', 'Clear sent')}</button>
-                <button className="btn-danger compact" disabled={batchScanRunning} onClick={batchDelete}><Trash2 size={15} /> {t('删除', 'Delete')}</button>
+                {!isAccountScoped && <button className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearInbox}><Inbox size={15} /> {t('清空收件', 'Clear inbox')}</button>}
+                {!isAccountScoped && <button className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearSent}><Send size={15} /> {t('清空发件', 'Clear sent')}</button>}
+                {!isAccountScoped && <button className="btn-danger compact" disabled={batchScanRunning} onClick={batchDelete}><Trash2 size={15} /> {t('删除', 'Delete')}</button>}
                 <button className="btn-secondary compact mobile-bulk-clear" disabled={batchScanRunning} onClick={() => { setSelectedAddressMap({}); setMobileBulkMenuOpen(false); setMobileBulkSearchOpen(false); }}><X size={15} /> {t('清除选择', 'Clear selection')}</button>
               </div>
             </div>
@@ -1638,7 +1823,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
         <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} />
       </div>
 
-      <div className="panel sender-access-shell overflow-hidden">
+      {!isAccountScoped && <div className="panel sender-access-shell overflow-hidden">
         <button type="button" className="sender-access-toggle" onClick={() => setSenderPanelOpen((open) => !open)} aria-expanded={senderPanelOpen}>
           <span className="flex min-w-0 items-center gap-2">
             <ShieldCheck size={17} className="text-slate-600" />
@@ -1650,7 +1835,7 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
           <ChevronDown size={16} className={cls('shrink-0 text-slate-400 transition', senderPanelOpen && 'rotate-180')} />
         </button>
         {senderPanelOpen && <SenderAccessPanel request={request} notify={notify} ask={ask} embedded />}
-      </div>
+      </div>}
 
       {desktopActionMenu && typeof document !== 'undefined' && createPortal(
         <div
@@ -1659,10 +1844,10 @@ export function AddressView({ request, notify, ask, globalQuery, openSettings, u
           style={{ top: desktopActionMenu.top, left: desktopActionMenu.left }}
         >
           <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); copyMailboxPassword(row); }}><KeyRound size={15} />{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
-          <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); setResetTarget(row); setResetPassword(''); }}><Lock size={15} />{t("重置密码", "Reset password")}</button>
-          <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearInbox(row); }}><Inbox size={15} />{t('清空收件箱', 'Clear inbox')}</button>
-          <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearSent(row); }}><Send size={15} />{t('清空发件箱', 'Clear sent')}</button>
-          <button type="button" role="menuitem" className="danger" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionDelete(row); }}><Trash2 size={15} />{t('删除', 'Delete')}</button>
+          {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); setResetTarget(row); setResetPassword(''); }}><Lock size={15} />{t("重置密码", "Reset password")}</button>}
+          {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearInbox(row); }}><Inbox size={15} />{t('清空收件箱', 'Clear inbox')}</button>}
+          {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearSent(row); }}><Send size={15} />{t('清空发件箱', 'Clear sent')}</button>}
+          {!isAccountScoped && <button type="button" role="menuitem" className="danger" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionDelete(row); }}><Trash2 size={15} />{t('删除', 'Delete')}</button>}
         </div>
       , document.body)}
 
