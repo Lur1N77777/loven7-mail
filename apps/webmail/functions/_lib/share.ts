@@ -3,6 +3,7 @@ import {
   errorJson,
   fetchAdminWorkerJson,
   fetchWorkerJson,
+  fetchWorkerJsonWithHeaders,
   normalizeMailPage,
   RuntimeConfigError,
   runtimeConfigCodeFromMessage,
@@ -74,11 +75,24 @@ export type ShareListOptions = {
   request: Request;
 };
 
+export type ShareAdminAuth = {
+  workerEnv: CloudmailEnv;
+  headers: Record<string, string>;
+};
+
 const SHARE_PREFIX = "share:";
 const SHARE_SUMMARY_PREFIX = "share-summary:";
+const SHARE_ADDRESS_PREFIX = "share-address:";
 const TOKEN_BYTES = 18;
 const MAX_LIST_SCAN_PAGES = 8;
+const MAX_SHARE_TTL_DAYS = 30;
 const DEFAULT_PERMISSIONS: SharePermissions = { hideMail: true };
+const ADDRESS_CURSOR_PREFIX = "addr:";
+
+type AddressListCursor = {
+  createdAt: string;
+  token: string;
+};
 
 function base64Url(bytes: Uint8Array) {
   let binary = "";
@@ -161,10 +175,33 @@ function requireShareEnv(env: CloudmailEnv) {
   return { kv: env.SHARE_KV, secret: env.SHARE_ENCRYPTION_SECRET.trim() };
 }
 
+function adminAccessTokenFromRequest(request: Request) {
+  const auth = request.headers.get("authorization") || "";
+  const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  return bearer || request.headers.get("x-user-access-token")?.trim() || request.headers.get("x-user-token")?.trim() || "";
+}
+
+function adminAccessHeaders(env: CloudmailEnv, token: string, hasJsonBody = false) {
+  const headers: Record<string, string> = { "x-lang": "zh" };
+  if (hasJsonBody) headers["content-type"] = "application/json";
+  if (env.SITE_PASSWORD) headers["x-custom-auth"] = env.SITE_PASSWORD;
+  headers.Authorization = `Bearer ${token}`;
+  headers["x-user-access-token"] = token;
+  headers["x-user-token"] = token;
+  return headers;
+}
+
+function adminPasswordHeaders(env: CloudmailEnv, adminPassword: string, hasJsonBody = false) {
+  const headers: Record<string, string> = { "x-lang": "zh" };
+  if (hasJsonBody) headers["content-type"] = "application/json";
+  if (env.SITE_PASSWORD) headers["x-custom-auth"] = env.SITE_PASSWORD;
+  headers["x-admin-auth"] = adminPassword;
+  return headers;
+}
+
 export function parseShareTtl(value: unknown): { label: string; expiresAt: string | null; ttlSeconds?: number } {
-  const key = String(value || "30d").trim().toLowerCase();
-  const days = key === "1d" ? 1 : key === "7d" ? 7 : key === "30d" ? 30 : key === "forever" || key === "never" ? 0 : 30;
-  if (days <= 0) return { label: "永久", expiresAt: null };
+  const key = String(value || "7d").trim().toLowerCase();
+  const days = key === "1d" ? 1 : key === "7d" ? 7 : key === "30d" ? 30 : MAX_SHARE_TTL_DAYS;
   const ttlSeconds = days * 24 * 60 * 60;
   return { label: `${days}天`, expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(), ttlSeconds };
 }
@@ -241,9 +278,33 @@ function adminShareFromSummary(request: Request, summary: StoredShareSummary): S
   };
 }
 
+function kvExpirationOptions(expiresAt: string | null): { expirationTtl: number } | undefined {
+  if (!expiresAt) return undefined;
+  const expiresTime = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresTime)) return { expirationTtl: 60 };
+  const ttl = Math.floor((expiresTime - Date.now()) / 1000);
+  return { expirationTtl: Math.max(60, ttl) };
+}
+
+function reverseCreatedAtKey(value: string): string {
+  const time = Date.parse(value);
+  const safeTime = Number.isFinite(time) ? time : Date.now();
+  return String(9_999_999_999_999 - safeTime).padStart(13, "0");
+}
+
+function shareAddressIndexKey(addressId: string, token: string, payload: SharePayload) {
+  return `${SHARE_ADDRESS_PREFIX}${addressId}:${reverseCreatedAtKey(payload.createdAt)}:${token}`;
+}
+
 async function saveShareSummary(env: CloudmailEnv, token: string, payload: SharePayload) {
   const { kv } = requireShareEnv(env);
-  await kv.put(`${SHARE_SUMMARY_PREFIX}${token}`, JSON.stringify(summaryFromPayload(token, payload)));
+  await kv.put(`${SHARE_SUMMARY_PREFIX}${token}`, JSON.stringify(summaryFromPayload(token, payload)), kvExpirationOptions(payload.expiresAt));
+}
+
+async function saveShareAddressIndexes(env: CloudmailEnv, token: string, payload: SharePayload) {
+  const { kv } = requireShareEnv(env);
+  const options = kvExpirationOptions(payload.expiresAt);
+  await Promise.all(payload.addresses.map((mailbox) => kv.put(shareAddressIndexKey(mailbox.id, token, payload), "1", options)));
 }
 
 function normalizeStoredSummary(raw: unknown, token: string): StoredShareSummary | null {
@@ -285,8 +346,9 @@ export async function saveShare(env: CloudmailEnv, token: string, payload: Share
   const { kv, secret } = requireShareEnv(env);
   const normalized = normalizeSharePayload({ ...payload, token }, token);
   if (!normalized) throw new UpstreamError(500, "", "共享记录格式无效");
-  await kv.put(`${SHARE_PREFIX}${token}`, await sealPayload(normalized, secret));
+  await kv.put(`${SHARE_PREFIX}${token}`, await sealPayload(normalized, secret), kvExpirationOptions(normalized.expiresAt));
   await saveShareSummary(env, token, normalized).catch(() => undefined);
+  await saveShareAddressIndexes(env, token, normalized).catch(() => undefined);
 }
 
 export async function readShareRecord(env: CloudmailEnv, token: string): Promise<SharePayload | null> {
@@ -344,6 +406,32 @@ function summaryMatches(summary: ShareAdminSummary, status: string, query: strin
   return haystack.includes(query);
 }
 
+function compareShareOrder(left: Pick<ShareAdminSummary, "createdAt" | "token">, right: Pick<ShareAdminSummary, "createdAt" | "token">) {
+  const leftTime = Date.parse(left.createdAt);
+  const rightTime = Date.parse(right.createdAt);
+  const safeLeft = Number.isFinite(leftTime) ? leftTime : 0;
+  const safeRight = Number.isFinite(rightTime) ? rightTime : 0;
+  if (safeLeft !== safeRight) return safeRight - safeLeft;
+  return left.token.localeCompare(right.token);
+}
+
+function encodeAddressListCursor(summary: Pick<ShareAdminSummary, "createdAt" | "token">) {
+  return `${ADDRESS_CURSOR_PREFIX}${base64Url(new TextEncoder().encode(JSON.stringify({ createdAt: summary.createdAt, token: summary.token })))}`;
+}
+
+function decodeAddressListCursor(value: string | undefined): AddressListCursor | null {
+  if (!value?.startsWith(ADDRESS_CURSOR_PREFIX)) return null;
+  try {
+    const raw = new TextDecoder().decode(fromBase64Url(value.slice(ADDRESS_CURSOR_PREFIX.length)));
+    const parsed = JSON.parse(raw) as Partial<AddressListCursor>;
+    if (typeof parsed.createdAt !== "string" || typeof parsed.token !== "string") return null;
+    if (!parsed.createdAt || !parsed.token) return null;
+    return { createdAt: parsed.createdAt, token: parsed.token };
+  } catch {
+    return null;
+  }
+}
+
 export async function listShareRecords(env: CloudmailEnv, options: ShareListOptions) {
   const { kv } = requireShareEnv(env);
   const limit = Math.min(100, Math.max(1, options.limit || 20));
@@ -394,7 +482,7 @@ export async function listShareRecords(env: CloudmailEnv, options: ShareListOpti
     }
   }
 
-  const sorted = Array.from(results.values()).sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+  const sorted = Array.from(results.values()).sort(compareShareOrder);
   return {
     results: sorted.slice(0, limit),
     cursor: complete ? null : cursor || null,
@@ -402,13 +490,73 @@ export async function listShareRecords(env: CloudmailEnv, options: ShareListOpti
   };
 }
 
+export async function listShareRecordsForAddressIds(env: CloudmailEnv, addressIds: string[], options: ShareListOptions) {
+  const { kv } = requireShareEnv(env);
+  const limit = Math.min(100, Math.max(1, options.limit || 20));
+  const normalizedStatus = ["active", "expired", "revoked"].includes(String(options.status)) ? String(options.status) : "";
+  const normalizedQuery = String(options.query || "").trim().toLowerCase();
+  const addressCursor = decodeAddressListCursor(options.cursor);
+  const results = new Map<string, ShareAdminSummary>();
+  let exhaustedAllIndexes = true;
+
+  for (const addressId of [...new Set(addressIds.map((item) => String(item).trim()).filter(Boolean))]) {
+    let cursor: string | undefined;
+    let complete = false;
+    let scannedPages = 0;
+    while (!complete && scannedPages < MAX_LIST_SCAN_PAGES) {
+      scannedPages += 1;
+      const page = await kv.list({ prefix: `${SHARE_ADDRESS_PREFIX}${addressId}:`, cursor, limit: 100 });
+      cursor = page.cursor || undefined;
+      complete = Boolean(page.list_complete);
+      for (const key of page.keys) {
+        const token = key.name.slice(key.name.lastIndexOf(":") + 1);
+        if (results.has(token)) continue;
+        const summary = await readShareSummary(env, token).catch(() => null);
+        if (!summary) continue;
+        const admin = adminShareFromSummary(options.request, summary);
+        if (addressCursor && compareShareOrder(admin, addressCursor) <= 0) continue;
+        if (!summaryMatches(admin, normalizedStatus, normalizedQuery)) continue;
+        results.set(token, admin);
+      }
+      if (!cursor) complete = true;
+    }
+    if (!complete) exhaustedAllIndexes = false;
+  }
+
+  const sorted = Array.from(results.values()).sort(compareShareOrder);
+  const limited = sorted.slice(0, limit);
+  const hasPotentialMore = sorted.length > limit || !exhaustedAllIndexes;
+  const hasMore = hasPotentialMore && limited.length > 0;
+  const nextCursor = hasMore ? encodeAddressListCursor(limited[limited.length - 1]) : null;
+  return {
+    results: limited,
+    cursor: nextCursor,
+    hasMore,
+  };
+}
+
 export async function assertShareAdmin(request: Request, env: CloudmailEnv) {
   const adminPassword = request.headers.get("x-admin-auth")?.trim() || "";
-  if (!adminPassword) throw new UpstreamError(401, "", "缺少管理员凭证");
+  const adminToken = adminAccessTokenFromRequest(request);
+  if (!adminPassword && !adminToken) throw new UpstreamError(401, "", "缺少管理员凭证");
   const requestSitePassword = request.headers.get("x-custom-auth")?.trim() || "";
   const workerEnv = requestSitePassword && !env.SITE_PASSWORD ? { ...env, SITE_PASSWORD: requestSitePassword } : env;
-  await fetchAdminWorkerJson<unknown>(workerEnv, "/admin/statistics", adminPassword, { search: new URLSearchParams() });
-  return { adminPassword, workerEnv };
+  if (adminPassword) {
+    await fetchAdminWorkerJson<unknown>(workerEnv, "/admin/statistics", adminPassword, { search: new URLSearchParams() });
+    return { workerEnv, headers: adminPasswordHeaders(workerEnv, adminPassword) };
+  }
+  const headers = adminAccessHeaders(workerEnv, adminToken);
+  await fetchWorkerJsonWithHeaders<unknown>(workerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
+  return { workerEnv, headers };
+}
+
+export async function fetchShareAdminWorkerJson<T>(
+  auth: ShareAdminAuth,
+  path: string,
+  init: { method?: string; body?: unknown; search?: URLSearchParams } = {}
+): Promise<T> {
+  const headers = init.body === undefined ? auth.headers : { ...auth.headers, "content-type": "application/json" };
+  return fetchWorkerJsonWithHeaders<T>(auth.workerEnv, path, headers, init);
 }
 
 export async function resolveSharedMailbox(env: CloudmailEnv, token: string, mailboxId: string) {

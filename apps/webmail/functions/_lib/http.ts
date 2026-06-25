@@ -111,6 +111,10 @@ export function extractJwt(request: Request) {
   return bearer || request.headers.get("x-user-token")?.trim() || "";
 }
 
+export function extractUserToken(request: Request) {
+  return extractJwt(request) || request.headers.get("x-user-access-token")?.trim() || "";
+}
+
 export function buildWorkerHeaders(env: CloudmailEnv, jwt?: string, hasJsonBody = false) {
   const headers: Record<string, string> = { "x-lang": "zh" };
   if (hasJsonBody) headers["content-type"] = "application/json";
@@ -120,6 +124,33 @@ export function buildWorkerHeaders(env: CloudmailEnv, jwt?: string, hasJsonBody 
     headers["x-user-token"] = jwt;
   }
   return headers;
+}
+
+export function buildAddressWorkerHeaders(env: CloudmailEnv, addressJwt: string, userAccessToken?: string, hasJsonBody = false) {
+  const headers: Record<string, string> = { "x-lang": "zh" };
+  if (hasJsonBody) headers["content-type"] = "application/json";
+  if (env.SITE_PASSWORD) headers["x-custom-auth"] = env.SITE_PASSWORD;
+  if (addressJwt) headers.Authorization = `Bearer ${addressJwt}`;
+  if (userAccessToken) headers["x-user-access-token"] = userAccessToken;
+  return headers;
+}
+
+export function buildUserWorkerHeaders(env: CloudmailEnv, userToken: string, hasJsonBody = false) {
+  const headers: Record<string, string> = { "x-lang": "zh" };
+  if (hasJsonBody) headers["content-type"] = "application/json";
+  if (env.SITE_PASSWORD) headers["x-custom-auth"] = env.SITE_PASSWORD;
+  if (userToken) {
+    headers.Authorization = `Bearer ${userToken}`;
+    headers["x-user-token"] = userToken;
+  }
+  return headers;
+}
+
+export function buildBindAddressWorkerHeaders(env: CloudmailEnv, userToken: string, addressJwt: string, hasJsonBody = false) {
+  return {
+    ...buildAddressWorkerHeaders(env, addressJwt, undefined, hasJsonBody),
+    "x-user-token": userToken,
+  };
 }
 
 export function buildAdminWorkerHeaders(env: CloudmailEnv, adminPassword: string, hasJsonBody = false) {
@@ -187,7 +218,7 @@ export function corsHeaders(request: Request, env?: CloudmailEnv, mode: CorsMode
   const headers: Record<string, string> = {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": mode === "admin" ? "GET,POST,PATCH,DELETE,OPTIONS" : "GET,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": mode === "admin" ? "content-type,x-admin-auth,x-custom-auth,x-lang" : "content-type,x-lang",
+    "Access-Control-Allow-Headers": mode === "admin" ? "authorization,content-type,x-admin-auth,x-custom-auth,x-lang,x-user-access-token,x-user-token" : "content-type,x-lang",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -224,12 +255,44 @@ export async function fetchWorkerText(
   return text;
 }
 
+export async function fetchWorkerTextWithHeaders(
+  env: CloudmailEnv,
+  path: string,
+  headers: Record<string, string>,
+  init: { method?: string; body?: unknown; search?: URLSearchParams } = {}
+) {
+  const url = new URL(`${getWorkerBaseUrl(env)}${path}`);
+  if (init.search) url.search = init.search.toString();
+  const hasJsonBody = init.body !== undefined;
+  const response = await fetch(url.toString(), {
+    method: init.method || (hasJsonBody ? "POST" : "GET"),
+    headers,
+    body: hasJsonBody ? JSON.stringify(init.body) : undefined,
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new UpstreamError(response.status, text);
+  }
+  return text;
+}
+
 export async function fetchWorkerJson<T>(
   env: CloudmailEnv,
   path: string,
   init: { method?: string; jwt?: string; body?: unknown; search?: URLSearchParams } = {}
 ): Promise<T> {
   const text = await fetchWorkerText(env, path, init);
+  if (!text) return null as T;
+  return JSON.parse(text) as T;
+}
+
+export async function fetchWorkerJsonWithHeaders<T>(
+  env: CloudmailEnv,
+  path: string,
+  headers: Record<string, string>,
+  init: { method?: string; body?: unknown; search?: URLSearchParams } = {}
+): Promise<T> {
+  const text = await fetchWorkerTextWithHeaders(env, path, headers, init);
   if (!text) return null as T;
   return JSON.parse(text) as T;
 }
@@ -297,13 +360,31 @@ export function decodeJwtAddress(jwt: string) {
   }
 }
 
+function readableUpstreamMessage(error: UpstreamError) {
+  const body = String(error.body || "").trim();
+  if (body) {
+    try {
+      const data = JSON.parse(body) as { error?: { message?: unknown }; message?: unknown };
+      const message = data?.error?.message || data?.message;
+      if (typeof message === "string" && message.trim()) return message.trim();
+    } catch {
+      // fall through to text cleanup
+    }
+    const text = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    if (text && !/^<!doctype html/i.test(body)) return text.slice(0, 240);
+  }
+  if (error.status === 405) return "邮箱服务接口方法不匹配，请确认 Pages Functions 和 Worker API 已部署到最新版本。";
+  if (error.status === 401 || error.status === 403) return "登录凭据无效或权限不足。";
+  return "邮箱服务请求失败";
+}
+
 export function mapUpstreamError(error: unknown) {
   if (error instanceof RuntimeConfigError) return runtimeConfigErrorJson(error.code);
   if (error instanceof UpstreamError) {
     const configCode = error.status === 500 ? runtimeConfigCodeFromMessage(error.message, error.body) : "";
     if (configCode) return runtimeConfigErrorJson(configCode);
     const status = error.status === 500 ? 500 : error.status || 502;
-    return errorJson(status, status === 500 ? error.message : "邮箱服务请求失败", "upstream_error");
+    return errorJson(status, status === 500 ? error.message : readableUpstreamMessage(error), "upstream_error");
   }
   return errorJson(500, "请求处理失败", "internal_error");
 }

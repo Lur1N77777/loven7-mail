@@ -52,7 +52,7 @@ function assertNotAllowed(headers, label) {
 
 function assertAdminHeaders(headers, label) {
   assert.equal(headers.get('access-control-allow-methods'), 'GET,POST,PATCH,DELETE,OPTIONS', `${label}: admin methods`);
-  assert.equal(headers.get('access-control-allow-headers'), 'content-type,x-admin-auth,x-custom-auth,x-lang', `${label}: admin headers`);
+  assert.equal(headers.get('access-control-allow-headers'), 'authorization,content-type,x-admin-auth,x-custom-auth,x-lang,x-user-access-token,x-user-token', `${label}: admin headers`);
 }
 
 function assertPublicHeaders(headers, label) {

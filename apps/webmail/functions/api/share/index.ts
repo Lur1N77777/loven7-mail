@@ -1,5 +1,5 @@
-import { corsHeaders, decodeJwtAddress, errorJson, fetchAdminWorkerJson, fetchWorkerJson, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
-import { getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
+import { buildUserWorkerHeaders, corsHeaders, decodeJwtAddress, errorJson, extractUserToken, fetchWorkerJson, fetchWorkerJsonWithHeaders, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
+import { assertShareAdmin, fetchShareAdminWorkerJson, getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
 import type { PagesHandler } from "../../_lib/types";
 
 type AddressHint = {
@@ -10,6 +10,8 @@ type AddressHint = {
 type CreateShareBody = {
   addressIds?: unknown;
   addresses?: unknown;
+  addressCredentials?: unknown;
+  credentials?: unknown;
   expiresIn?: unknown;
   mailVisibility?: unknown;
   permissions?: unknown;
@@ -18,6 +20,18 @@ type CreateShareBody = {
 type AddressLoginResponse = {
   jwt?: string;
   address?: string;
+};
+
+type UserBoundAddress = {
+  id?: unknown;
+  name?: unknown;
+  address?: unknown;
+};
+
+type UserAddressCredential = {
+  id: string;
+  address: string;
+  jwt: string;
 };
 
 function parseAddressIds(value: unknown) {
@@ -49,6 +63,23 @@ function parseAddressHints(value: unknown) {
     if (id && address) hints.set(id, { id, address });
   }
   return hints;
+}
+
+function parseAddressCredentials(value: unknown) {
+  const credentials: UserAddressCredential[] = [];
+  if (!Array.isArray(value)) return credentials;
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const id = String(record.id || "").trim();
+    const address = normalizeAddress(record.address || record.name || record.email);
+    const jwt = String(record.jwt || record.JWT || record.token || record.credential || "").trim();
+    if (!id || !address || !jwt || seen.has(id)) continue;
+    seen.add(id);
+    credentials.push({ id, address, jwt });
+    if (credentials.length >= 50) break;
+  }
+  return credentials;
 }
 
 function extractJwtFromCredential(value: unknown) {
@@ -132,56 +163,94 @@ export const onRequestOptions: PagesHandler = ({ request, env }) => {
 export const onRequestPost: PagesHandler = async ({ request, env }) => {
   try {
     const adminPassword = request.headers.get("x-admin-auth")?.trim() || "";
-    if (!adminPassword) return withCors(errorJson(401, "缺少管理员凭证", "missing_admin_auth"), request, env, "admin");
+    const adminAccessToken = request.headers.get("x-user-access-token")?.trim() || "";
     const requestSitePassword = request.headers.get("x-custom-auth")?.trim() || "";
     const workerEnv = requestSitePassword && !env.SITE_PASSWORD ? { ...env, SITE_PASSWORD: requestSitePassword } : env;
 
     const body = (await request.json().catch(() => null)) as CreateShareBody | null;
-    const addressIds = parseAddressIds(body?.addressIds);
-    const addressHints = parseAddressHints(body?.addresses);
-    if (!addressIds.length) return withCors(errorJson(400, "请选择至少一个邮箱地址", "missing_addresses"), request, env, "admin");
-
     const ttl = parseShareTtl(body?.expiresIn);
     const mailVisibility: ShareMailVisibility = body?.mailVisibility === "all" ? "all" : "new";
     const permissions = normalizeSharePermissions(body?.permissions);
+    const addressIds = parseAddressIds(body?.addressIds);
+    const suppliedCredentials = parseAddressCredentials(body?.addressCredentials || body?.credentials);
     const addresses = [];
-    for (const id of addressIds) {
-      let credential: unknown;
-      try {
-        credential = await fetchAdminWorkerJson<unknown>(workerEnv, `/admin/show_password/${id}`, adminPassword);
-      } catch (error) {
-        if (error instanceof UpstreamError && (error.status === 401 || error.status === 403)) throw error;
-        throw new Error(`无法读取地址 #${id} 的访问凭证，请确认 Worker API 地址、管理员密码和站点访问密码是否正确`);
-      }
-      let jwt = extractJwtFromCredential(credential);
-      let fallbackAddress = addressHints.get(String(id))?.address || decodeJwtAddress(jwt);
-      const password = extractAddressPassword(credential);
-      if (!jwt && looksLikeJwt(password)) jwt = password;
-      if (!jwt && password && fallbackAddress) {
+    const useAdminAddressFlow = Boolean(adminPassword || (addressIds.length && !suppliedCredentials.length) || (adminAccessToken && !suppliedCredentials.length));
+
+    if (useAdminAddressFlow) {
+      const adminAuth = await assertShareAdmin(request, env);
+      const addressHints = parseAddressHints(body?.addresses);
+      if (!addressIds.length) return withCors(errorJson(400, "请选择至少一个邮箱地址", "missing_addresses"), request, env, "admin");
+
+      for (const id of addressIds) {
+        let credential: unknown;
         try {
-          jwt = await loginAddressPassword(workerEnv, fallbackAddress, password);
+          credential = await fetchShareAdminWorkerJson<unknown>(adminAuth, `/admin/show_password/${id}`);
         } catch (error) {
-          if (error instanceof UpstreamError && (error.status === 401 || error.status === 403)) {
-            throw new Error(`地址 #${id} 的邮箱密码无法登录，请先在地址管理中重置密码后再创建分享`);
-          }
-          throw error;
+          if (error instanceof UpstreamError && (error.status === 401 || error.status === 403)) throw error;
+          throw new Error(`无法读取地址 #${id} 的访问凭证，请确认 Worker API 地址、管理员密码和站点访问密码是否正确`);
         }
+        let jwt = extractJwtFromCredential(credential);
+        let fallbackAddress = addressHints.get(String(id))?.address || decodeJwtAddress(jwt);
+        const password = extractAddressPassword(credential);
+        if (!jwt && looksLikeJwt(password)) jwt = password;
+        if (!jwt && password && fallbackAddress) {
+          try {
+            jwt = await loginAddressPassword(workerEnv, fallbackAddress, password);
+          } catch (error) {
+            if (error instanceof UpstreamError && (error.status === 401 || error.status === 403)) {
+              throw new Error(`地址 #${id} 的邮箱密码无法登录，请先在地址管理中重置密码后再创建分享`);
+            }
+            throw error;
+          }
+        }
+        if (!jwt) throw new Error(`地址 #${id} 没有返回可用于分享的 JWT`);
+        if (!fallbackAddress) fallbackAddress = decodeJwtAddress(jwt);
+        const resolved = await resolveVerifiedJwtAddress(workerEnv, jwt, fallbackAddress);
+        const address = resolved.address;
+        if (!address || resolved.verifiedBy === "unverified") {
+          throw new Error(`地址 #${id} 的访问凭证无法验证邮箱归属，请刷新地址列表或重置密码后重试`);
+        }
+        if (fallbackAddress && !sameAddress(address, fallbackAddress)) {
+          throw new Error(`地址 #${id} 的访问凭证属于其他邮箱，请刷新地址列表后重试`);
+        }
+        const snapshot = await getLatestMailCutoff(adminAuth.workerEnv, jwt);
+        const cutoff = mailVisibility === "new"
+          ? { sinceMailId: snapshot.sinceMailId, sinceCreatedAt: snapshot.sinceCreatedAt, mailCount: 0 }
+          : { sinceMailId: 0, sinceCreatedAt: null, mailCount: snapshot.mailCount };
+        addresses.push({ id: String(id), address, jwt, ...cutoff, hiddenMailIds: [] });
       }
-      if (!jwt) throw new Error(`地址 #${id} 没有返回可用于分享的 JWT`);
-      if (!fallbackAddress) fallbackAddress = decodeJwtAddress(jwt);
-      const resolved = await resolveVerifiedJwtAddress(workerEnv, jwt, fallbackAddress);
-      const address = resolved.address;
-      if (!address || resolved.verifiedBy === "unverified") {
-        throw new Error(`地址 #${id} 的访问凭证无法验证邮箱归属，请刷新地址列表或重置密码后重试`);
+    } else {
+      const userToken = extractUserToken(request);
+      if (!userToken) return withCors(errorJson(401, "请先登录账号", "missing_user_token"), request, env, "admin");
+      if (!suppliedCredentials.length) return withCors(errorJson(400, "请选择至少一个邮箱地址", "missing_addresses"), request, env, "admin");
+      const boundRaw = await fetchWorkerJsonWithHeaders<{ results?: UserBoundAddress[] } | UserBoundAddress[]>(
+        workerEnv,
+        "/user_api/bind_address",
+        buildUserWorkerHeaders(workerEnv, userToken)
+      );
+      const boundRows = Array.isArray(boundRaw) ? boundRaw : Array.isArray(boundRaw?.results) ? boundRaw.results : [];
+      const allowed = new Map<string, string>();
+      for (const row of boundRows) {
+        const id = String(row.id || "").trim();
+        const address = normalizeAddress(row.name || row.address);
+        if (id && address) allowed.set(id, address);
       }
-      if (fallbackAddress && !sameAddress(address, fallbackAddress)) {
-        throw new Error(`地址 #${id} 的访问凭证属于其他邮箱，请刷新地址列表后重试`);
+      for (const item of suppliedCredentials) {
+        const allowedAddress = allowed.get(item.id);
+        if (!allowedAddress || !sameAddress(allowedAddress, item.address)) {
+          return withCors(errorJson(403, `无权分享地址 #${item.id}`, "address_not_allowed"), request, env, "admin");
+        }
+        const resolved = await resolveVerifiedJwtAddress(workerEnv, item.jwt, item.address);
+        const address = resolved.address;
+        if (!address || resolved.verifiedBy === "unverified" || !sameAddress(address, allowedAddress)) {
+          return withCors(errorJson(403, `地址 #${item.id} 的凭据无法验证`, "credential_mismatch"), request, env, "admin");
+        }
+        const snapshot = await getLatestMailCutoff(workerEnv, item.jwt);
+        const cutoff = mailVisibility === "new"
+          ? { sinceMailId: snapshot.sinceMailId, sinceCreatedAt: snapshot.sinceCreatedAt, mailCount: 0 }
+          : { sinceMailId: 0, sinceCreatedAt: null, mailCount: snapshot.mailCount };
+        addresses.push({ id: item.id, address, jwt: item.jwt, ...cutoff, hiddenMailIds: [] });
       }
-      const snapshot = await getLatestMailCutoff(workerEnv, jwt);
-      const cutoff = mailVisibility === "new"
-        ? { sinceMailId: snapshot.sinceMailId, sinceCreatedAt: snapshot.sinceCreatedAt, mailCount: 0 }
-        : { sinceMailId: 0, sinceCreatedAt: null, mailCount: snapshot.mailCount };
-      addresses.push({ id: String(id), address, jwt, ...cutoff, hiddenMailIds: [] });
     }
 
     const token = newShareToken();
