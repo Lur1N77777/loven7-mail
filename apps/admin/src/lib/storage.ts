@@ -134,6 +134,7 @@ const AUTH_PRIVATE_STORAGE_KEYS = [
   STORAGE_KEYS.adminPassword,
   STORAGE_KEYS.sitePassword,
   STORAGE_KEYS.userAccessToken,
+  STORAGE_KEYS.accountUserToken,
   STORAGE_KEYS.addressJwt,
   STORAGE_KEYS.authRememberedAt,
   STORAGE_KEYS.authExpiredNotice,
@@ -209,6 +210,24 @@ function getBrowserStorages(): Storage[] {
     }
   });
   return storages;
+}
+
+function getSessionStorages(): Storage[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return [window.sessionStorage];
+  } catch {
+    return [];
+  }
+}
+
+function getLocalStorages(): Storage[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return [window.localStorage];
+  } catch {
+    return [];
+  }
 }
 
 function removeStorageKey(storage: Storage, key: string): void {
@@ -366,20 +385,40 @@ function clearPrivateCaches(storages: Storage[]): void {
   });
 }
 
+function clearPersistentAuthStorage(): void {
+  const localStorages = getLocalStorages();
+  removeLegacyAuthKeys(localStorages);
+  localStorages.forEach((storage) => {
+    collectAuthScopes([storage]).forEach((scope) => removeAuthScope([storage], scope));
+  });
+}
+
 export function readBoundAuth(apiBase: string): BoundAuth {
   if (typeof window === 'undefined') return emptyBoundAuth();
-  return readBoundAuthFromStorages(getBrowserStorages(), normalizeAuthApiBase(apiBase));
+  return readBoundAuthFromStorages(getSessionStorages(), normalizeAuthApiBase(apiBase));
 }
 
 export function writeBoundAuth(apiBase: string, auth: Partial<BoundAuth>, rememberedAt = Date.now()): void {
   if (typeof window === 'undefined') return;
   const normalizedBase = normalizeAuthApiBase(apiBase);
-  const storages = getBrowserStorages();
-  writeBoundAuthToStorages(storages, normalizedBase, auth, rememberedAt);
-  removeLegacyAuthKeys(storages);
+  const sessionStorages = getSessionStorages();
+  writeBoundAuthToStorages(sessionStorages, normalizedBase, auth, rememberedAt);
+  removeLegacyAuthKeys(sessionStorages);
+  clearPersistentAuthStorage();
   if (auth.adminPassword || auth.sitePassword || auth.userAccessToken || auth.addressJwt) {
     writeAuthCookieMirror({ apiBase: normalizedBase, rememberedAt: auth.rememberedAt || rememberedAt });
   }
+}
+
+export function readAccountUserToken(): string {
+  if (typeof window === 'undefined') return '';
+  return readFirstStorageItem(getSessionStorages(), STORAGE_KEYS.accountUserToken);
+}
+
+export function writeAccountUserToken(value: string): void {
+  if (typeof window === 'undefined') return;
+  getSessionStorages().forEach((storage) => writeStorageItem(storage, STORAGE_KEYS.accountUserToken, value.trim()));
+  getLocalStorages().forEach((storage) => removeStorageKey(storage, STORAGE_KEYS.accountUserToken));
 }
 
 export function purgeExpiredAuthStorage(now = Date.now()): AuthExpiryCheck {
@@ -442,6 +481,7 @@ export function purgeExpiredAuthStorage(now = Date.now()): AuthExpiryCheck {
         expired = true;
       }
     });
+    clearPersistentAuthStorage();
     if (!hadPrivateAuth) return { ...fallback, rememberedAt };
     return { expired, migrated, rememberedAt, hadPrivateAuth };
   } catch {

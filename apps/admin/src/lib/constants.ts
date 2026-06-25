@@ -4,12 +4,14 @@ export const STORAGE_KEYS = {
   adminPassword: 'loven7.adminPassword',
   sitePassword: 'loven7.sitePassword',
   userAccessToken: 'loven7.userAccessToken',
+  accountUserToken: 'loven7.admin.accountUserToken',
   addressJwt: 'loven7.addressJwt',
   apiBase: 'loven7.apiBase',
   authRememberedAt: 'loven7.authRememberedAt',
   authExpiredNotice: 'loven7.authExpiredNotice',
   authScopeMismatchNotice: 'loven7.authScopeMismatchNotice',
   authCookieMirror: 'loven7.authCookieMirror',
+  oauthLoginAttempt: 'loven7.admin.oauth.attempt',
   authScopedPrefix: 'loven7.auth.v1.',
   uiTheme: 'loven7.uiTheme',
   uiLocale: 'loven7.locale',
@@ -49,11 +51,11 @@ export const CACHE_TTL = {
 } as const;
 
 export const SWIPE = {
-  startThreshold: 18,
-  ratio: 1.15,
-  pageMinDistance: 78,
-  pageMaxVertical: 96,
-  pageRatio: 1.25,
+  startThreshold: 24,
+  ratio: 1.32,
+  pageMinDistance: 112,
+  pageMaxVertical: 82,
+  pageRatio: 1.45,
   mailMinDistance: 72,
   mailMaxVertical: 64,
 } as const;

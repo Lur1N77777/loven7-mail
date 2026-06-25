@@ -19,9 +19,13 @@
 
 | 变量 | 说明 |
 | --- | --- |
-| `VITE_API_BASE` | 可留空。留空时首次打开页面会要求填写自己的 Worker API 地址，并缓存在浏览器本地。 |
+| `VITE_API_BASE` | 生产建议留空。留空时管理后台请求同域 Pages Functions，再由服务端代理到上游 Worker，避免在前端暴露管理员密码。 |
 | `VITE_FRONTEND_LOGIN_BASE` | 可留空。用户站 URL，可部署后在“系统设置 → 前端登录链接前缀”里保存。 |
 | `VITE_APP_NAME` | 显示名，默认 `Loven7-Mail`。 |
+| `MAIL_WORKER_BASE_URL` | Cloudflare Pages 运行时变量/secret。上游 Temp Mail Worker/API 根地址。 |
+| `ADMIN_PASSWORD` | Cloudflare Pages Production secret。管理员账号访问 `/admin/*` 时由 Pages Function 在服务端注入，绝不能写进前端环境变量或仓库。 |
+| `SITE_PASSWORD` | 可选 Cloudflare Pages secret。上游 Worker 开启站点密码时填写。 |
+| `MAIL_READ_STATE_KV` | 可选 KV 绑定。用于跨设备同步管理后台邮件已读/星标状态；公开仓库不要提交真实 KV Namespace ID。 |
 
 ## 本地运行
 

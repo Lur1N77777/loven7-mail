@@ -6,6 +6,7 @@ export interface ApiCredentials {
   adminPassword?: string;
   sitePassword?: string;
   userAccessToken?: string;
+  accountUserToken?: string;
   addressJwt?: string;
   lang?: string;
 }
@@ -94,6 +95,7 @@ function authCacheFingerprint(credentials: ApiCredentials, headers?: Record<stri
     admin: safeHeaderValue(credentials.adminPassword) || '',
     site: safeHeaderValue(credentials.sitePassword) || '',
     userAccessToken: safeHeaderValue(credentials.userAccessToken) || '',
+    accountUserToken: safeHeaderValue(credentials.accountUserToken) || '',
     addressJwt: safeHeaderValue(credentials.addressJwt) || '',
     lang: credentials.lang || 'zh',
     headers: headers || {},
@@ -173,8 +175,11 @@ export function createApiClient(getBaseUrl: () => string, getCredentials: () => 
       if (adminPassword) headers['x-admin-auth'] = adminPassword;
       const userAccessToken = safeHeaderValue(credentials.userAccessToken);
       if (userAccessToken) headers['x-user-access-token'] = userAccessToken;
+      const accountUserToken = safeHeaderValue(credentials.accountUserToken);
+      if (accountUserToken) headers['x-user-token'] = accountUserToken;
       const addressJwt = safeHeaderValue(credentials.addressJwt);
-      if (addressJwt) headers.Authorization = `Bearer ${addressJwt}`;
+      const bearerToken = addressJwt || userAccessToken || accountUserToken;
+      if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`;
 
       const timeoutMs = Math.max(1000, Number(options.timeoutMs || DEFAULT_TIMEOUT_MS));
       const timeoutController = typeof AbortController !== 'undefined' ? new AbortController() : null;

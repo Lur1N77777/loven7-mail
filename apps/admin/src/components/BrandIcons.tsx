@@ -208,3 +208,12 @@ export function HeroOrbitLogo(props: BrandIconProps) {
     </SvgBase>
   );
 }
+
+export function LovenMailMark(props: BrandIconProps) {
+  return (
+    <SvgBase {...props}>
+      <path d="M8.8 28.7c6.1-9.5 15.8-14.8 29.3-15.5-4.3 3-7.7 7-10 12 4.4-.8 8.5-.2 11.5 2.2-8.8.8-15.6 4.6-20 11.4-1.4-5-4.9-8.4-10.8-10.1Z" {...strokeProps} />
+      <path d="M11.6 20.4c2.6-3 6.2-4.9 10.8-5.9" {...strokeProps} opacity=".42" />
+    </SvgBase>
+  );
+}
