@@ -145,6 +145,13 @@ npm run check:cloudflare
 npm run check:release
 ```
 
+刷新 README 示例截图：
+
+```bash
+npm --prefix apps/admin install
+npm run docs:screenshots
+```
+
 部署后检查用户站运行时：
 
 ```powershell

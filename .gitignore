@@ -10,6 +10,7 @@ wrangler.local.toml
 .codex-dev-logs/
 qa-shots/
 tmp/
+apps/admin/*.png
 .env
 .env.local
 .env.*.local

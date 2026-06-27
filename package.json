@@ -11,6 +11,7 @@
     "check:baseline": "node scripts/check-change-baseline.mjs",
     "check:cloudflare": "node scripts/check-cloudflare-pages-preflight.mjs",
     "check:cloudflare:runtime": "node scripts/check-cloudflare-runtime.mjs",
+    "docs:screenshots": "node scripts/capture-readme-screenshots.mjs",
     "check:release": "npm run check:cloudflare && npm run lint:admin && npm run check:webmail && npm run build",
     "build": "npm run build:admin && npm run build:webmail"
   }
