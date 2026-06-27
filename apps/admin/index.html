@@ -12,6 +12,20 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="alternate icon" href="/pwa.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/pwa.svg" />
+    <script>
+      (() => {
+        try {
+          const normalizeTheme = (value) => (value === 'dark' || value === 'light' ? value : '');
+          const localTheme = normalizeTheme(window.localStorage && window.localStorage.getItem('loven7.uiTheme'));
+          const sessionTheme = normalizeTheme(window.sessionStorage && window.sessionStorage.getItem('loven7.uiTheme'));
+          const theme = localTheme || sessionTheme;
+          if (theme === 'dark') {
+            document.documentElement.classList.add('theme-dark');
+            document.documentElement.style.colorScheme = 'dark';
+          }
+        } catch (_) {}
+      })();
+    </script>
     <title>Loven7-Mail Admin</title>
   </head>
   <body>

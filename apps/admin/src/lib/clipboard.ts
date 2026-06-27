@@ -1,3 +1,5 @@
+import { normalizeFrontendBaseUrl } from './frontendBase';
+
 export async function copyText(value: string): Promise<void> {
   const text = value.trim();
   if (!text) throw new Error('没有可复制的内容');
@@ -28,7 +30,7 @@ export async function copyText(value: string): Promise<void> {
 
 export function buildAddressLoginUrl(jwt: string, frontendBase?: string): string {
   const fallback = typeof window !== 'undefined' ? window.location.origin : '';
-  const base = (frontendBase || fallback || '').trim().replace(/\/$/, '');
+  const base = normalizeFrontendBaseUrl(frontendBase || fallback || '');
   return `${base || ''}/?JWT=${encodeURIComponent(jwt)}`;
 }
 

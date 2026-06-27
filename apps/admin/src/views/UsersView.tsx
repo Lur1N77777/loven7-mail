@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronUp, Filter, Link2, Lock, Plus, RefreshCw, Save, Shield, Trash2, UserRoundCog } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { CACHE_TTL, DEFAULT_PAGE_SIZE, STORAGE_KEYS } from '../lib/constants';
@@ -12,7 +12,7 @@ import { EmptyState, LoadingState, Modal, Pagination, type Notify, useConfirm } 
 type CachedUserList = { version: number; count: number; savedAt: number; users: UserRecord[]; roles: RoleRecord[] };
 type InlineAddressCacheEntry = { data: BoundAddressRecord[]; loading: boolean; savedAt: number; requestId?: number };
 const USER_LIST_CACHE_VERSION = 1;
-const USER_INLINE_ANIMATION_MS = 240;
+const USER_INLINE_ANIMATION_MS = 170;
 const DESKTOP_USERS_QUERY = '(min-width: 768px)';
 
 function useMediaQuery(query: string) {
@@ -269,7 +269,7 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
           <button className="btn-danger compact col-span-2" onClick={(event) => { event.stopPropagation(); deleteUser(user); }}><Trash2 size={14} /> {t('删除', 'Delete')}</button>
         </div>
       </article>
-      {renderInline && <div className={cls('user-inline-mobile-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><UserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
+      {renderInline && <div className={cls('user-inline-mobile-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
     </div>;
   };
 
@@ -293,12 +293,12 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
           <button className="table-action danger" onClick={(event) => { event.stopPropagation(); deleteUser(user); }} title={t('删除', 'Delete')}><Trash2 size={15} /></button>
         </div>
       </div>
-      {renderInline && <div className={cls('user-inline-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><UserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
+      {renderInline && <div className={cls('user-inline-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
     </div>;
   };
 
-  return <div className="h-full space-y-4 overflow-y-auto p-3 md:p-4 xl:p-6">
-    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('用户管理', 'User management')}</h2><p className="mt-1 text-sm text-slate-400">{t('点击用户可直接展开其地址，也可跳转到地址管理批量筛选。', 'Click a user to expand their addresses, or jump to address management with that user filtered.')}</p></div><button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> {t('新建用户', 'New user')}</button></div>
+  return <div className="users-view-shell h-full space-y-4 overflow-y-auto p-3 md:p-4 xl:p-6">
+    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('用户管理', 'User management')}</h2></div><button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> {t('新建用户', 'New user')}</button></div>
     <div className="panel overflow-hidden"><div className="flex flex-col gap-3 border-b border-slate-100 p-3 md:flex-row"><input className="form-input compact-control" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder={t('搜索用户邮箱', 'Search user email')} /><button className="btn-secondary compact" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && users.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button></div>{loading && users.length === 0 ? <LoadingState /> : users.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={UserRoundCog} title={t('暂无用户', 'No users')} /></div> : <>
       {isDesktopUsers ? <div className="user-grid-scroll"><div className="user-grid-list" role="table" aria-label={t('用户列表', 'User list')}><div className="user-grid-row user-grid-header" role="row"><div>ID</div><div>{t('邮箱', 'Email')}</div><div>{t('角色', 'Role')}</div><div>{t('地址数', 'Addresses')}</div><div>{t('更新时间', 'Updated')}</div><div className="text-right">{t('操作', 'Actions')}</div></div>{users.map(renderDesktopUser)}</div></div> : <div className="space-y-2 p-3">{users.map(renderMobileUser)}</div>}
     </>}<Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} /></div>
@@ -325,10 +325,17 @@ function UserAddressInline({ user, data, loading, onBind, onManage, onClose }: {
 
   return <div className="user-address-inline">
     <div className="user-address-inline-head">
-      <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{locale === 'en-US' ? `${user.user_email} addresses` : `${user.user_email} 的地址`}</p><p className="text-xs text-slate-400">{locale === 'en-US' ? `${data.length} total · from user bound-address API.` : `共 ${data.length} 个，数据来自用户绑定地址接口。`}</p></div>
+      <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{locale === 'en-US' ? `${user.user_email} addresses` : `${user.user_email} 的地址`}</p><p className="text-xs text-slate-400">{locale === 'en-US' ? `${data.length} total` : `共 ${data.length} 个`}</p></div>
       <div className="flex shrink-0 gap-2"><button className="btn-secondary compact" onClick={onManage}><Filter size={14} /> {t('地址管理筛选', 'Filter in addresses')}</button><button className="btn-secondary compact" onClick={onClose}><ChevronUp size={14} /> {t('收起', 'Collapse')}</button></div>
     </div>
     <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input className="form-input compact-control" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t('绑定完整邮箱地址，例如 test@example.com', 'Bind full mailbox address, e.g. test@example.com')} /><button className="btn-primary compact" onClick={bind}><Link2 size={14} /> {t('绑定', 'Bind')}</button></div>
     {loading ? <LoadingState label={t('正在加载用户地址...', 'Loading user addresses...')} /> : data.length === 0 ? <div className="mt-3"><EmptyState icon={Link2} title={t('暂无绑定地址', 'No bound addresses')} /></div> : <div className="user-address-inline-list">{data.map((row) => <div key={row.id} className="user-address-inline-item"><div className="min-w-0"><p className="truncate font-semibold text-slate-800">{row.name}</p><p className="text-[11px] text-slate-400">#{row.id} · {formatDateTime(row.updated_at || row.created_at)}</p></div><div className="user-address-inline-stats"><span>{t('收', 'In')} {row.mail_count ?? 0}</span><span>{t('发', 'Out')} {row.send_count ?? 0}</span></div></div>)}</div>}
   </div>;
 }
+
+const MemoUserAddressInline = memo(UserAddressInline, (prev, next) => (
+  prev.user.id === next.user.id
+  && prev.user.user_email === next.user.user_email
+  && prev.loading === next.loading
+  && prev.data === next.data
+));

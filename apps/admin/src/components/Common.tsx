@@ -122,8 +122,8 @@ export function NoticeToast({ notice }: { notice: Notice }) {
 export function LoadingState({ label }: { label?: string }) {
   const locale = getRuntimeLocale();
   return (
-    <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-slate-400 md:min-h-48">
-      <Loader2 className="h-6 w-6 animate-spin text-slate-600" />
+    <div className="admin-loading-state flex min-h-36 flex-col items-center justify-center gap-3 text-slate-400 md:min-h-48">
+      <Loader2 className="admin-loading-spinner h-6 w-6 animate-spin text-slate-600" />
       <span className="text-sm">{label || localeText('加载中...', 'Loading...', locale)}</span>
     </div>
   );

@@ -1,4 +1,5 @@
 import { sha256Hex } from './crypto';
+import { normalizeFrontendBaseUrl } from './frontendBase';
 
 export type OAuthClientInfo = {
   clientID: string;
@@ -358,7 +359,7 @@ export async function createUserShare(
     allowHideMail?: boolean;
   } = {},
 ): Promise<UserShareResult> {
-  const base = String(frontendBase || '').trim().replace(/\/+$/, '');
+  const base = normalizeFrontendBaseUrl(frontendBase);
   if (!base) throw new Error('请先配置用户站前端地址');
   if (!rows.length) throw new Error('请选择至少一个邮箱地址');
   const credentials = await Promise.all(rows.map(async (row) => ({
@@ -366,21 +367,27 @@ export async function createUserShare(
     address: row.name,
     jwt: await fetchAddressJwt(apiBase, userToken, row.id),
   })));
-  const response = await fetch(`${base}/api/share`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      Authorization: `Bearer ${userToken}`,
-      'x-user-token': userToken,
-    },
-    body: JSON.stringify({
-      addressCredentials: credentials,
-      addresses: rows.map((row) => ({ id: row.id, address: row.name })),
-      expiresIn: options.expiresIn || '30d',
-      mailVisibility: options.mailVisibility || 'new',
-      permissions: { hideMail: options.allowHideMail !== false },
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${base}/api/share`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        Authorization: `Bearer ${userToken}`,
+        'x-user-token': userToken,
+      },
+      body: JSON.stringify({
+        addressCredentials: credentials,
+        addresses: rows.map((row) => ({ id: row.id, address: row.name })),
+        expiresIn: options.expiresIn || '30d',
+        mailVisibility: options.mailVisibility || 'new',
+        permissions: { hideMail: options.allowHideMail !== false },
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || '');
+    throw new Error(`共享链接暂不可用：${base}${message ? ` ${message}` : ''}`);
+  }
   const text = await response.text();
   let data: any = null;
   try {

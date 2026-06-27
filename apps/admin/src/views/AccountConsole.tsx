@@ -5,10 +5,12 @@ import { Header, MobileNav, Sidebar, type MenuKey } from '../components/Shell';
 import { ActivityLogo, AddressLogo, ChartLogo, HeroOrbitLogo, InboxLogo, TimeLogo } from '../components/BrandIcons';
 import { AddressView } from './AddressView';
 import { copyText } from '../lib/clipboard';
-import { DEFAULT_PAGE_SIZE, FRONTEND_LOGIN_BASE } from '../lib/constants';
+import { DEFAULT_PAGE_SIZE, FRONTEND_LOGIN_BASE, STORAGE_KEYS } from '../lib/constants';
 import { createApiClient } from '../lib/api';
 import { cls, formatDateTime, formatShortDate } from '../lib/format';
+import { isLocalAdminOrigin, normalizeFrontendBaseUrl } from '../lib/frontendBase';
 import { localeText, type AppLocale } from '../lib/locale';
+import { readStorage, writeLocalStorage } from '../lib/storage';
 import {
   createUserAddress,
   createUserShare,
@@ -182,12 +184,12 @@ function AccountDashboardView({ stats, profile, loading, locale, refresh, setAct
   setActiveMenu: (menu: MenuKey) => void;
 }) {
   const t = useLocaleText(locale);
-  const quickActions: Array<{ menu: MenuKey; icon: ComponentType<{ className?: string }>; title: string; desc: string }> = [
-    { menu: 'address', icon: AddressLogo, title: t('地址管理', 'Addresses'), desc: t('创建和查看自己名下的邮箱地址。', 'Create and view your own mailbox addresses.') },
-    { menu: 'inbox', icon: InboxLogo, title: t('收件箱', 'Inbox'), desc: t('查看自己邮箱收到的邮件。', 'Read mail received by your own mailboxes.') },
-    { menu: 'sent', icon: Send, title: t('发件箱', 'Sent'), desc: t('查看自己权限范围内的发件记录。', 'View sent records within your own scope.') },
-    { menu: 'unknown', icon: AlertCircle, title: t('未知邮件', 'Unknown'), desc: t('普通用户仅显示自己权限内的未知邮件。', 'Member view only shows unknown mail within its own scope.') },
-    { menu: 'stats', icon: ChartLogo, title: t('统计', 'Stats'), desc: t('查看个人地址和邮件统计。', 'View personal address and mail stats.') },
+  const quickActions: Array<{ menu: MenuKey; icon: ComponentType<{ className?: string }>; title: string }> = [
+    { menu: 'address', icon: AddressLogo, title: t('地址管理', 'Addresses') },
+    { menu: 'inbox', icon: InboxLogo, title: t('收件箱', 'Inbox') },
+    { menu: 'sent', icon: Send, title: t('发件箱', 'Sent') },
+    { menu: 'unknown', icon: AlertCircle, title: t('未知邮件', 'Unknown') },
+    { menu: 'stats', icon: ChartLogo, title: t('统计', 'Stats') },
   ];
   return (
     <div className="dashboard-view-shell dashboard-view-typography h-full overflow-y-auto p-3 md:p-4 xl:p-6">
@@ -199,7 +201,6 @@ function AccountDashboardView({ stats, profile, loading, locale, refresh, setAct
               <div className="min-w-0">
                 <p className="dashboard-hero-kicker text-sm">{profile.roleLabel || t('普通用户', 'Member')} · {profile.userEmail}</p>
                 <h2 className="dashboard-hero-title mt-2 text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">{t('个人管理后台', 'Personal admin console')}</h2>
-                <p className="dashboard-hero-copy mt-3 max-w-2xl text-sm leading-6">{t('地址、收件箱、发件箱和未知邮件均按当前账号权限显示。', 'Addresses, inbox, sent, and unknown mail are scoped to the current account.')}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -221,7 +222,6 @@ function AccountDashboardView({ stats, profile, loading, locale, refresh, setAct
           <div className="flex items-end justify-between gap-3">
             <div>
               <h3 className="panel-title">{t('快捷入口', 'Quick actions')}</h3>
-              <p className="panel-subtitle mt-1">{t('和管理员后台保持一致的菜单结构，只显示当前账号可用页面。', 'The menu structure matches the admin console and only shows available pages.')}</p>
             </div>
             <span className="dashboard-quick-count">{quickActions.length}</span>
           </div>
@@ -232,7 +232,6 @@ function AccountDashboardView({ stats, profile, loading, locale, refresh, setAct
                 <button key={action.menu} onClick={() => setActiveMenu(action.menu)} className="dashboard-quick-card text-left transition">
                   <span className="dashboard-quick-logo"><Icon className="dashboard-logo-svg" /></span>
                   <p className="dashboard-quick-title font-semibold text-slate-800">{action.title}</p>
-                  <p className="dashboard-quick-desc mt-1 text-sm text-slate-400">{action.desc}</p>
                 </button>
               );
             })}
@@ -255,7 +254,6 @@ function AccountStatsView({ stats, locale, refresh, loading }: { stats: Statisti
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
           <div>
             <h2 className="page-title">{t('统计', 'Stats')}</h2>
-            <p className="page-subtitle mt-1">{t('仅统计当前账号名下地址、收件和活跃情况。', 'Only counts addresses, inbox mail, and activity under the current account.')}</p>
           </div>
           <button className="btn-secondary compact" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} />{t('刷新', 'Refresh')}</button>
         </div>
@@ -266,7 +264,7 @@ function AccountStatsView({ stats, locale, refresh, loading }: { stats: Statisti
           <div className="dashboard-stat-card rounded-3xl border border-slate-100 bg-white p-4 shadow-sm"><div className="dashboard-logo-frame dashboard-logo-neutral mb-4"><TimeLogo className="dashboard-logo-svg" /></div><p className="dashboard-stat-label text-sm text-slate-400">{t('30天活跃地址', 'Active addresses 30d')}</p><p className="dashboard-stat-value mt-2 text-3xl font-bold text-slate-800">{stats.activeAddressCount30days}</p></div>
         </section>
         <section className="panel p-4 sm:p-5">
-          <div className="mb-4 flex items-center justify-between"><div><h3 className="panel-title">{t('运行占比', 'Operational mix')}</h3><p className="panel-subtitle">{t('用当前用户数据计算。', 'Calculated from current user data.')}</p></div><span className="dashboard-quick-logo"><ChartLogo className="dashboard-logo-svg" /></span></div>
+          <div className="mb-4 flex items-center justify-between"><div><h3 className="panel-title">{t('运行占比', 'Operational mix')}</h3></div><span className="dashboard-quick-logo"><ChartLogo className="dashboard-logo-svg" /></span></div>
           <div className="dashboard-segment-bar" aria-hidden="true">
             <span className="stat-bar-mint" style={{ width: `${Math.max(mailPercent, 4)}%` }} />
             <span className="stat-bar-sky" style={{ width: `${Math.max(addressPercent, 4)}%` }} />
@@ -289,7 +287,7 @@ function MailDetail({ mail, mode, locale }: { mail: AddressMail | null; mode: Ma
     const emptyIcon = mode === 'sent' ? Send : mode === 'unknown' ? AlertCircle : Inbox;
     return (
       <div className="grid h-full min-h-0 place-items-center p-5">
-        <EmptyState icon={emptyIcon} title={t('请选择一封邮件', 'Select a mail')} body={t('从左侧列表打开邮件后，会在这里显示完整内容。', 'Open a message from the list to read the full content here.')} />
+        <EmptyState icon={emptyIcon} title={t('请选择一封邮件', 'Select a mail')} />
       </div>
     );
   }
@@ -314,7 +312,7 @@ function MailDetail({ mail, mode, locale }: { mail: AddressMail | null; mode: Ma
           {body ? (
             <pre className="mail-text whitespace-pre-wrap rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm leading-7 text-slate-700">{body}</pre>
           ) : (
-            <EmptyState title={t('无正文内容', 'No content')} body={t('这封邮件没有返回可展示的正文。', 'This message did not return displayable content.')} />
+            <EmptyState title={t('无正文内容', 'No content')} />
           )}
         </div>
       </article>
@@ -418,7 +416,7 @@ function MailboxReader({ apiBase, jwt, address, locale, mode = 'inbox', refreshK
         {error ? <div className="mx-4 mb-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div> : null}
         <div className="mail-list-viewport flex-1 overflow-y-auto px-2 pb-2 md:px-4 md:pb-4">
           {loading && mails.length === 0 ? <LoadingState label={t('正在加载邮件...', 'Loading mail...')} /> : visibleMails.length === 0 ? (
-            <EmptyState icon={emptyIcon} title={t('没有匹配的邮件', 'No matching mail')} body={query ? t('搜索结果为空，清空关键词或刷新后再试。', 'No search results. Clear the keyword or refresh.') : t('当前账号暂时没有可查看的邮件。', 'There is no mail available for this account yet.')} />
+            <EmptyState icon={emptyIcon} title={query ? t('没有匹配结果', 'No matches') : t('暂无邮件', 'No mail')} />
           ) : visibleMails.map((mail) => {
             const active = selected?.id === mail.id;
             return (
@@ -658,7 +656,6 @@ function AddressManagementView({
       <div className="address-page-head flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div className="address-page-title">
           <h2 className="text-2xl font-bold text-slate-800">{t('地址管理', 'Address management')}</h2>
-          <p className="mt-1 text-sm text-slate-400">{t('创建、搜索、分享并打开当前账号名下的邮箱地址。', 'Create, search, share, and open mailbox addresses under this account.')}</p>
         </div>
         <div className="address-page-actions flex flex-wrap gap-2">
           <button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> <span>{t('新建地址', 'New address')}</span></button>
@@ -717,7 +714,7 @@ function AddressManagementView({
         {copyNotice ? <div className="mx-4 mb-3 rounded-xl bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">{copyNotice}</div> : null}
         {error ? <div className="mx-4 mb-3 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">{error}</div> : null}
         {busy === 'list' && addresses.length === 0 ? <LoadingState label={t('正在加载地址...', 'Loading addresses...')} /> : filteredRows.length === 0 ? (
-          <div className="p-4 md:p-6"><EmptyState title={t('暂无地址', 'No addresses')} body={t('可以通过右上角新建地址。', 'Use New address in the top-right to create one.')} /></div>
+          <div className="p-4 md:p-6"><EmptyState title={t('暂无地址', 'No addresses')} /></div>
         ) : (
           <>
             <div className="space-y-2 p-3 md:hidden">
@@ -978,9 +975,21 @@ export function AccountConsole({ apiBase, profile, locale, theme, setTheme, setL
     }
   };
 
+  const frontendShareBase = useCallback(() => {
+    const storedRaw = readStorage(STORAGE_KEYS.frontendLoginBase, '');
+    const stored = normalizeFrontendBaseUrl(storedRaw);
+    const configured = normalizeFrontendBaseUrl(FRONTEND_LOGIN_BASE);
+    const currentOrigin = normalizeFrontendBaseUrl(typeof window !== 'undefined' ? window.location.origin : '');
+    const isLocalAdmin = isLocalAdminOrigin(currentOrigin);
+    if (storedRaw && stored && storedRaw.trim().replace(/\/+$/, '') !== stored) writeLocalStorage(STORAGE_KEYS.frontendLoginBase, stored);
+    if (configured) return configured;
+    if (stored && (stored !== currentOrigin || isLocalAdmin)) return stored;
+    return isLocalAdmin ? currentOrigin : '';
+  }, []);
+
   const createShareForRows = useCallback((rows: UserAddress[], expiresIn: UserShareExpiry, mailVisibility: UserShareMailVisibility, allowHideMail: boolean) => (
-    createUserShare(apiBase, profile.userToken, FRONTEND_LOGIN_BASE, rows, { expiresIn, mailVisibility, allowHideMail })
-  ), [apiBase, profile.userToken]);
+    createUserShare(apiBase, profile.userToken, frontendShareBase(), rows, { expiresIn, mailVisibility, allowHideMail })
+  ), [apiBase, frontendShareBase, profile.userToken]);
 
   const openInbox = (addressRow: UserAddress) => {
     setSelectedAddress(addressRow);
@@ -1045,7 +1054,7 @@ export function AccountConsole({ apiBase, profile, locale, theme, setTheme, setL
       <div className="grid h-full place-items-center p-4">
         {busy.startsWith('open:')
           ? <LoadingState label={t('正在打开邮箱...', 'Opening mailbox...')} />
-          : <EmptyState icon={mode === 'sent' ? Send : mode === 'unknown' ? AlertCircle : Inbox} title={t('请选择邮箱', 'Select a mailbox')} body={t('从地址管理打开自己的邮箱。', 'Open one of your own mailboxes from address management.')} />}
+          : <EmptyState icon={mode === 'sent' ? Send : mode === 'unknown' ? AlertCircle : Inbox} title={t('请选择邮箱', 'Select a mailbox')} />}
       </div>
     )
   );

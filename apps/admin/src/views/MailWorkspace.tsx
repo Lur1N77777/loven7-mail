@@ -1,14 +1,14 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type TouchEvent, type UIEvent } from 'react';
-import { CheckCheck, ChevronDown, Copy, Download, MoreHorizontal, Paperclip, RefreshCw, Reply, ReplyAll, Star, Trash2, X } from 'lucide-react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type TouchEvent, type UIEvent } from 'react';
+import { Archive, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Download, MoreHorizontal, Paperclip, RefreshCw, Reply, Star, Trash2, X } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { ADDRESS_INPUT_DEBOUNCE_MS, CACHE_TTL, COPY_HINT_MS, DEFAULT_PAGE_SIZE, MAIL_READ_HISTORY_MAX, NEW_MAIL_FLASH_MS, STORAGE_KEYS } from '../lib/constants';
-import { cls, formatDateTime, formatShortDate, normalizeSearch } from '../lib/format';
+import { cls, formatShortDate, normalizeSearch } from '../lib/format';
 import { getRuntimeLocale, localeText } from '../lib/locale';
 import { copyText } from '../lib/clipboard';
 import { readJsonStorage, readStorage, writeJsonStorage, writeLocalStorage } from '../lib/storage';
 import { buildMailHtmlDocument, getDownloadEmlUrl, looksLikeMimeSource, parseRawMail, parseRawMailListItem, parseSendbox, sanitizeMailHtml, sanitizeVerificationCode } from '../lib/mailParser';
 import type { ComposePayload, ListResponse, ParsedMail, ParsedSendbox, RawMailRecord, SendboxRecord } from '../types/api';
-import { EmptyState, LoadingState, Pagination, type Notify, useConfirm } from '../components/Common';
+import { EmptyState, LoadingState, type Notify, useConfirm } from '../components/Common';
 import { BrandAvatar } from '../lib/brandIdentity';
 import type { MenuKey } from '../components/Shell';
 
@@ -36,6 +36,7 @@ type FetchOptions = { addressOverride?: string; pageOverride?: number; forceRefr
 type TranslateFn = (zh: string, en: string) => string;
 type PullRefreshLock = 'none' | 'pull' | 'scroll';
 type MailStateStorageKeys = { readIds: string; readAllBefore: string; starredIds: string };
+type PressPoint = { x: number; y: number };
 type MobileMailChromePaddingVars = CSSProperties & {
   '--mobile-mail-viewport-top-pad': string;
   '--mobile-mail-viewport-bottom-pad': string;
@@ -43,13 +44,14 @@ type MobileMailChromePaddingVars = CSSProperties & {
 
 const MAIL_LIST_CACHE_VERSION = 4;
 const MAIL_SEARCH_INDEX_PAGE_SIZE = 240;
-const MAIL_SEARCH_INDEX_MAX_PAGES = 90;
+const MAIL_SEARCH_INDEX_MAX_PAGES = 240;
 const MAIL_STATE_CHANGED_EVENT = 'loven7-mail-state-changed';
 const PULL_REFRESH_TRIGGER = 52;
 const PULL_REFRESH_MAX_OFFSET = 86;
 const MOBILE_MAIL_CHROME_COLLAPSE_TRAVEL = 360;
 const MOBILE_MAIL_CHROME_EXPAND_TRAVEL = 320;
 const MOBILE_MAIL_CHROME_SETTLE_DELAY = 220;
+const RECIPIENT_COPY_DRAG_TOLERANCE = 8;
 const isParsed = (mail: AnyMail): mail is ParsedMail => typeof (mail as ParsedMail).senderAddress === 'string';
 const mailStateMode = (mode: MailMode): MailMode => (mode === 'unknown' ? 'inbox' : mode);
 const storageId = (mode: MailMode, id: number) => `${mailStateMode(mode)}:${id}`;
@@ -82,10 +84,10 @@ function easeOutQuart(progress: number): number {
 
 function getMobileMailChromePaddingVars(progress: number): MobileMailChromePaddingVars {
   const clamped = clampMailChromeProgress(progress);
-  const expandedTop = 122.4;
-  const collapsedTop = 5.6;
-  const expandedBottom = 48.8;
-  const collapsedBottom = 5.6;
+  const expandedTop = 96;
+  const collapsedTop = expandedTop;
+  const expandedBottom = 74;
+  const collapsedBottom = expandedBottom;
   const top = expandedTop + (collapsedTop - expandedTop) * clamped;
   const bottom = expandedBottom + (collapsedBottom - expandedBottom) * clamped;
   return {
@@ -118,6 +120,11 @@ function useCompactMailViewport(): boolean {
 function isBlockedPullRefreshTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return true;
   return Boolean(target.closest('input, textarea, select, button, a, iframe, .mail-filter-menu, .modal-card, .mobile-mail-detail, [data-no-page-swipe="true"]'));
+}
+
+function isIntentionalRecipientCopyClick(press: PressPoint | null, event: MouseEvent<HTMLButtonElement>): boolean {
+  if (!press) return true;
+  return Math.hypot(event.clientX - press.x, event.clientY - press.y) <= RECIPIENT_COPY_DRAG_TOLERANCE;
 }
 
 function getRecipient(mail: AnyMail): string {
@@ -412,14 +419,15 @@ function writeSessionMailDetail(mode: MailMode, mail: AnyMail): void {
   }
 }
 
-export function MailWorkspace({ mode, active, visualActive = active, request, notify, ask, globalQuery, addressRequest, setActiveMenu, setComposeSeed, mailStateScope }: { mode: MailMode; active: boolean; visualActive?: boolean; request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; addressRequest?: MailboxAddressRequest | null; setActiveMenu: (menu: MenuKey) => void; setComposeSeed: (seed: Partial<ComposePayload>) => void; mailStateScope: string }) {
+export function MailWorkspace({ mode, active, visualActive = active, request, notify, ask, globalQuery, addressRequest, setActiveMenu, setComposeSeed, mailStateScope, theme = 'light' }: { mode: MailMode; active: boolean; visualActive?: boolean; request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; addressRequest?: MailboxAddressRequest | null; setActiveMenu: (menu: MenuKey) => void; setComposeSeed: (seed: Partial<ComposePayload>) => void; mailStateScope: string; theme?: 'light' | 'dark' }) {
   const [mails, setMails] = useState<AnyMail[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [count, setCount] = useState(0);
   const [mobileLoadedPages, setMobileLoadedPages] = useState(1);
   const [mobileLoadingMore, setMobileLoadingMore] = useState(false);
+  const [mailListExhausted, setMailListExhausted] = useState(false);
   const [searchIndex, setSearchIndex] = useState<AnyMail[]>([]);
   const [searchIndexLoading, setSearchIndexLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -432,6 +440,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const [isMobileDetail, setIsMobileDetail] = useState(false);
   const [mobileDetailDragX, setMobileDetailDragX] = useState(0);
   const [mobileDetailSettling, setMobileDetailSettling] = useState(false);
+  const [detailClosed, setDetailClosed] = useState(false);
   const [pullRefreshOffset, setPullRefreshOffset] = useState(0);
   const [pullRefreshLabel, setPullRefreshLabel] = useState('');
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
@@ -605,6 +614,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     if (!cached || cached.version !== MAIL_LIST_CACHE_VERSION || !Array.isArray(cached.items)) return false;
     setMails(applyLocalState(cached.items, mode, readIds, starredIds, readAllBefore));
     setCount(cached.count || cached.items.length);
+    setMailListExhausted(cached.items.length < pageSize);
     return true;
   }, [mode, pageSize, readAllBefore, readIds, starredIds]);
 
@@ -641,7 +651,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       const { results, count: totalCount } = await loadPage(offset, forceNetwork, targetAddress, abortController.signal);
       if (seq !== fetchSeqRef.current) return;
       const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
-      const nextCount = typeof totalCount === 'number' ? totalCount : parsed.length;
+      const reportedCount = typeof totalCount === 'number' ? totalCount : 0;
+      const nextCount = Math.max(reportedCount, parsed.length, incremental ? currentMails.length : 0);
       setCount(nextCount);
 
       if (incremental && targetPage !== 1) {
@@ -650,14 +661,19 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         return;
       }
 
-      if (!incremental) setMobileLoadedPages(Math.max(1, targetPage));
+      if (!incremental) {
+        setMobileLoadedPages(Math.max(1, targetPage));
+        setMailListExhausted(parsed.length < pageSize);
+      }
 
       if (incremental && currentMails.length > 0) {
         const existing = new Set(currentMails.map((mail) => mail.id));
         const added = parsed.filter((mail) => !existing.has(mail.id));
         const merged = mergeMailLists(parsed, currentMails);
         setMails(merged);
-        saveListCache(merged, nextCount, mailListCacheKey(mode, targetPage, pageSize, targetAddress));
+        const mergedCount = Math.max(nextCount, merged.length);
+        setCount(mergedCount);
+        saveListCache(merged, mergedCount, mailListCacheKey(mode, targetPage, pageSize, targetAddress));
         if (added.length) {
           setNewIds(new Set(added.map((mail) => mail.id)));
           if (newIdsTimerRef.current !== null) window.clearTimeout(newIdsTimerRef.current);
@@ -703,15 +719,16 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     setSearchIndexLoading(true);
     try {
       const collected: AnyMail[] = [];
+      let offset = 0;
       for (let index = 0; index < MAIL_SEARCH_INDEX_MAX_PAGES; index += 1) {
         if (abortController.signal.aborted || seq !== searchIndexSeqRef.current) return;
-        const { results, count: totalCount } = await loadSearchIndexPage(index * MAIL_SEARCH_INDEX_PAGE_SIZE, abortController.signal, targetAddress);
+        const { results } = await loadSearchIndexPage(offset, abortController.signal, targetAddress);
         if (abortController.signal.aborted || seq !== searchIndexSeqRef.current) return;
+        if (!results.length) break;
         const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
         collected.push(...parsed);
         setSearchIndex((current) => mergeMailLists(current, parsed));
-        if (typeof totalCount === 'number' && collected.length >= totalCount) break;
-        if (!results.length) break;
+        offset += results.length;
       }
       if (seq === searchIndexSeqRef.current) {
         setSearchIndex((current) => mergeMailLists(current, collected));
@@ -799,6 +816,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     if (!cached || cached.version !== MAIL_LIST_CACHE_VERSION || !Array.isArray(cached.items)) return;
     setMails(applyLocalState(cached.items, mode, readIds, starredIds, readAllBefore));
     setCount(cached.count || cached.items.length);
+    setMailListExhausted(cached.items.length < pageSize);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentListCacheKey, mode, remoteStateReady]);
   useEffect(() => {
@@ -827,6 +845,11 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     window.addEventListener('loven7-mail-refresh-settings', syncRefreshSettings);
     return () => window.removeEventListener('loven7-mail-refresh-settings', syncRefreshSettings);
   }, []);
+  useEffect(() => {
+    if (!active) return;
+    setAutoRefresh(readStorage(STORAGE_KEYS.mailAutoRefreshEnabled, 'true') !== 'false');
+    setAutoSeconds(Math.max(15, Number(readStorage(STORAGE_KEYS.mailAutoRefreshSeconds, '60')) || 60));
+  }, [active]);
   useEffect(() => {
     const onGlobalRefresh = (event: Event) => {
       const targetMenu = (event as CustomEvent<{ menu?: string }>).detail?.menu;
@@ -907,6 +930,10 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       root?.style.setProperty('--mobile-mail-viewport-top-pad', String(paddingVars['--mobile-mail-viewport-top-pad']));
       root?.style.setProperty('--mobile-mail-viewport-bottom-pad', String(paddingVars['--mobile-mail-viewport-bottom-pad']));
       root?.classList.toggle('mobile-mail-chrome-collapsed-local', locallyCollapsed);
+      document.documentElement.style.setProperty('--mobile-mail-preserved-chrome-progress', value);
+      if (mode === 'inbox' || mode === 'sent') {
+        document.documentElement.style.setProperty(`--mobile-mail-preserved-chrome-progress-${mode}`, value);
+      }
       if (ownsMobileChromeRef.current) {
         document.body.style.setProperty('--mobile-mail-chrome-progress', value);
         document.body.classList.toggle('mobile-mail-chrome-collapsed', locallyCollapsed);
@@ -923,7 +950,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     if (mobileChromeRafRef.current === null) {
       mobileChromeRafRef.current = window.requestAnimationFrame(applyProgress);
     }
-  }, []);
+  }, [mode]);
 
   const animateMobileMailChromeProgress = useCallback((target: number, duration = 190) => {
     if (typeof window === 'undefined') return;
@@ -1116,14 +1143,12 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   useEffect(() => {
     if (!active || !compactViewport || !mailListViewportRef.current) return;
     const viewport = mailListViewportRef.current;
-    if (!immersiveMobileMail || isMobileDetail || viewport.scrollTop <= 18) {
-      setMobileMailChromeProgress(0);
+    if (!immersiveMobileMail || isMobileDetail) {
+      setMobileMailChromeProgress(0, true);
       return;
     }
     mobileChromeRef.current.lastScrollTop = viewport.scrollTop;
-    const scrollProgress = Math.min(1, viewport.scrollTop / MOBILE_MAIL_CHROME_COLLAPSE_TRAVEL);
-    const preservedProgress = mobileChromeRef.current.progress;
-    setMobileMailChromeProgress(preservedProgress >= 0.9 && viewport.scrollTop > 48 ? preservedProgress : scrollProgress, true);
+    setMobileMailChromeProgress(mobileChromeRef.current.progress, true);
   }, [active, compactViewport, immersiveMobileMail, isMobileDetail, mode, setMobileMailChromeProgress]);
 
   const searchSource = useMemo(() => {
@@ -1137,15 +1162,16 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     return matchesQuery && matchesAddress && matchesTab;
   }), [activeTab, deferredAddressQuery, deferredQuery, searchSource]);
   const mailListEntries = useMemo(() => groupConsecutiveSenderMails(filtered, mode !== 'sent'), [filtered, mode]);
-  const selected = filtered.find((mail) => mail.id === selectedId) || filtered[0] || null;
-  const totalPages = Math.max(1, Math.ceil(count / pageSize));
+  const selected = detailClosed ? null : filtered.find((mail) => mail.id === selectedId) || filtered[0] || null;
+  const selectedIndex = selected ? filtered.findIndex((mail) => mail.id === selected.id) : -1;
+  const detailPositionLabel = selectedIndex >= 0 ? `${selectedIndex + 1} of ${Math.max(filtered.length, 1)}` : `0 of ${Math.max(filtered.length, 1)}`;
   const unreadCount = useMemo(() => mails.filter((mail) => mail.isUnread).length, [mails]);
   const displayCount = isSearchMode ? filtered.length : (count || filtered.length);
   const tabOptions = mode === 'sent'
     ? [['all', t('全部', 'All')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]]
     : [['all', t('全部', 'All')], ['unread', t('未读', 'Unread')], ['read', t('已读', 'Read')], ['starred', t('标注', 'Starred')], ['attachments', t('附件', 'Attachments')]];
   const activeTabLabel = tabOptions.find(([key]) => key === activeTab)?.[1] || t('全部', 'All');
-  const mobileHasMore = mails.length < count;
+  const mobileHasMore = !isSearchMode && !mailListExhausted;
   const toggleMailStack = useCallback((key: string) => {
     setExpandedMailStacks((current) => {
       const next = new Set(current);
@@ -1156,7 +1182,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, []);
 
   const loadMoreMobile = useCallback(async () => {
-    if (!compactViewport || mobileLoadingMore || loading || refreshing || !mobileHasMore) return;
+    if (mobileLoadingMore || loading || refreshing || !mobileHasMore) return;
     const nextPage = mobileLoadedPages + 1;
     const nextOffset = latestMailsRef.current.length;
     const seq = ++mobileLoadMoreSeqRef.current;
@@ -1166,19 +1192,21 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       if (seq !== mobileLoadMoreSeqRef.current) return;
       const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
       const existing = new Set(latestMailsRef.current.map((mail) => mail.id));
-      const merged = [...latestMailsRef.current, ...parsed.filter((mail) => !existing.has(mail.id))];
+      const added = parsed.filter((mail) => !existing.has(mail.id));
+      const merged = [...latestMailsRef.current, ...added];
       setMails(merged);
-      setCount(parsed.length === 0 ? merged.length : (typeof totalCount === 'number' ? totalCount : Math.max(count, merged.length)));
+      setCount(Math.max(count, typeof totalCount === 'number' ? totalCount : 0, merged.length));
+      setMailListExhausted(results.length < pageSize || added.length === 0);
       setMobileLoadedPages(nextPage);
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('加载更多邮件失败', 'Failed to load more mail'));
     } finally {
       if (seq === mobileLoadMoreSeqRef.current) setMobileLoadingMore(false);
     }
-  }, [address, compactViewport, count, loadPage, loading, mobileHasMore, mobileLoadedPages, mobileLoadingMore, mode, notify, pageSize, readAllBefore, readIds, refreshing, starredIds, t]);
+  }, [address, count, loadPage, loading, mobileHasMore, mobileLoadedPages, mobileLoadingMore, mode, notify, pageSize, readAllBefore, readIds, refreshing, starredIds, t]);
 
   useEffect(() => {
-    if (!compactViewport || !mobileLoadMoreRef.current) return undefined;
+    if (!mobileLoadMoreRef.current) return undefined;
     const target = mobileLoadMoreRef.current;
     const root = mailListViewportRef.current;
     const observer = new IntersectionObserver((entries) => {
@@ -1186,10 +1214,10 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     }, { root, rootMargin: '520px 0px 520px 0px', threshold: 0.01 });
     observer.observe(target);
     return () => observer.disconnect();
-  }, [compactViewport, loadMoreMobile, filtered.length]);
+  }, [loadMoreMobile, filtered.length]);
 
   useEffect(() => {
-    if (!active || !compactViewport || !mailListViewportRef.current) return undefined;
+    if (!active || !mailListViewportRef.current) return undefined;
     const viewport = mailListViewportRef.current;
     const checkNearBottom = () => {
       if (!mobileHasMore || mobileLoadingMore || loading || refreshing) return;
@@ -1202,7 +1230,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       viewport.removeEventListener('scroll', checkNearBottom);
       window.clearTimeout(timer);
     };
-  }, [active, compactViewport, loadMoreMobile, loading, mobileHasMore, mobileLoadingMore, refreshing, mails.length, filtered.length]);
+  }, [active, loadMoreMobile, loading, mobileHasMore, mobileLoadingMore, refreshing, mails.length, filtered.length]);
 
   const clearAddressFilter = useCallback(() => {
     if (addressDebounceRef.current !== null) {
@@ -1225,6 +1253,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, [clearAddressFilter]);
 
   const markRead = useCallback((mail: AnyMail) => {
+    setDetailClosed(false);
     const key = storageId(mode, mail.id);
     const next = new Set(readIds);
     next.add(key);
@@ -1248,6 +1277,11 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     setSelectedId(mail.id);
     if (compactViewport) setIsMobileDetail(true);
   }, [compactViewport, mode, patchRemoteMailState, persistReadIds, readIds]);
+  const navigateDetail = useCallback((offset: number) => {
+    if (selectedIndex < 0) return;
+    const next = filtered[selectedIndex + offset];
+    if (next) markRead(next);
+  }, [filtered, markRead, selectedIndex]);
   const settleMobileDetailOffset = useCallback((offset: number, after?: () => void) => {
     setMobileDetailSettling(true);
     setMobileDetailDragX(offset);
@@ -1295,15 +1329,16 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const copyValue = useCallback(async (value: string, label = t('已复制', 'Copied'), key?: string) => {
     try {
       await copyText(value);
+      const isListRecipientCopy = Boolean(key?.startsWith(`recipient-list-${mode}-`) || key?.startsWith(`recipient-stack-${mode}-`));
       if (key) {
         setCopiedKey(key);
         window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), COPY_HINT_MS);
       }
-      notify('success', label);
+      if (!isListRecipientCopy) notify('success', label);
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('复制失败，请手动复制', 'Copy failed. Please copy manually.'));
     }
-  }, [notify, t]);
+  }, [mode, notify, t]);
   const deleteMail = (mail: AnyMail) => ask({ title: t(`删除邮件 #${mail.id}`, `Delete mail #${mail.id}`), body: mode === 'sent' ? t('将删除该发件箱记录。', 'This deletes the sent-mail record.') : t('将删除该原始邮件记录。', 'This deletes the raw mail record.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(mode === 'sent' ? `/admin/sendbox/${mail.id}` : `/admin/mails/${mail.id}`, { method: 'DELETE' }); notify('success', t('邮件已删除', 'Mail deleted')); setSelectedId(null); setMails((current) => current.filter((item) => item.id !== mail.id)); await fetchData(true); } });
   const composeFromMail = (mail: AnyMail, kind: 'reply' | 'forward') => {
     if (isParsed(mail)) setComposeSeed({ from_mail: mail.address || '', to_mail: kind === 'reply' ? mail.senderAddress : '', to_name: kind === 'reply' ? mail.senderName : '', subject: `${kind === 'reply' ? 'Re' : 'Fwd'}: ${mail.subject}`, content: `\n\n---- ${t('原邮件', 'Original Message')} ----\n${mail.text || mail.preview}`, is_html: false });
@@ -1381,6 +1416,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     return () => window.removeEventListener('message', handleFrameSwipe);
   }, [closeMobileDetailWithMotion, isMobileDetail]);
 
+  const showListCopyToast = !compactViewport && Boolean(copiedKey?.startsWith(`recipient-list-${mode}-`) || copiedKey?.startsWith(`recipient-stack-${mode}-`));
+
   return (
     <div
       ref={mailWorkspaceRef}
@@ -1388,6 +1425,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       style={{ '--mobile-mail-chrome-progress': mobileChromeRef.current.progress.toFixed(3), ...getMobileMailChromePaddingVars(mobileChromeRef.current.progress) } as CSSProperties}
     >
       <div ref={mailListPanelRef} className={cls('mail-list-panel relative flex h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-100 lg:w-[430px] xl:w-[470px]', isMobileDetail ? 'hidden lg:flex' : 'flex')}>
+        <div className={cls('mail-copy-toast', showListCopyToast && 'show')} aria-live="polite">{t('已复制', 'Copied')}</div>
         <div className="mail-list-header shrink-0 px-2.5 py-2 md:p-4 md:pb-2">
           <div className="mail-toolbar flex flex-wrap items-center gap-2">
             <div className="mr-auto min-w-0">
@@ -1483,7 +1521,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
           onScroll={handleMailListScroll}
           className="mail-list-viewport flex-1 overflow-y-auto px-2 pb-2 md:px-4 md:pb-4"
         >
-          {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={t('没有匹配的邮件', 'No matching mail')} body={isSearchMode ? t('搜索结果为空，继续输入或刷新后会自动补全更多结果。', 'No search results yet. Keep typing or refresh to broaden the result set.') : t('尝试刷新、修改地址筛选或调整当前筛选。', 'Try refreshing, changing the address filter, or adjusting the current filter.')} /> : mailListEntries.map((entry) => (
+          {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={isSearchMode ? t('没有匹配结果', 'No matches') : t('暂无邮件', 'No mail')} /> : mailListEntries.map((entry) => (
             entry.type === 'single' ? (
               <MailListItem
                 key={entry.key}
@@ -1512,23 +1550,22 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
               />
             )
           ))}
-          {compactViewport && mails.length > 0 && (
-            <div ref={mobileLoadMoreRef} className="mobile-mail-load-more" data-no-page-swipe="true">
-              {mobileLoadingMore ? t('正在加载更多邮件…', 'Loading more mail...') : mobileHasMore ? t('继续下滑加载更多', 'Keep scrolling to load more') : t('没有更多邮件', 'No more mail')}
+          {mails.length > 0 && !isSearchMode && (
+            <div ref={mobileLoadMoreRef} className="mail-list-load-more mobile-mail-load-more" data-no-page-swipe="true">
+              {mobileLoadingMore ? t('正在加载…', 'Loading...') : mobileHasMore ? '' : t('已全部加载', 'All loaded')}
             </div>
           )}
         </div>
-        {!compactViewport && <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} variant="floating" />}
       </div>
       <div className="mail-detail-pane hidden h-full min-w-0 flex-1 flex-col lg:flex">
-        {!compactViewport && <MailDetail mail={selected} mode={mode} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} />}
+        {!compactViewport && <MailDetail mail={selected} mode={mode} theme={theme} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} />}
       </div>
       {isMobileDetail && (
         <div
           className={cls('mobile-mail-detail absolute inset-0 z-40 flex h-full min-h-0 flex-col bg-white lg:hidden', mobileDetailSettling && 'mobile-detail-settling')}
           style={{ transform: `translate3d(${mobileDetailDragX}px, 0, 0)` }}
         >
-          <MailDetail mail={selected} mode={mode} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} mobile />
+          <MailDetail mail={selected} mode={mode} theme={theme} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} mobile />
         </div>
       )}
     </div>
@@ -1547,23 +1584,14 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
 }) {
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
-  const recipient = getRecipient(mail);
-  const primaryCode = getVerificationCodes(mail)[0];
   const senderAddress = getSenderAddress(mail);
   const senderName = getSenderName(mail);
-  const copyKey = `recipient-${mode}-${mail.id}`;
-  const openByKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onOpen(mail);
-    }
-  };
+  const recipientAddress = getRecipient(mail);
+  const recipientCopyKey = `recipient-list-${mode}-${mail.id}`;
+  const recipientPressRef = useRef<PressPoint | null>(null);
   return (
     <div
-      role="button"
-      tabIndex={0}
       onClick={() => onOpen(mail)}
-      onKeyDown={openByKeyboard}
       className={cls('mail-list-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', mail.isUnread && 'mail-row-unread', isNew && 'animate-mail-in')}
     >
       <div className="flex min-w-0 items-start gap-2.5">
@@ -1573,7 +1601,27 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
         <div className="min-w-0 flex-1">
       <div className="mb-0.5 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <span className="mail-sender block truncate text-[13px] font-normal text-slate-600 md:text-[14px]">{getSender(mail)}</span>
+          <span className="mail-sender-line">
+            <span className="mail-sender truncate text-[13px] font-normal text-slate-600 md:text-[14px]">{senderName || senderAddress || getSender(mail)}</span>
+            {recipientAddress && (
+              <button
+                type="button"
+                onPointerDown={(event) => { recipientPressRef.current = { x: event.clientX, y: event.clientY }; }}
+                onPointerCancel={() => { recipientPressRef.current = null; }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const intentional = isIntentionalRecipientCopyClick(recipientPressRef.current, event);
+                  recipientPressRef.current = null;
+                  if (!intentional) return;
+                  onCopy(recipientAddress, t('已复制收件地址', 'Recipient address copied'), recipientCopyKey);
+                }}
+                className="mail-list-recipient-inline"
+                title={recipientAddress}
+              >
+                <span className="mail-list-recipient-text">{recipientAddress}</span>
+              </button>
+            )}
+          </span>
           <div className="mt-0.5 flex items-center gap-2">
             <h4 className="mail-subject truncate text-[14px] font-semibold text-slate-900 md:text-[15px]">{mail.subject}</h4>
             {isParsed(mail) && mail.attachments.length > 0 && <Paperclip size={13} className="shrink-0 text-slate-400" />}
@@ -1582,19 +1630,13 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
         <div className="mail-list-side flex shrink-0 flex-col items-end gap-1">
           <span className="mail-list-time-line">
             <span className="mail-time text-[12px] font-semibold text-slate-600">{formatShortDate(mail.created_at)}</span>
-            {mail.isUnread && <span className="mail-unread-dot" aria-hidden="true" />}
           </span>
-          {primaryCode && <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(primaryCode, t('已复制验证码', 'Verification code copied')); }} className="verify-pill compact">{primaryCode}</button>}
+          {mail.isUnread && <span className="mail-unread-dot" aria-hidden="true" />}
         </div>
-      </div>
-      <div className="account-address-row mb-0.5">
-        <span className="hidden text-xs text-slate-500 sm:inline">{t('收件人', 'To')}</span>
-        <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(recipient, t('已复制收件人地址', 'Recipient address copied'), copyKey); }} className="address-copy-button" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipient || t('未知收件地址', 'Unknown recipient')}</button>
-        <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">{t('已复制', 'Copied')}</em>
       </div>
       <div className="flex items-center gap-2 md:gap-3">
         <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-        <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('星星代表收藏/标记，点击可固定到“标注”筛选', 'Starred mail appears in the Starred filter')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+        <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
           <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
         </span>
       </div>
@@ -1619,24 +1661,15 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const mail = entry.latest;
-  const recipient = getRecipient(mail);
-  const primaryCode = getVerificationCodes(mail)[0];
   const senderAddress = getSenderAddress(mail);
   const senderName = getSenderName(mail);
-  const copyKey = `recipient-stack-${mode}-${mail.id}`;
+  const recipientAddress = getRecipient(mail);
+  const recipientCopyKey = `recipient-stack-${mode}-${mail.id}`;
   const selected = entry.mails.some((item) => item.id === selectedId);
-  const openByKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onOpen(mail);
-    }
-  };
+  const recipientPressRef = useRef<PressPoint | null>(null);
   return (
     <div
-      role="button"
-      tabIndex={0}
       onClick={() => onOpen(mail)}
-      onKeyDown={openByKeyboard}
       className={cls('mail-list-item mail-stack-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', entry.unreadCount > 0 && 'mail-row-unread', isNew && 'animate-mail-in', expanded && 'mail-stack-expanded')}
     >
       <div className="flex min-w-0 items-start gap-2.5">
@@ -1646,19 +1679,37 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <span className="mail-sender block truncate text-[13px] font-normal text-slate-600 md:text-[14px]">{getSender(mail)}</span>
+              <span className="mail-sender-line">
+                <span className="mail-sender truncate text-[13px] font-normal text-slate-600 md:text-[14px]">{senderName || senderAddress || getSender(mail)}</span>
+                {recipientAddress && (
+                  <button
+                    type="button"
+                    onPointerDown={(event) => { recipientPressRef.current = { x: event.clientX, y: event.clientY }; }}
+                    onPointerCancel={() => { recipientPressRef.current = null; }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const intentional = isIntentionalRecipientCopyClick(recipientPressRef.current, event);
+                      recipientPressRef.current = null;
+                      if (!intentional) return;
+                      onCopy(recipientAddress, t('已复制收件地址', 'Recipient address copied'), recipientCopyKey);
+                    }}
+                    className="mail-list-recipient-inline"
+                    title={recipientAddress}
+                  >
+                    <span className="mail-list-recipient-text">{recipientAddress}</span>
+                  </button>
+                )}
+              </span>
               <div className="mt-0.5 flex items-center gap-2">
                 <h4 className="mail-subject truncate text-[14px] font-semibold text-slate-900 md:text-[15px]">{mail.subject}</h4>
-                <span className="mail-stack-count-pill">{locale === 'en-US' ? `${entry.mails.length} mails` : `${entry.mails.length} 封`}</span>
-                {entry.unreadCount > 0 && <span className="mail-stack-count-pill unread">{locale === 'en-US' ? `${entry.unreadCount} unread` : `${entry.unreadCount} 未读`}</span>}
                 {isParsed(mail) && mail.attachments.length > 0 && <Paperclip size={13} className="shrink-0 text-slate-400" />}
               </div>
             </div>
             <div className="mail-list-side flex shrink-0 flex-col items-end gap-1">
               <span className="mail-list-time-line">
                 <span className="mail-time text-[12px] font-semibold text-slate-600">{formatShortDate(mail.created_at)}</span>
-                {entry.unreadCount > 0 && <span className="mail-unread-dot" aria-hidden="true" />}
               </span>
+              {entry.unreadCount > 0 && <span className="mail-unread-dot" aria-hidden="true" />}
               <button
                 type="button"
                 className="mail-stack-expand-button"
@@ -1669,23 +1720,15 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
               </button>
             </div>
           </div>
-          <div className="account-address-row mb-0.5">
-            <span className="hidden text-xs text-slate-500 sm:inline">{t('收件人', 'To')}</span>
-            <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(recipient, t('已复制收件人地址', 'Recipient address copied'), copyKey); }} className="address-copy-button" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipient || t('未知收件地址', 'Unknown recipient')}</button>
-            <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">{t('已复制', 'Copied')}</em>
-          </div>
           <div className="flex items-center gap-2 md:gap-3">
             <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-            {entry.codeCount > 0 && <span className="verify-pill compact mail-stack-code-pill">{locale === 'en-US' ? `${entry.codeCount} codes` : `${entry.codeCount} 个验证码`}</span>}
-            {primaryCode && <button type="button" onClick={(event) => { event.stopPropagation(); onCopy(primaryCode, t('已复制验证码', 'Verification code copied')); }} className="verify-pill compact">{primaryCode}</button>}
-            <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('星星代表收藏/标记，点击可固定到“标注”筛选', 'Starred mail appears in the Starred filter')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+            <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
               <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
             </span>
           </div>
           <div className={cls('mail-stack-children-shell', expanded && 'open')} aria-hidden={!expanded}>
             <div className="mail-stack-children" onClick={(event) => event.stopPropagation()}>
               {entry.mails.map((stackMail, index) => {
-                const stackCodes = getVerificationCodes(stackMail);
                 return (
                   <div
                     key={stackMail.id}
@@ -1705,19 +1748,6 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
                       <strong>{stackMail.subject}</strong>
                       <small>{stackMail.preview || t('无内容预览', 'No preview')}</small>
                     </span>
-                    {stackCodes[0] ? (
-                      <button
-                        type="button"
-                        className="verify-pill compact mail-stack-child-code"
-                        tabIndex={expanded ? 0 : -1}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onCopy(stackCodes[0], t('已复制验证码', 'Verification code copied'));
-                        }}
-                      >
-                        {stackCodes[0]}
-                      </button>
-                    ) : null}
                     <time>{formatShortDate(stackMail.created_at)}</time>
                   </div>
                 );
@@ -1730,7 +1760,38 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
   );
 });
 
-function MailDetail({ mail, mode, onDelete, onReply, onForward, onCopy, onToggleStar, mobile: _mobile = false }: { mail: AnyMail | null; mode: MailMode; onDelete: (mail: AnyMail) => void; onReply: (mail: AnyMail) => void; onForward: (mail: AnyMail) => void; onCopy: (value: string, label?: string, key?: string) => void; onToggleStar: (mail: AnyMail) => void; mobile?: boolean }) {
+function MailDetail({
+  mail,
+  mode,
+  onDelete,
+  onReply,
+  onForward,
+  onCopy,
+  onToggleStar,
+  onClose,
+  onPrevious,
+  onNext,
+  canPrevious,
+  canNext,
+  positionLabel,
+  mobile: _mobile = false,
+}: {
+  mail: AnyMail | null;
+  mode: MailMode;
+  theme: 'light' | 'dark';
+  onDelete: (mail: AnyMail) => void;
+  onReply: (mail: AnyMail) => void;
+  onForward: (mail: AnyMail) => void;
+  onCopy: (value: string, label?: string, key?: string) => void;
+  onToggleStar: (mail: AnyMail) => void;
+  onClose: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  canPrevious: boolean;
+  canNext: boolean;
+  positionLabel: string;
+  mobile?: boolean;
+}) {
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   useEffect(() => { if (mail) writeSessionMailDetail(mode, mail); }, [mail, mode]);
@@ -1742,40 +1803,68 @@ function MailDetail({ mail, mode, onDelete, onReply, onForward, onCopy, onToggle
   }, [htmlForFrame, parsedForMemo]);
   const emlUrl = useMemo(() => (rawForDownload ? getDownloadEmlUrl(rawForDownload) : ''), [rawForDownload]);
   useEffect(() => () => { if (emlUrl) URL.revokeObjectURL(emlUrl); }, [emlUrl]);
-  if (!mail) return <div className="p-8"><EmptyState title={t('请选择一封邮件', 'Select a message')} body={t('左侧列表选择邮件后，会在这里显示解析后的正文、附件和原始下载入口。', 'Choose a message from the list to view parsed content, attachments, and raw download options here.')} /></div>;
+  if (!mail) return <div className="p-8"><EmptyState title={t('请选择一封邮件', 'Select a message')} /></div>;
   const parsed = isParsed(mail);
   const text = parsed ? (looksLikeMimeSource(mail.text) ? '' : mail.text) : mail.content;
   const senderAddress = getSenderAddress(mail);
   const senderName = getSenderName(mail);
-  const subtitle = parsed ? `<${mail.senderAddress}>` : t('发件记录', 'Sent record');
+  const subtitle = parsed ? mail.senderAddress : t('发件记录', 'Sent record');
   const recipientAddress = getRecipient(mail);
-  const recipientLabel = mode === 'sent' ? t('收件人：', 'To:') : t('收件邮箱：', 'Inbox:');
-  const verificationCodes = getVerificationCodes(mail);
+  const recipientLabel = mode === 'sent'
+    ? `${t('to', 'to')} ${recipientAddress || t('unknown', 'unknown')}`
+    : t('to me', 'to me');
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mail-detail-scroll min-h-0 flex-1 overflow-hidden p-1.5 sm:p-2.5 md:p-4 xl:p-5">
         <article className={cls('mail-detail-card mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col rounded-2xl border border-slate-100/80 bg-white p-2.5 shadow-sm sm:rounded-3xl sm:p-3.5 md:p-4 xl:p-5', _mobile && 'mail-detail-card-mobile')}>
+          <div className="mail-detail-topbar shrink-0">
+            <div className="mail-detail-topbar-actions">
+              <button type="button" onClick={onClose} className="mail-detail-icon-action mail-detail-close" title={t('关闭', 'Close')} aria-label={t('关闭邮件详情', 'Close message detail')}><X size={18} /></button>
+              <button type="button" onClick={() => onDelete(mail)} className="mail-detail-icon-action" title={t('删除', 'Delete')} aria-label={t('删除', 'Delete')}><Trash2 size={16} /></button>
+              {parsed && mail.raw && emlUrl ? (
+                <a className="mail-detail-icon-action" href={emlUrl} download={`${mail.id}.eml`} title={t('下载 EML', 'Download EML')} aria-label={t('下载 EML', 'Download EML')}><Archive size={16} /></a>
+              ) : (
+                <button type="button" className="mail-detail-icon-action" disabled title={t('无可下载原文', 'No raw message available')} aria-label={t('无可下载原文', 'No raw message available')}><Archive size={16} /></button>
+              )}
+              <button type="button" onClick={() => onForward(mail)} className="mail-detail-icon-action" title={t('更多', 'More')} aria-label={t('更多', 'More')}><MoreHorizontal size={17} /></button>
+            </div>
+            <div className="mail-detail-topbar-nav" aria-label={t('邮件导航', 'Message navigation')}>
+              <span>{positionLabel}</span>
+              <button type="button" onClick={onPrevious} disabled={!canPrevious} className="mail-detail-icon-action" title={t('上一封', 'Previous')} aria-label={t('上一封', 'Previous')}><ChevronLeft size={18} /></button>
+              <button type="button" onClick={onNext} disabled={!canNext} className="mail-detail-icon-action" title={t('下一封', 'Next')} aria-label={t('下一封', 'Next')}><ChevronRight size={18} /></button>
+            </div>
+          </div>
           <header className={cls('mail-detail-header shrink-0', _mobile && 'is-mobile')}>
             <div className="mail-detail-subject-row flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h1 className="mail-detail-subject truncate text-[1.05rem] font-bold leading-snug text-slate-800 sm:text-[1.25rem] md:text-[1.45rem]">{mail.subject}</h1>
-                <div className="mail-detail-meta-strip mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                  <span className="mail-detail-meta-pill rounded-full bg-slate-100 px-2 py-0.5">ID #{mail.id}</span>
-                  <span className="mail-time mail-detail-meta-pill rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">{formatDateTime(mail.created_at)}</span>
-                  {mode === 'unknown' && <span className="mail-detail-meta-pill rounded-full bg-rose-50 px-2 py-0.5 text-rose-600">{t('未知邮件', 'Unknown mail')}</span>}
-                  {verificationCodes.map((code) => <button key={code} onClick={() => onCopy(code, t('已复制验证码', 'Verification code copied'))} className="verify-pill"><Copy size={12} /> {code}</button>)}
-                </div>
               </div>
               <button onClick={() => onToggleStar(mail)} className={cls('mail-detail-star rounded-full p-2 transition hover:bg-slate-100', mail.isStarred ? 'text-slate-800' : 'text-slate-300 hover:text-slate-600')} title={t('星星代表收藏/标记，点击后可在列表“标注”里筛选', 'Starred mail appears in the Starred filter')}><Star size={21} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
             </div>
-            <div className="mail-detail-sender-row mt-2.5 flex gap-2.5 md:mt-3"><BrandAvatar sender={senderAddress} senderName={senderName} size={40} className="mail-detail-brand-avatar" /><div className="min-w-0 flex-1"><div className="mail-detail-sender-main flex flex-wrap items-center gap-2"><span className="font-semibold text-slate-800">{parsed ? mail.senderName : mail.address}</span><span className="truncate text-sm text-slate-500">{subtitle}</span></div><div className="account-address-row mail-detail-recipient-row mt-0.5"><span className="text-sm text-slate-500">{recipientLabel}</span><button type="button" onClick={() => onCopy(recipientAddress, t('已复制收件地址', 'Recipient address copied'), `detail-recipient-${mode}-${mail.id}`)} className="plain-copy-address" title={t('点击复制邮箱地址', 'Copy mailbox address')}>{recipientAddress || t('未知收件地址', 'Unknown recipient')}</button></div></div><div className="hidden shrink-0 items-center gap-1.5 lg:flex"><button onClick={() => onReply(mail)} className="detail-action" title={t('回复', 'Reply')}><Reply size={16} /></button><button onClick={() => onReply(mail)} className="detail-action" title={t('回复全部', 'Reply all')}><ReplyAll size={16} /></button><button onClick={() => onForward(mail)} className="detail-action" title={t('转发', 'Forward')}><MoreHorizontal size={16} /></button><button onClick={() => onDelete(mail)} className="detail-action text-rose-500" title={t('删除', 'Delete')}><Trash2 size={16} /></button></div></div>
+            <div className="mail-detail-sender-row mt-2.5 flex gap-2.5 md:mt-3">
+              <BrandAvatar sender={senderAddress} senderName={senderName} size={40} className="mail-detail-brand-avatar" />
+              <div className="min-w-0 flex-1">
+                <div className="mail-detail-sender-main flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-slate-800">{parsed ? mail.senderName : mail.address}</span>
+                  <span className="truncate text-sm text-slate-500">{subtitle}</span>
+                </div>
+                <button type="button" onClick={() => onCopy(recipientAddress, t('已复制收件地址', 'Recipient address copied'), `detail-recipient-${mode}-${mail.id}`)} className="mail-detail-to-line" title={recipientAddress || undefined}>{recipientLabel} <ChevronDown size={12} /></button>
+              </div>
+              <div className="mail-detail-sender-actions hidden shrink-0 lg:flex">
+                <time className="mail-detail-inline-time">{formatShortDate(mail.created_at)}</time>
+                <div className="mail-detail-action-row">
+                  <button onClick={() => onReply(mail)} className="detail-action" title={t('回复', 'Reply')}><Reply size={16} /></button>
+                  <button onClick={() => onToggleStar(mail)} className="detail-action" title={t('星标', 'Star')}><Star size={16} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
+                  <button onClick={() => onForward(mail)} className="detail-action" title={t('更多', 'More')}><MoreHorizontal size={16} /></button>
+                </div>
+              </div>
+            </div>
           </header>
           <div className="my-2 h-px shrink-0 bg-slate-100 md:my-2.5" />
           <div className="mail-detail-body min-h-0 flex-1 overflow-hidden">
             {iframeDocument ? <iframe title={`mail-${mail.id}`} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={iframeDocument} referrerPolicy="no-referrer" className="mail-frame" /> : <pre className="mail-text">{text || mail.preview || t('邮件正文仍在后台同步，请稍后刷新。', 'Message body is still syncing. Please refresh later.')}</pre>}
           </div>
           {parsed && mail.attachments.length > 0 && <div className="mt-2.5 shrink-0"><h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><Paperclip size={16} /> {t('附件', 'Attachments')} ({mail.attachments.length})</h4><div className="grid max-h-24 gap-2 overflow-y-auto sm:grid-cols-2">{mail.attachments.map((attachment) => <a key={attachment.id} href={attachment.url} download={attachment.filename} className="flex items-center justify-between rounded-2xl border border-slate-200 p-2 transition hover:bg-slate-50"><div className="flex min-w-0 items-center gap-2"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-[10px] font-bold uppercase text-slate-700">{attachment.filename.split('.').pop() || 'file'}</div><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-700">{attachment.filename}</p><p className="text-[11px] text-slate-400">{attachment.size}</p></div></div><Download size={14} className="text-slate-400" /></a>)}</div></div>}
-          <footer className="mt-2.5 flex shrink-0 flex-wrap gap-2 border-t border-slate-100 pt-2.5"><button className="btn-secondary compact" onClick={() => onReply(mail)}><Reply size={15} /> {t('回复', 'Reply')}</button><button className="btn-secondary compact" onClick={() => onForward(mail)}><MoreHorizontal size={15} /> {t('转发', 'Forward')}</button>{parsed && mail.raw && emlUrl && <a className="btn-secondary compact" href={emlUrl} download={`${mail.id}.eml`}><Download size={15} /> {t('下载 EML', 'Download EML')}</a>}<button className="btn-danger compact" onClick={() => onDelete(mail)}><Trash2 size={15} /> {t('删除', 'Delete')}</button></footer>
         </article>
       </div>
     </div>

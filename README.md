@@ -71,9 +71,9 @@ Loven7 Mail Cloudflare Suite 是给 Cloudflare Temp Mail / `cloudflare_temp_emai
       <br /><sub>统计、快捷入口、能力覆盖和下一步操作集中展示。</sub>
     </td>
     <td width="50%" align="center">
-      <a href="docs/screenshots/admin-connection-settings.png"><img src="docs/screenshots/admin-connection-settings.png" alt="管理后台连接设置" height="220" /></a>
-      <br /><strong>连接设置 · 本地保存</strong>
-      <br /><sub>Worker API、管理员密码和站点密码只保存在当前浏览器。</sub>
+      <a href="docs/screenshots/admin-connection-settings.png"><img src="docs/screenshots/admin-connection-settings.png" alt="管理后台系统设置" height="220" /></a>
+      <br /><strong>系统设置 · 前端配置</strong>
+      <br /><sub>集中配置界面偏好、角色额度、登录链接前缀和自动刷新。</sub>
     </td>
   </tr>
   <tr>
@@ -162,6 +162,7 @@ npm run check:cloudflare:runtime
 | [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md) | 给 Claude Code、Codex、OpenCode 等 Agent 的完整指令 |
 | [Cloudflare Pages 部署说明](docs/CLOUDFLARE_PAGES.md) | Pages、Preview / Production、KV 和 runtime 排错 |
 | [GitHub Actions](docs/GITHUB_ACTIONS.md) | 自动构建和自动部署配置 |
+| [项目结构与维护边界](docs/PROJECT_STRUCTURE.md) | 目录放置规则、本地产物边界和提交前检查 |
 | [安全脱敏检查](docs/SECURITY_DESENSITIZATION.md) | 发布前避免泄露密钥、Token、KV ID |
 | [上游关系](docs/UPSTREAM.md) | 与 Cloudflare Temp Mail / `cloudflare_temp_email` 的关系 |
 

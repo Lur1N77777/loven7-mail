@@ -212,12 +212,13 @@ function LoginNoticeToast({ notice }: { notice: Notice }) {
   );
 }
 
-export function BackendLogin({ apiBase, locale, theme, onAccountLogin, onDirectLogin }: {
+export function BackendLogin({ apiBase, locale, theme, onAccountLogin, onDirectLogin, localPreviewHref }: {
   apiBase: string;
   locale: AppLocale;
   theme: 'light' | 'dark';
   onAccountLogin: (profile: AccountUserProfile) => void | Promise<void>;
   onDirectLogin: (session: { jwt: string; address: string }) => void;
+  localPreviewHref?: string;
 }) {
   void theme;
   void onDirectLogin;
@@ -410,6 +411,11 @@ export function BackendLogin({ apiBase, locale, theme, onAccountLogin, onDirectL
                   {busy && busy !== 'oauth' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {busy && busy !== 'oauth' ? t('处理中...', 'Working...') : mode === 'register' ? t('创建账号', 'Create account') : t('登录', 'Log in')}
                 </button>
+                {localPreviewHref ? (
+                  <a className="anything-local-preview-button" href={localPreviewHref}>
+                    {t('本地预览后台', 'Preview admin locally')}
+                  </a>
+                ) : null}
               </div>
 
               <div className="anything-login-footer">

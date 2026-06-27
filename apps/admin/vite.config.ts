@@ -34,7 +34,13 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+          globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
+          globIgnores: [
+            '**/loven7-cover-*.png',
+            '**/loven7-landscape-*.png',
+            '**/loven7-designer-cover-*.png',
+            '**/loven7-login-generated-bg.png',
+          ],
           runtimeCaching: [
             {
               urlPattern: ({ request, url }) => request.destination === 'document' && !/\bJWT=/i.test(url.search),

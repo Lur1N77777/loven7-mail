@@ -92,7 +92,7 @@ export function sanitizeMailHtml(html: string): string {
   return doc.body.innerHTML;
 }
 
-export function buildMailHtmlDocument(html: string): string {
+export function buildMailHtmlDocument(html: string, _theme: 'light' | 'dark' = 'light'): string {
   const safe = sanitizeMailHtml(html);
   const swipeBridge = `<script>
     (() => {
@@ -139,17 +139,20 @@ export function buildMailHtmlDocument(html: string): string {
     })();
   <\/script>`;
   return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="referrer" content="no-referrer"/><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: https: http: cid:; media-src data: blob: https: http:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data: https: http:; form-action 'none'; base-uri 'none'"/><base target="_blank"/><style>
-    :root { color-scheme: light; }
-    html, body { margin: 0; padding: 0; width: 100%; min-width: 0; background: #fff; overscroll-behavior-x: contain; touch-action: pan-y; }
-    body { box-sizing: border-box; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif; color: #1e293b; line-height: 1.65; overflow-wrap: anywhere; word-break: break-word; }
+    :root { color-scheme: light; --mail-frame-surface: #fff; --mail-frame-text: #111317; --mail-frame-muted: #475569; --mail-frame-link: #2563eb; --mail-frame-quote-border: #e5e7eb; }
+    html, body { margin: 0; padding: 0; width: 100%; min-width: 0; background: var(--mail-frame-surface) !important; color-scheme: light; overscroll-behavior-x: contain; touch-action: pan-y; scrollbar-width: none; -ms-overflow-style: none; }
+    * { scrollbar-width: none; -ms-overflow-style: none; letter-spacing: 0; }
+    *::-webkit-scrollbar, *::-webkit-scrollbar-track, *::-webkit-scrollbar-thumb, *::-webkit-scrollbar-corner { width: 0 !important; height: 0 !important; display: none !important; background: transparent !important; }
+    body { box-sizing: border-box; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif; background: var(--mail-frame-surface) !important; color: var(--mail-frame-text); font-size: 14px; line-height: 1.625; overflow-wrap: anywhere; word-break: break-word; font-weight: 400; letter-spacing: 0; -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
+    #loven7-mail-root { display: flow-root; width: 100%; max-width: 100%; min-height: 0; background: transparent; color: inherit; }
     *, *::before, *::after { box-sizing: border-box; max-width: 100%; }
     img, video, canvas, svg { max-width: 100% !important; height: auto !important; }
     table { width: auto !important; max-width: 100% !important; border-collapse: collapse; table-layout: auto; }
     pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
-    a { color: #4b5563; }
-    blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid #e5e7eb; color: #475569; }
-    @media (max-width: 640px) { body { padding: 12px; font-size: 14px; } table { display: block; overflow-x: auto; } }
-  </style></head><body>${safe}${swipeBridge}</body></html>`;
+    a { color: var(--mail-frame-link); }
+    blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--mail-frame-quote-border); color: var(--mail-frame-muted); }
+    @media (max-width: 640px) { body { padding: 8px 0 0; font-size: 14px; } table { display: block; overflow-x: auto; } }
+  </style></head><body><div id="loven7-mail-root">${safe}</div>${swipeBridge}</body></html>`;
 }
 
 function parseHeaders(raw: string): Record<string, string> {

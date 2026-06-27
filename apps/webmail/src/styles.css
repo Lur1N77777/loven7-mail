@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Loven7 Brand Script";
+  src: url("/fonts/loven7-brand-script-latin-v2.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
 :root {
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -426,6 +434,14 @@ button:disabled {
   color: #182842;
   background: #fff;
   cursor: pointer;
+  contain: layout paint style;
+}
+
+@supports (content-visibility: auto) {
+  .mail-row {
+    content-visibility: auto;
+    contain-intrinsic-size: 88px;
+  }
 }
 
 .mail-row.selected {
@@ -646,6 +662,7 @@ button:disabled {
   background: #fff;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  contain: layout paint style;
 }
 
 .mail-frame,
@@ -1188,14 +1205,29 @@ button:disabled {
 
 @media (max-width: 760px) {
   .code-row {
+    display: flex;
     width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
   }
 
   .code-copy-button {
-    max-width: calc(100% - 52px);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: 100%;
+    min-height: 30px;
+    flex: 1 1 min(12rem, 100%);
+    justify-content: center;
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .code-copy-hint {
+    flex: 1 0 100%;
+    min-height: 14px;
   }
 
   .mail-view-tabs {
@@ -1864,6 +1896,16 @@ input {
     linear-gradient(180deg, color-mix(in srgb, var(--lm-surface) 96%, #f7eef2 4%), var(--lm-surface));
 }
 
+.mailbox-login-card {
+  position: relative;
+}
+
+.login-card-head {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 12px;
+}
+
 .login-form {
   gap: 15px;
 }
@@ -1938,9 +1980,7 @@ input {
   cursor: pointer;
   transition:
     opacity var(--lm-motion-fast),
-    background var(--lm-motion-fast),
-    color var(--lm-motion-fast),
-    transform var(--lm-motion-fast);
+    color var(--lm-motion-fast);
 }
 
 .password-toggle svg {
@@ -1958,15 +1998,16 @@ input {
 .password-toggle[aria-pressed="true"] {
   opacity: 1;
   color: var(--lm-accent-strong);
-  background: color-mix(in srgb, var(--lm-accent-soft) 72%, transparent);
+  background: transparent;
 }
 
 .password-toggle:active {
-  transform: translateY(-50%) scale(.96);
+  transform: translateY(-50%);
 }
 
 .login-button {
-  min-height: 50px;
+  min-height: 54px;
+  margin-top: 10px;
   border-radius: 17px;
   color: #f7f4f2;
   background: #2f2b2d;
@@ -2059,7 +2100,7 @@ input {
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Roboto, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --font-brand: "Snell Roundhand", "Segoe Script", "Lucida Handwriting", "Brush Script MT", "Baskerville Italic", "Georgia", cursive;
+  --font-brand: "Loven7 Brand Script", "Segoe Script", "Snell Roundhand", "Lucida Handwriting", "Brush Script MT", "Baskerville Italic", "Georgia", cursive;
   --fw-body: 400;
   --fw-subtle: 450;
   --fw-medium: 500;
@@ -2419,4 +2460,261 @@ textarea {
   min-height: 96px;
   gap: 0;
   color: var(--lm-muted);
+}
+
+.mailbox-direct-shell .account-portal-hero > .brand-logo {
+  position: absolute;
+  top: clamp(22px, 4vw, 48px);
+  left: clamp(22px, 4.5vw, 56px);
+  z-index: 1;
+  color: #fbf7ef;
+}
+
+.mailbox-direct-panel-inner {
+  width: min(100%, 500px);
+}
+
+.mailbox-direct-panel-top {
+  align-items: center;
+}
+
+.mailbox-direct-card {
+  gap: 20px;
+}
+
+.mailbox-direct-form {
+  gap: 14px;
+}
+
+.mailbox-direct-submit {
+  min-height: 54px;
+  margin-top: 8px;
+}
+/* Direct mailbox login */
+.account-portal-shell {
+  width: 100%;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(390px, .92fr);
+  background: #f4f2ee;
+  color: #181713;
+  overflow: hidden;
+}
+
+.account-portal-hero {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background:
+    linear-gradient(90deg, rgba(18, 16, 13, .46), rgba(18, 16, 13, .05) 52%, rgba(18, 16, 13, .18)),
+    url("/loven7-portal-hero-v2.png") center / cover no-repeat;
+}
+
+.account-portal-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(18, 16, 13, .18), transparent 38%, rgba(18, 16, 13, .34)),
+    linear-gradient(90deg, rgba(18, 16, 13, .22), transparent 46%);
+  pointer-events: none;
+}
+
+.account-portal-panel {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  align-items: center;
+  padding: clamp(24px, 6vw, 76px);
+  overflow: auto;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.48), rgba(255,255,255,.14)),
+    #f4f2ee;
+}
+
+.account-panel-inner {
+  width: min(100%, 500px);
+  display: grid;
+  gap: clamp(26px, 5vw, 48px);
+}
+
+.account-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.account-auth-card {
+  display: grid;
+  gap: 18px;
+}
+
+.account-title-block {
+  display: grid;
+  gap: 8px;
+}
+
+.account-auth-card h1 {
+  margin: 0;
+  color: #181713;
+  font-family: var(--font-display) !important;
+  font-size: clamp(34px, 4.2vw, 50px);
+  font-weight: var(--fw-strong) !important;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.account-auth-card p {
+  margin: 0;
+  max-width: 34rem;
+  color: rgba(32, 30, 26, .58);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.account-form {
+  display: grid;
+  gap: 12px;
+}
+
+.account-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.account-form label span {
+  color: rgba(32, 30, 26, .66);
+  font-size: 12px;
+  font-weight: var(--fw-medium);
+}
+
+.account-form input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(32, 30, 26, .13);
+  border-radius: 10px;
+  padding: 12px 13px;
+  background: rgba(255,255,255,.76);
+  color: #181713;
+  font-weight: var(--fw-medium);
+  outline: none;
+  transition: border-color .18s cubic-bezier(.22,.61,.36,1), box-shadow .18s cubic-bezier(.22,.61,.36,1), background .18s cubic-bezier(.22,.61,.36,1);
+}
+
+.account-form input:focus {
+  border-color: rgba(35, 31, 26, .44);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(35, 31, 26, .08);
+}
+
+.account-primary-button {
+  min-height: 46px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: #fbf7ef;
+  background: #181713;
+  box-shadow: 0 16px 34px rgba(24, 23, 19, .16);
+  font-weight: var(--fw-strong);
+  letter-spacing: 0;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .18s cubic-bezier(.22,.61,.36,1), border-color .18s cubic-bezier(.22,.61,.36,1), color .18s cubic-bezier(.22,.61,.36,1);
+}
+
+.account-primary-button:hover {
+  background: #27241f;
+}
+
+.account-primary-button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.account-message {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  line-height: 1.45;
+}
+
+.account-message.error {
+  color: #9f1d1d;
+  background: #fff0ee;
+}
+
+@media (max-width: 920px) {
+  .account-portal-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(132px, 18dvh) minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .account-portal-hero {
+    min-height: 132px;
+    background-position: center 48%;
+  }
+
+  .account-portal-panel {
+    align-items: start;
+    padding: 26px 18px 34px;
+    overflow: visible;
+  }
+
+  .account-panel-top {
+    justify-content: flex-end;
+  }
+
+  .account-panel-top .brand-logo {
+    display: none;
+  }
+
+  .account-panel-inner {
+    width: min(100%, 560px);
+    margin: 0 auto;
+    gap: 26px;
+  }
+}
+
+@media (max-width: 640px) {
+  .account-panel-top {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .account-auth-card h1 {
+    font-size: 32px;
+  }
+}
+
+@media (max-width: 420px) {
+  .account-panel-top {
+    gap: 10px;
+  }
+
+  .account-auth-card h1 {
+    font-size: 29px;
+  }
+}
+
+/* Brand wordmark parity: keep desktop, mobile, login, and home on one bundled face. */
+.brand-wordmark {
+  display: block;
+  font-family: var(--font-brand) !important;
+  font-style: normal !important;
+  font-weight: 400 !important;
+  font-synthesis: none;
+  letter-spacing: -0.015em !important;
+  line-height: .86 !important;
+  text-rendering: geometricPrecision;
+}
+
+.brand-wordmark > span {
+  display: block;
 }

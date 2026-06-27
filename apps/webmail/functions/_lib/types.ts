@@ -1,6 +1,9 @@
 export interface CloudmailEnv {
   MAIL_WORKER_BASE_URL?: string;
   SITE_PASSWORD?: string;
+  ADMIN_PASSWORD?: string;
+  MAIL_WORKER_ADMIN_PASSWORD?: string;
+  SHARE_ADMIN_PROXY_BASE_URL?: string;
   SHARE_ENCRYPTION_SECRET?: string;
   SHARE_ADMIN_CORS_ORIGINS?: string;
   SHARE_PUBLIC_CORS_ORIGINS?: string;

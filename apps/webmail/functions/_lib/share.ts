@@ -77,6 +77,7 @@ export type ShareListOptions = {
 
 export type ShareAdminAuth = {
   workerEnv: CloudmailEnv;
+  adminWorkerEnv?: CloudmailEnv;
   headers: Record<string, string>;
 };
 
@@ -179,6 +180,93 @@ function adminAccessTokenFromRequest(request: Request) {
   const auth = request.headers.get("authorization") || "";
   const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   return bearer || request.headers.get("x-user-access-token")?.trim() || request.headers.get("x-user-token")?.trim() || "";
+}
+
+type AdminProfile = {
+  is_admin?: unknown;
+  isAdmin?: unknown;
+  admin?: unknown;
+  role?: unknown;
+  role_text?: unknown;
+  roleText?: unknown;
+  role_key?: unknown;
+  roleKey?: unknown;
+  user_role?: unknown;
+  userRole?: unknown;
+};
+
+function normalizeRole(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") return String(value).trim().toLowerCase();
+  return "";
+}
+
+function isAdminRole(value: unknown) {
+  const role = normalizeRole(value);
+  return role === "admin" || role === "administrator" || role === "管理员";
+}
+
+function isTrueFlag(value: unknown) {
+  if (value === true || value === 1) return true;
+  if (typeof value !== "string") return false;
+  return /^(1|true|yes|y)$/i.test(value.trim());
+}
+
+function profileIsAdmin(profile: AdminProfile) {
+  const userRole = profile.user_role || profile.userRole;
+  const roleRecord = userRole && typeof userRole === "object" && !Array.isArray(userRole) ? userRole as Record<string, unknown> : {};
+  return isTrueFlag(profile.is_admin)
+    || isTrueFlag(profile.isAdmin)
+    || isTrueFlag(profile.admin)
+    || isAdminRole(profile.role)
+    || isAdminRole(profile.role_text)
+    || isAdminRole(profile.roleText)
+    || isAdminRole(profile.role_key)
+    || isAdminRole(profile.roleKey)
+    || isAdminRole(userRole)
+    || isAdminRole(roleRecord.role)
+    || isAdminRole(roleRecord.role_text)
+    || isAdminRole(roleRecord.roleText)
+    || isAdminRole(roleRecord.label)
+    || isAdminRole(roleRecord.key)
+    || isAdminRole(roleRecord.value);
+}
+
+function configuredAdminPassword(env: CloudmailEnv) {
+  return (env.ADMIN_PASSWORD || env.MAIL_WORKER_ADMIN_PASSWORD || "").trim();
+}
+
+function normalizeOrigin(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    return `${url.protocol}//${url.host.toLowerCase()}`;
+  } catch {
+    return "";
+  }
+}
+
+function splitOrigins(value: string | undefined) {
+  return String(value || "")
+    .split(/[\s,]+/)
+    .map((item) => normalizeOrigin(item))
+    .filter(Boolean);
+}
+
+function adminProxyBaseFromRequest(request: Request, env: CloudmailEnv) {
+  const explicit = normalizeOrigin(env.SHARE_ADMIN_PROXY_BASE_URL);
+  if (explicit) return explicit;
+
+  const requestOrigin = normalizeOrigin(request.headers.get("origin"));
+  if (!requestOrigin) return "";
+
+  const allowed = new Set([
+    ...splitOrigins(env.SHARE_ADMIN_CORS_ORIGINS),
+    ...splitOrigins(env.SHARE_ADMIN_ALLOWED_ORIGINS),
+    ...splitOrigins(env.CORS_ALLOWED_ORIGINS),
+  ]);
+  return allowed.has(requestOrigin) ? requestOrigin : "";
 }
 
 function adminAccessHeaders(env: CloudmailEnv, token: string, hasJsonBody = false) {
@@ -307,6 +395,20 @@ async function saveShareAddressIndexes(env: CloudmailEnv, token: string, payload
   await Promise.all(payload.addresses.map((mailbox) => kv.put(shareAddressIndexKey(mailbox.id, token, payload), "1", options)));
 }
 
+async function deleteShareAddressIndexes(env: CloudmailEnv, token: string, createdAt: string, addresses: Array<{ id: string }>) {
+  const { kv } = requireShareEnv(env);
+  const ids = [...new Set(addresses.map((item) => String(item.id || "").trim()).filter(Boolean))];
+  await Promise.all(ids.map((id) => kv.delete(shareAddressIndexKey(id, token, {
+    version: 2,
+    token,
+    createdAt,
+    expiresAt: null,
+    mailVisibility: "all",
+    permissions: DEFAULT_PERMISSIONS,
+    addresses: [],
+  }))));
+}
+
 function normalizeStoredSummary(raw: unknown, token: string): StoredShareSummary | null {
   if (!raw || typeof raw !== "object") return null;
   const src = raw as Partial<StoredShareSummary>;
@@ -382,6 +484,29 @@ export async function revokeShare(env: CloudmailEnv, token: string): Promise<Sha
     revokedAt: payload.revokedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }));
+}
+
+export async function deleteInactiveShareRecord(env: CloudmailEnv, token: string): Promise<boolean> {
+  const { kv } = requireShareEnv(env);
+  if (!/^[A-Za-z0-9_-]{12,96}$/.test(token)) return false;
+  const payload = await readShareRecord(env, token).catch(() => null);
+  const summary = payload ? summaryFromPayload(token, payload) : await readShareSummary(env, token).catch(() => null);
+  if (!summary) {
+    await Promise.all([
+      kv.delete(`${SHARE_PREFIX}${token}`),
+      kv.delete(`${SHARE_SUMMARY_PREFIX}${token}`),
+    ]);
+    return false;
+  }
+  if (shareStatus(summary) === "active") {
+    throw new Error("只能清理已失效或已撤销的共享链接");
+  }
+  await Promise.all([
+    kv.delete(`${SHARE_PREFIX}${token}`),
+    kv.delete(`${SHARE_SUMMARY_PREFIX}${token}`),
+    deleteShareAddressIndexes(env, token, summary.createdAt, summary.addresses),
+  ]);
+  return true;
 }
 
 export function publicShare(token: string, payload: SharePayload) {
@@ -545,9 +670,36 @@ export async function assertShareAdmin(request: Request, env: CloudmailEnv) {
     await fetchAdminWorkerJson<unknown>(workerEnv, "/admin/statistics", adminPassword, { search: new URLSearchParams() });
     return { workerEnv, headers: adminPasswordHeaders(workerEnv, adminPassword) };
   }
+
+  const injectedAdminPassword = configuredAdminPassword(workerEnv);
+  if (injectedAdminPassword) {
+    const profileRaw = await fetchWorkerJsonWithHeaders<unknown>(
+      workerEnv,
+      "/user_api/settings",
+      adminAccessHeaders(workerEnv, adminToken),
+      { search: new URLSearchParams() }
+    );
+    const profile = profileRaw && typeof profileRaw === "object" && !Array.isArray(profileRaw) ? profileRaw as AdminProfile : {};
+    if (!profileIsAdmin(profile)) throw new UpstreamError(403, "", "当前账号不是管理员或登录已失效");
+    await fetchAdminWorkerJson<unknown>(workerEnv, "/admin/statistics", injectedAdminPassword, { search: new URLSearchParams() });
+    return { workerEnv, headers: adminPasswordHeaders(workerEnv, injectedAdminPassword) };
+  }
+
   const headers = adminAccessHeaders(workerEnv, adminToken);
-  await fetchWorkerJsonWithHeaders<unknown>(workerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
-  return { workerEnv, headers };
+  try {
+    await fetchWorkerJsonWithHeaders<unknown>(workerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
+    return { workerEnv, headers };
+  } catch (error) {
+    if (!(error instanceof UpstreamError) || (error.status !== 401 && error.status !== 403)) throw error;
+  }
+
+  const adminProxyBase = adminProxyBaseFromRequest(request, workerEnv);
+  if (!adminProxyBase) {
+    throw new Error("用户站缺少 ADMIN_PASSWORD secret，无法用管理员账号创建共享链接");
+  }
+  const adminWorkerEnv = { ...workerEnv, MAIL_WORKER_BASE_URL: adminProxyBase };
+  await fetchWorkerJsonWithHeaders<unknown>(adminWorkerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
+  return { workerEnv, adminWorkerEnv, headers };
 }
 
 export async function fetchShareAdminWorkerJson<T>(
@@ -556,7 +708,7 @@ export async function fetchShareAdminWorkerJson<T>(
   init: { method?: string; body?: unknown; search?: URLSearchParams } = {}
 ): Promise<T> {
   const headers = init.body === undefined ? auth.headers : { ...auth.headers, "content-type": "application/json" };
-  return fetchWorkerJsonWithHeaders<T>(auth.workerEnv, path, headers, init);
+  return fetchWorkerJsonWithHeaders<T>(auth.adminWorkerEnv || auth.workerEnv, path, headers, init);
 }
 
 export async function resolveSharedMailbox(env: CloudmailEnv, token: string, mailboxId: string) {

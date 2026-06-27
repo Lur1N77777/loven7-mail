@@ -1,12 +1,13 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { clearApiCache, createApiClient } from './lib/api';
 import { API_BASE, STORAGE_KEYS, SWIPE } from './lib/constants';
 import { readJwtFromQuery } from './lib/clipboard';
 import { decodeJwtPayload, isLikelyJwt } from './lib/crypto';
-import { forgetAuthBrowserStorage, normalizeAuthApiBase, purgeExpiredAuthStorage, readAccountUserToken, readBoundAuth, readStorage, writeAccountUserToken, writeBoundAuth, writeLocalStorage } from './lib/storage';
+import { forgetAuthBrowserStorage, normalizeAuthApiBase, purgeExpiredAuthStorage, readAccountUserToken, readBoundAuth, readStorage, writeAccountUserToken, writeBoundAuth, writeLocalStorage, writeSessionStorage } from './lib/storage';
 import { cls } from './lib/format';
 import { applyRuntimeLocale, getBackendLang, getRuntimeLocale, localeText, readInitialLocale, writeLocale, type AppLocale } from './lib/locale';
 import type { AddressUserFilter, ComposePayload, OpenSettings, Statistics } from './types/api';
+import { createAdminPreviewRequest, isAdminPreviewAvailable, isAdminPreviewEnabled } from './lib/adminPreview';
 import { AuthPanel } from './components/AuthPanel';
 import { BackendLogin } from './components/BackendLogin';
 import { NoticeToast, useConfirm, useNotice } from './components/Common';
@@ -45,6 +46,28 @@ function preloadAdminViewChunks() {
   void import('./views/ComposeView');
   void import('./views/UsersView');
   void import('./views/SettingsMaintenance');
+}
+
+function normalizeThemePreference(value: string | null): 'light' | 'dark' | null {
+  return value === 'dark' || value === 'light' ? value : null;
+}
+
+function readThemePreference(): 'light' | 'dark' {
+  if (typeof window === 'undefined') return 'light';
+  try {
+    const localTheme = normalizeThemePreference(window.localStorage.getItem(STORAGE_KEYS.uiTheme));
+    if (localTheme) return localTheme;
+    const sessionTheme = normalizeThemePreference(window.sessionStorage.getItem(STORAGE_KEYS.uiTheme));
+    if (sessionTheme) return sessionTheme;
+  } catch {
+    // Fall back to the shared storage reader in restricted browser modes.
+  }
+  return readStorage(STORAGE_KEYS.uiTheme, 'light') === 'dark' ? 'dark' : 'light';
+}
+
+function writeThemePreference(theme: 'light' | 'dark'): void {
+  writeLocalStorage(STORAGE_KEYS.uiTheme, theme);
+  writeSessionStorage(STORAGE_KEYS.uiTheme, theme);
 }
 
 function redirectUserOAuthCallbackToAdminRoot(): boolean {
@@ -288,7 +311,7 @@ function consumeAdminConnectionFromUrl(): { adminPassword: string; apiBase: stri
 
 function ViewFallback() {
   const locale = getRuntimeLocale();
-  return <div className="flex h-full items-center justify-center text-sm text-slate-400">{localeText('视图加载中...', 'Loading view...', locale)}</div>;
+  return <div className="view-fallback flex h-full items-center justify-center text-sm text-slate-400">{localeText('视图加载中...', 'Loading view...', locale)}</div>;
 }
 
 function AdminAccessGate({ locale, theme, hasRejectedToken }: { locale: AppLocale; theme: 'light' | 'dark'; hasRejectedToken: boolean }) {
@@ -342,7 +365,9 @@ export default function App() {
     return <div className="flex h-[100dvh] w-full items-center justify-center bg-[var(--color-bg)] text-sm text-slate-500">正在跳转登录...</div>;
   }
 
-  const [activeMenu, setActiveMenu] = useState<MenuKey>('dashboard');
+  const adminPreviewMode = isAdminPreviewEnabled();
+  const adminPreviewAvailable = isAdminPreviewAvailable();
+  const [activeMenu, setActiveMenu] = useState<MenuKey>(() => (adminPreviewMode ? 'inbox' : 'dashboard'));
   const [pageMotion, setPageMotion] = useState<'forward' | 'back' | ''>('');
   const [pageDragX, setPageDragX] = useState(0);
   const [pageSettling, setPageSettling] = useState(false);
@@ -361,7 +386,7 @@ export default function App() {
   const [accountUserToken, setAccountUserToken] = useState(() => readAccountUserToken());
   const [accountProfile, setAccountProfile] = useState<AccountUserProfile | null>(null);
   const [accountBooting, setAccountBooting] = useState(() => Boolean(readAccountUserToken()));
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (readStorage(STORAGE_KEYS.uiTheme, 'light') === 'dark' ? 'dark' : 'light'));
+  const [theme, setThemeState] = useState<'light' | 'dark'>(() => readThemePreference());
   const [locale, setLocale] = useState<AppLocale>(() => readInitialLocale());
   const [stats, setStats] = useState<Statistics>(emptyStats);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -379,7 +404,12 @@ export default function App() {
   const pageDragXValueRef = useRef(0);
   const pageDragXStateRef = useRef(0);
   const pageDragXStateAtRef = useRef(0);
+  const pageAnimationFrameRef = useRef<number | null>(null);
+  const pageAnimationSecondFrameRef = useRef<number | null>(null);
   const pageTransitionTimerRef = useRef<number | null>(null);
+  const themeTransitionTimerRef = useRef<number | null>(null);
+  const pageTransitionSeqRef = useRef(0);
+  const mobileTransitionMenuRef = useRef<MenuKey | null>(null);
   const credentialFingerprintRef = useRef<string | null>(null);
   const authResetSeqRef = useRef(0);
   const { notice, push } = useNotice();
@@ -413,15 +443,75 @@ export default function App() {
     pageDragXStateAtRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now();
     setPageDragX(value);
   }, [applyMobilePageTransforms, getSwipeViewportWidth]);
+  const cancelPendingPageAnimation = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (pageAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(pageAnimationFrameRef.current);
+      pageAnimationFrameRef.current = null;
+    }
+    if (pageAnimationSecondFrameRef.current !== null) {
+      window.cancelAnimationFrame(pageAnimationSecondFrameRef.current);
+      pageAnimationSecondFrameRef.current = null;
+    }
+  }, []);
+  const updateMobileTransitionMenu = useCallback((menu: MenuKey | null) => {
+    mobileTransitionMenuRef.current = menu;
+    setMobileTransitionMenu(menu);
+  }, []);
+  const applyPreservedMobileMailChrome = useCallback((menu: MenuKey | null) => {
+    if (typeof document === 'undefined') return false;
+    if (menu !== 'inbox' && menu !== 'sent') return false;
+    const root = document.documentElement;
+    const preservedForMenu = root.style.getPropertyValue(`--mobile-mail-preserved-chrome-progress-${menu}`).trim();
+    const preserved = preservedForMenu || root.style.getPropertyValue('--mobile-mail-preserved-chrome-progress').trim();
+    const progress = preserved ? Math.max(0, Math.min(1, Number.parseFloat(preserved) || 0)) : 0;
+    document.body.style.setProperty('--mobile-mail-chrome-progress', progress.toFixed(3));
+    document.body.classList.toggle('mobile-mail-chrome-collapsed', progress >= 0.92);
+    return true;
+  }, []);
+  const syncMobileChromeForMenu = useCallback((menu: MenuKey | null) => {
+    if (applyPreservedMobileMailChrome(menu)) return;
+    if (typeof document === 'undefined') return;
+    document.body.style.setProperty('--mobile-mail-chrome-progress', '0');
+    document.body.classList.remove('mobile-mail-chrome-collapsed');
+  }, [applyPreservedMobileMailChrome]);
+  const settleMobilePageAt = useCallback((menu: MenuKey) => {
+    cancelPendingPageAnimation();
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--mobile-nav-live-progress', '0');
+    }
+    activeMenuRef.current = menu;
+    syncMobileChromeForMenu(menu);
+    pageSwipeTargetMenuRef.current = null;
+    setActiveMenu(menu);
+    setPageSettling(false);
+    setPageSwipeTargetMenu(null);
+    updateMobileTransitionMenu(null);
+    commitPageDragX(0, true);
+    setPageMotion('');
+    setPageSettleMs(220);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        activeMenuRef.current = menu;
+        pageSwipeTargetMenuRef.current = null;
+        commitPageDragX(0, true);
+      });
+    }
+  }, [cancelPendingPageAnimation, commitPageDragX, syncMobileChromeForMenu, updateMobileTransitionMenu]);
   const animatePageDragX = useCallback((value: number, forceState = true) => {
     if (typeof window === 'undefined') {
       commitPageDragX(value, forceState);
       return;
     }
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => commitPageDragX(value, forceState));
+    cancelPendingPageAnimation();
+    pageAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      pageAnimationFrameRef.current = null;
+      pageAnimationSecondFrameRef.current = window.requestAnimationFrame(() => {
+        pageAnimationSecondFrameRef.current = null;
+        commitPageDragX(value, forceState);
+      });
     });
-  }, [commitPageDragX]);
+  }, [cancelPendingPageAnimation, commitPageDragX]);
   const clearRecoveredAccountAuth = useCallback(() => {
     writeAccountUserToken('');
     writeBoundAuth(apiBase, { adminPassword: '', sitePassword: '', userAccessToken: '', addressJwt: '' });
@@ -521,9 +611,13 @@ export default function App() {
     addressJwt: '',
     lang: getBackendLang(locale),
   })), [apiBase, effectiveAccountUserToken, effectiveAdminPassword, effectiveUserAccessToken, locale]);
-  const request = useCallback(<T,>(path: string, options?: Parameters<typeof client.request>[1]) => client.request<T>(path, options), [client]);
-  const connected = Boolean(effectiveAdminPassword || effectiveUserAccessToken);
+  const previewRequest = useMemo(() => createAdminPreviewRequest(), []);
+  const request = useCallback(<T,>(path: string, options?: Parameters<typeof client.request>[1]) => (
+    adminPreviewMode ? previewRequest<T>(path, options) : client.request<T>(path, options)
+  ), [adminPreviewMode, client, previewRequest]);
+  const connected = adminPreviewMode || Boolean(effectiveAdminPassword || effectiveUserAccessToken);
   const authenticatedView = connected || Boolean(accountProfile) || Boolean(addressJwt && directAddress);
+  const themeShellEligible = authenticatedView || accountBooting || Boolean(accountUserToken);
   const stableMailAccountIdentity = useMemo(() => {
     const profile = accountProfile || adminAccessProfile;
     if (profile?.userId) return `user:${profile.userId}`;
@@ -593,13 +687,51 @@ export default function App() {
       return next;
     });
   }, [activeMenu]);
-  useEffect(() => {
-    writeLocalStorage(STORAGE_KEYS.uiTheme, theme);
+  const setTheme = useCallback((nextTheme: 'light' | 'dark') => {
+    if (nextTheme === theme) return;
+    writeThemePreference(nextTheme);
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      setThemeState(nextTheme);
+      return;
+    }
+    const root = document.documentElement;
+    const body = document.body;
+    const clearTransitionClass = () => {
+      root.classList.remove('theme-transitioning');
+      body.classList.remove('theme-transitioning');
+    };
+    if (themeTransitionTimerRef.current !== null) {
+      window.clearTimeout(themeTransitionTimerRef.current);
+      themeTransitionTimerRef.current = null;
+    }
+    root.classList.add('theme-transitioning');
+    body.classList.add('theme-transitioning');
+    const useDarkTheme = nextTheme === 'dark' && themeShellEligible;
+    root.classList.toggle('theme-dark', useDarkTheme);
+    body.classList.toggle('theme-dark', useDarkTheme);
+    root.style.colorScheme = useDarkTheme ? 'dark' : 'light';
+    body.style.colorScheme = useDarkTheme ? 'dark' : 'light';
+    setThemeState(nextTheme);
+    themeTransitionTimerRef.current = window.setTimeout(() => {
+      clearTransitionClass();
+      themeTransitionTimerRef.current = null;
+    }, 180);
+  }, [theme, themeShellEligible]);
+
+  useLayoutEffect(() => {
+    writeThemePreference(theme);
     if (typeof document === 'undefined') return;
-    const useDarkTheme = theme === 'dark' && authenticatedView;
+    const useDarkTheme = theme === 'dark' && themeShellEligible;
     document.documentElement.classList.toggle('theme-dark', useDarkTheme);
     document.body.classList.toggle('theme-dark', useDarkTheme);
-  }, [authenticatedView, theme]);
+    document.documentElement.style.colorScheme = useDarkTheme ? 'dark' : 'light';
+    document.body.style.colorScheme = useDarkTheme ? 'dark' : 'light';
+  }, [theme, themeShellEligible]);
+  useEffect(() => () => {
+    if (themeTransitionTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(themeTransitionTimerRef.current);
+    }
+  }, []);
   useEffect(() => {
     writeLocale(locale);
     applyRuntimeLocale(locale);
@@ -653,11 +785,9 @@ export default function App() {
         }
         setActiveMenu('dashboard');
         setPageMotion('');
-        commitPageDragX(0, true);
-        setPageSettling(false);
-        setPageSettleMs(220);
-        setPageSwipeTargetMenu(null);
-        pageSwipeTargetMenuRef.current = null;
+        pageTransitionSeqRef.current += 1;
+        cancelPendingPageAnimation();
+        settleMobilePageAt('dashboard');
         credentialFingerprintRef.current = null;
         window.setTimeout(() => {
           const hasFreshAuth = Boolean(readStorage(STORAGE_KEYS.adminPassword, '') || readStorage(STORAGE_KEYS.sitePassword, '') || readStorage(STORAGE_KEYS.userAccessToken, '') || readStorage(STORAGE_KEYS.addressJwt, ''));
@@ -666,7 +796,7 @@ export default function App() {
         push('success', localeText('已退出，并清除本机保存的敏感凭据和管理缓存。', 'Signed out and cleared saved sensitive credentials plus admin caches on this browser.', currentLocale));
       },
     });
-  }, [apiBase, ask, push]);
+  }, [apiBase, ask, cancelPendingPageAnimation, push, settleMobilePageAt]);
   const refreshCurrent = () => {
     clearApiCache();
     loadOpenSettings(true);
@@ -674,11 +804,41 @@ export default function App() {
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('loven7-global-refresh', { detail: { menu: activeMenu } }));
   };
   const navigateMenu = useCallback((menu: MenuKey) => {
+    if (activeMenuRef.current === menu) {
+      if (mobileTransitionMenuRef.current && mobileTransitionMenuRef.current !== menu && mobilePagesEnabled && connected) {
+        pageTransitionSeqRef.current += 1;
+        if (pageTransitionTimerRef.current !== null) {
+          window.clearTimeout(pageTransitionTimerRef.current);
+          pageTransitionTimerRef.current = null;
+        }
+        const width = getSwipeViewportWidth();
+        const duration = getPageSettleMs(pageDragXValueRef.current, 0, width);
+        setPageSettleMs(duration);
+        setPageSettling(true);
+        setPageMotion('');
+        pageSwipeTargetMenuRef.current = null;
+        setPageSwipeTargetMenu(null);
+        updateMobileTransitionMenu(null);
+        animatePageDragX(0, true);
+        const transitionSeq = pageTransitionSeqRef.current;
+        pageTransitionTimerRef.current = window.setTimeout(() => {
+          if (transitionSeq !== pageTransitionSeqRef.current) return;
+          settleMobilePageAt(menu);
+          pageTransitionTimerRef.current = null;
+        }, duration);
+        return;
+      }
+      if (typeof window !== 'undefined' && (menu === 'inbox' || menu === 'sent' || menu === 'unknown')) {
+        window.dispatchEvent(new CustomEvent('loven7-global-refresh', { detail: { menu, source: 'repeat-menu-click' } }));
+      }
+      return;
+    }
     setActiveMenu((current) => {
       if (current === menu) return current;
       const currentIndex = mobileSwipeMenus.indexOf(current);
       const nextIndex = mobileSwipeMenus.indexOf(menu);
       if (currentIndex >= 0 && nextIndex >= 0 && mobilePagesEnabled && connected) {
+        pageTransitionSeqRef.current += 1;
         if (pageTransitionTimerRef.current !== null) {
           window.clearTimeout(pageTransitionTimerRef.current);
           pageTransitionTimerRef.current = null;
@@ -690,7 +850,7 @@ export default function App() {
         const adjacentTarget = Math.abs(offset) === 1 ? menu : null;
         setPageSettleMs(duration);
         setPageSettling(true);
-        setMobileTransitionMenu(menu);
+        updateMobileTransitionMenu(menu);
         setPageMotion('');
         pageSwipeTargetMenuRef.current = adjacentTarget;
         setPageSwipeTargetMenu(adjacentTarget);
@@ -701,16 +861,10 @@ export default function App() {
           return next;
         });
         animatePageDragX(targetX, true);
+        const transitionSeq = pageTransitionSeqRef.current;
         pageTransitionTimerRef.current = window.setTimeout(() => {
-          activeMenuRef.current = menu;
-          pageSwipeTargetMenuRef.current = null;
-          setActiveMenu(menu);
-          setPageSettling(false);
-          setPageSwipeTargetMenu(null);
-          setMobileTransitionMenu(null);
-          commitPageDragX(0, true);
-          setPageMotion('');
-          setPageSettleMs(220);
+          if (transitionSeq !== pageTransitionSeqRef.current) return;
+          settleMobilePageAt(menu);
           pageTransitionTimerRef.current = null;
         }, duration);
         return current;
@@ -722,7 +876,7 @@ export default function App() {
       }
       return menu;
     });
-  }, [animatePageDragX, commitPageDragX, connected, getSwipeViewportWidth, mobilePagesEnabled]);
+  }, [animatePageDragX, connected, getSwipeViewportWidth, mobilePagesEnabled, settleMobilePageAt, updateMobileTransitionMenu]);
   const clearAddressUserFilter = useCallback(() => setAddressUserFilter(null), []);
   const openAddressInbox = useCallback((address: string) => {
     setMailboxAddressRequest((current) => ({ address, requestId: (current?.requestId || 0) + 1 }));
@@ -742,7 +896,7 @@ export default function App() {
       const visualMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : activeMenu;
       return (
         <div key={`${menu}:${mailStateScope}`} className="h-full min-h-0">
-          <MemoMailWorkspace mode={menu} active={activeMenu === menu} visualActive={visualMenu === menu} request={request} notify={push} ask={ask} globalQuery={globalQuery} addressRequest={menu === 'inbox' ? mailboxAddressRequest : null} setActiveMenu={navigateMenu} setComposeSeed={setComposeSeed} mailStateScope={mailStateScope} />
+          <MemoMailWorkspace mode={menu} active={activeMenu === menu} visualActive={visualMenu === menu} request={request} notify={push} ask={ask} globalQuery={globalQuery} addressRequest={menu === 'inbox' ? mailboxAddressRequest : null} setActiveMenu={navigateMenu} setComposeSeed={setComposeSeed} mailStateScope={mailStateScope} theme={theme} />
         </div>
       );
     }
@@ -766,9 +920,9 @@ export default function App() {
     if (clearTarget) {
       pageSwipeTargetMenuRef.current = null;
       setPageSwipeTargetMenu(null);
-      setMobileTransitionMenu(null);
+      updateMobileTransitionMenu(null);
     }
-  }, []);
+  }, [updateMobileTransitionMenu]);
   const getMobileSwipeTarget = useCallback((direction: 1 | -1): MenuKey | null => {
     const currentIndex = mobileSwipeMenus.indexOf(activeMenu);
     if (currentIndex < 0) return null;
@@ -788,13 +942,14 @@ export default function App() {
     const currentDragX = dragOverride ?? getPageDragX(getLockedSwipeDelta(pageSwipeRef.current.lastX - pageSwipeRef.current.startX, direction), width);
     const targetX = direction === 1 ? -width : width;
     const duration = getPageSettleMs(currentDragX, targetX, width);
+    pageTransitionSeqRef.current += 1;
     if (pageTransitionTimerRef.current !== null) {
       window.clearTimeout(pageTransitionTimerRef.current);
       pageTransitionTimerRef.current = null;
     }
     setPageSettleMs(duration);
     setPageSettling(true);
-    setMobileTransitionMenu(nextMenu);
+    updateMobileTransitionMenu(nextMenu);
     setGestureTargetMenu(nextMenu);
     setPageMotion('');
     setVisitedMenus((current) => {
@@ -804,22 +959,18 @@ export default function App() {
       return next;
     });
     animatePageDragX(targetX, true);
+    const transitionSeq = pageTransitionSeqRef.current;
     pageTransitionTimerRef.current = window.setTimeout(() => {
-      activeMenuRef.current = nextMenu;
-      pageSwipeTargetMenuRef.current = null;
-      setActiveMenu(nextMenu);
-      setPageSettling(false);
+      if (transitionSeq !== pageTransitionSeqRef.current) return;
       setGestureTargetMenu(null);
-      setMobileTransitionMenu(null);
-      commitPageDragX(0, true);
-      setPageMotion('');
-      setPageSettleMs(220);
+      settleMobilePageAt(nextMenu);
       pageTransitionTimerRef.current = null;
     }, duration);
-  }, [activeMenu, animatePageDragX, commitPageDragX, getMobileSwipeTarget, getSwipeViewportWidth, setGestureTargetMenu]);
+  }, [activeMenu, animatePageDragX, getMobileSwipeTarget, getSwipeViewportWidth, setGestureTargetMenu, settleMobilePageAt, updateMobileTransitionMenu]);
   useEffect(() => () => {
     if (pageTransitionTimerRef.current !== null) window.clearTimeout(pageTransitionTimerRef.current);
-  }, []);
+    cancelPendingPageAnimation();
+  }, [cancelPendingPageAnimation]);
   useEffect(() => {
     const handleNativeTouchStart = (event: TouchEvent) => {
       if (pageSettling) return;
@@ -827,6 +978,7 @@ export default function App() {
       const touch = event.touches[0];
       if (pageSwipeRef.current.rafId) window.cancelAnimationFrame(pageSwipeRef.current.rafId);
       pageSwipeRef.current = { ...createPageSwipeState(), active: true, startX: touch.clientX, startY: touch.clientY, lastX: touch.clientX, lastY: touch.clientY };
+      document.documentElement.style.setProperty('--mobile-nav-live-progress', '0');
     };
     const handleNativeTouchMove = (event: TouchEvent) => {
       const swipe = pageSwipeRef.current;
@@ -842,6 +994,7 @@ export default function App() {
         if (swipe.lock === 'page') {
           swipe.direction = dx < 0 ? 1 : -1;
           swipe.targetMenu = getMobileSwipeTarget(swipe.direction);
+          applyPreservedMobileMailChrome(swipe.targetMenu);
           setGestureTargetMenu(swipe.targetMenu);
         }
       }
@@ -851,7 +1004,9 @@ export default function App() {
         setPageSettling(false);
         const width = getSwipeViewportWidth();
         const visualDx = getLockedSwipeDelta(dx, swipe.direction);
-        setGestureTargetMenu(Math.abs(visualDx) > 2 ? swipe.targetMenu : null);
+        const visibleTargetMenu = Math.abs(visualDx) > 2 ? swipe.targetMenu : null;
+        if (visibleTargetMenu) applyPreservedMobileMailChrome(visibleTargetMenu);
+        setGestureTargetMenu(visibleTargetMenu);
         schedulePageDragX(getPageDragX(visualDx, width));
       }
     };
@@ -869,13 +1024,17 @@ export default function App() {
       const commitDistance = Math.max(SWIPE.pageMinDistance, width * 0.34);
       if (Math.abs(lockedDx) < commitDistance || Math.abs(lockedDx) < dy * SWIPE.pageRatio || dy > SWIPE.pageMaxVertical) {
         const settleMs = getPageSettleMs(dragX, 0, width);
+        pageTransitionSeqRef.current += 1;
         setPageSettling(true);
         setPageSettleMs(settleMs);
         animatePageDragX(0, true);
+        const transitionSeq = pageTransitionSeqRef.current;
         window.setTimeout(() => {
+          if (transitionSeq !== pageTransitionSeqRef.current) return;
+          syncMobileChromeForMenu(activeMenuRef.current);
           setPageSettling(false);
           setGestureTargetMenu(null);
-          setMobileTransitionMenu(null);
+          updateMobileTransitionMenu(null);
           setPageSettleMs(220);
         }, settleMs);
         return;
@@ -885,13 +1044,17 @@ export default function App() {
     const handleNativeTouchCancel = () => {
       resetPageSwipe(false);
       const settleMs = getPageSettleMs(pageDragXValueRef.current, 0, getSwipeViewportWidth());
+      pageTransitionSeqRef.current += 1;
       setPageSettling(true);
       setPageSettleMs(settleMs);
       animatePageDragX(0, true);
+      const transitionSeq = pageTransitionSeqRef.current;
       window.setTimeout(() => {
+        if (transitionSeq !== pageTransitionSeqRef.current) return;
+        syncMobileChromeForMenu(activeMenuRef.current);
         setPageSettling(false);
         setGestureTargetMenu(null);
-        setMobileTransitionMenu(null);
+        updateMobileTransitionMenu(null);
         setPageSettleMs(220);
       }, settleMs);
     };
@@ -905,7 +1068,7 @@ export default function App() {
       document.removeEventListener('touchend', handleNativeTouchEnd, { capture: true });
       document.removeEventListener('touchcancel', handleNativeTouchCancel, { capture: true });
     };
-  }, [animatePageDragX, getMobileSwipeTarget, getSwipeViewportWidth, pageSettling, resetPageSwipe, schedulePageDragX, setGestureTargetMenu, switchMobileMenuBySwipe]);
+  }, [animatePageDragX, applyPreservedMobileMailChrome, getMobileSwipeTarget, getSwipeViewportWidth, pageSettling, resetPageSwipe, schedulePageDragX, setGestureTargetMenu, switchMobileMenuBySwipe, syncMobileChromeForMenu, updateMobileTransitionMenu]);
   const authProps = useMemo(() => ({
     apiBase,
     setApiBase,
@@ -922,29 +1085,36 @@ export default function App() {
     turnstileRequired: Boolean(openSettings?.enableGlobalTurnstileCheck),
     request,
     notify: push,
-    canForgetBrowser: connected,
+    canForgetBrowser: connected && !adminPreviewMode,
     onForgetBrowser: forgetCurrentBrowser,
-  }), [accountProfile?.isAdmin, adminAccessProfile, apiBase, connected, effectiveAdminPassword, effectiveUserAccessToken, forgetCurrentBrowser, openSettings?.cfTurnstileSiteKey, openSettings?.enableGlobalTurnstileCheck, push, request]);
+  }), [accountProfile?.isAdmin, adminAccessProfile, adminPreviewMode, apiBase, connected, effectiveAdminPassword, effectiveUserAccessToken, forgetCurrentBrowser, openSettings?.cfTurnstileSiteKey, openSettings?.enableGlobalTurnstileCheck, push, request]);
   const activeSwipeIndex = mobileSwipeMenus.indexOf(activeMenu);
   const useMobileSwipeDeck = mobilePagesEnabled && connected && activeSwipeIndex >= 0;
   const renderLegacyMenus = !useMobileSwipeDeck;
   const isMailMenu = !useMobileSwipeDeck && (activeMenu === 'inbox' || activeMenu === 'sent');
-  const visualActiveMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : activeMenu;
+  const visualActiveMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : mobileTransitionMenu || activeMenu;
   const swipeViewportWidth = typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360);
-  const navSwipeTargetMenu = useMobileSwipeDeck ? pageSwipeTargetMenu : null;
-  const navSwipeProgress = navSwipeTargetMenu ? Math.min(1, Math.abs(pageDragX) / Math.max(swipeViewportWidth, 1)) : 0;
+  const navSwipeTargetMenu = useMobileSwipeDeck ? (pageSwipeTargetMenu || mobileTransitionMenu) : null;
+  const navUsesLiveProgress = Boolean(useMobileSwipeDeck && pageSwipeTargetMenu);
+  const navSwipeDistance = navSwipeTargetMenu
+    ? Math.max(1, Math.abs(getCircularOffset(navSwipeTargetMenu, activeMenu))) * Math.max(swipeViewportWidth, 1)
+    : Math.max(swipeViewportWidth, 1);
+  const navSwipeProgress = navSwipeTargetMenu ? Math.min(1, Math.abs(pageDragX) / navSwipeDistance) : 0;
   const mobileRenderedMenus = useMemo(() => {
     const rendered = new Set<MenuKey>(getAdjacentSwipeMenus(activeMenu));
     if (pageSwipeTargetMenu) rendered.add(pageSwipeTargetMenu);
     if (mobileTransitionMenu) rendered.add(mobileTransitionMenu);
     return mobileSwipeMenus.filter((menu) => rendered.has(menu));
   }, [activeMenu, mobileTransitionMenu, pageSwipeTargetMenu]);
-  useEffect(() => {
+  const mobileMailChromeMenu = (visualActiveMenu === 'inbox' || visualActiveMenu === 'sent')
+    ? visualActiveMenu
+    : (navSwipeTargetMenu === 'inbox' || navSwipeTargetMenu === 'sent')
+      ? navSwipeTargetMenu
+      : null;
+  useLayoutEffect(() => {
     if (typeof document === 'undefined') return;
-    if (visualActiveMenu === 'inbox' || visualActiveMenu === 'sent') return;
-    document.body.style.setProperty('--mobile-mail-chrome-progress', '0');
-    document.body.classList.remove('mobile-mail-chrome-collapsed');
-  }, [visualActiveMenu]);
+    syncMobileChromeForMenu(mobileMailChromeMenu);
+  }, [mobileMailChromeMenu, syncMobileChromeForMenu]);
 
   if (accountBooting) {
     return <div className="flex h-[100dvh] w-full items-center justify-center bg-[var(--color-bg)] text-sm text-slate-500">正在恢复登录...</div>;
@@ -973,7 +1143,7 @@ export default function App() {
   if (!connected) {
     return (
       <>
-        <BackendLogin apiBase={apiBase} locale={locale} theme={theme} onAccountLogin={applyAccountLogin} onDirectLogin={applyDirectLogin} />
+        <BackendLogin apiBase={apiBase} locale={locale} theme={theme} onAccountLogin={applyAccountLogin} onDirectLogin={applyDirectLogin} localPreviewHref={adminPreviewAvailable ? '/?preview=admin' : undefined} />
         <NoticeToast notice={notice} />
         {confirmModal}
       </>
@@ -994,8 +1164,10 @@ export default function App() {
           refresh={refreshCurrent}
           apiBase={apiBase}
           connected={connected}
-          accountName={accountProfile?.username || accountProfile?.userEmail || adminAccessProfile?.username || adminAccessProfile?.userEmail}
-          accountMeta={accountProfile
+          accountName={adminPreviewMode ? localeText('本地预览', 'Local preview', locale) : accountProfile?.username || accountProfile?.userEmail || adminAccessProfile?.username || adminAccessProfile?.userEmail}
+          accountMeta={adminPreviewMode
+            ? localeText('样例数据 · 不连接线上账号', 'Sample data · no production account', locale)
+            : accountProfile
             ? `${accountProfile.userEmail || ''}${accountProfile.linuxDoEmail ? ` · L站 ${accountProfile.linuxDoEmail}` : ''}${accountProfile.linuxDoId ? ` · ID ${accountProfile.linuxDoId}` : ''}`
             : adminAccessProfile?.userEmail}
         >
@@ -1062,6 +1234,7 @@ export default function App() {
             locale={locale}
             swipeTargetMenu={navSwipeTargetMenu}
             swipeProgress={navSwipeProgress}
+            useLiveProgress={navUsesLiveProgress}
             settling={pageSettling}
             settleMs={pageSettleMs}
           />

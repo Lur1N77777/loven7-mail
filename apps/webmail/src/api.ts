@@ -1,4 +1,9 @@
-import type { MailPage, SafeSettings, SessionResponse, ShareInfo } from "./types";
+import type {
+  MailPage,
+  SafeSettings,
+  SessionResponse,
+  ShareInfo,
+} from "./types";
 
 function currentLocale() {
   if (typeof document !== "undefined" && document.documentElement.dataset.locale === "en-US") return "en-US";

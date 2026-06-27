@@ -94,7 +94,8 @@ function BrandLogo({ variant = "regular" }: { variant?: "hero" | "regular" | "co
         <circle className="brand-sigil-dot" cx="34.7" cy="28.1" r="2" />
       </svg>
       <span className="brand-wordmark" aria-hidden="true">
-        Loven7 Mail
+        <span>Loven7</span>
+        <span>Mail</span>
       </span>
     </div>
   );
@@ -245,6 +246,7 @@ const UI_COPY = {
   "zh-CN": {
     bootLogin: "正在验证访问凭证",
     boot: "正在启动邮箱",
+    loginTitle: "邮箱登录",
     loginIntro: "请输入管理员提供的邮箱与密码",
     emailLabel: "邮箱地址",
     passwordLabel: "密码",
@@ -268,6 +270,21 @@ const UI_COPY = {
     refresh: "刷新",
     auto: "自动",
     logout: "退出",
+    compose: "写邮件",
+    composeTitle: "发送邮件",
+    toMail: "收件人",
+    toName: "收件人名称",
+    fromName: "发件人名称",
+    subject: "主题",
+    content: "正文",
+    htmlMode: "HTML 正文",
+    send: "发送",
+    sending: "发送中…",
+    sendSuccess: "邮件已发送",
+    sendAccess: "申请发信权限",
+    sendAccessSuccess: "已提交发信权限申请",
+    composeHint: "发件权限由后台允许的域名、余额和角色控制；没有权限时 Worker 会拒绝请求。",
+    close: "关闭",
     noContent: "(无内容)",
     verificationCode: "验证码",
     emptyList: "暂无邮件",
@@ -319,6 +336,7 @@ const UI_COPY = {
   "en-US": {
     bootLogin: "Verifying access",
     boot: "Starting mailbox",
+    loginTitle: "Mailbox sign in",
     loginIntro: "Enter the mailbox and password from your administrator",
     emailLabel: "Email address",
     passwordLabel: "Password",
@@ -342,6 +360,21 @@ const UI_COPY = {
     refresh: "Refresh",
     auto: "Auto",
     logout: "Exit",
+    compose: "Compose",
+    composeTitle: "Send mail",
+    toMail: "To",
+    toName: "Recipient name",
+    fromName: "Sender name",
+    subject: "Subject",
+    content: "Message",
+    htmlMode: "HTML body",
+    send: "Send",
+    sending: "Sending…",
+    sendSuccess: "Mail sent",
+    sendAccess: "Request send access",
+    sendAccessSuccess: "Send access requested",
+    composeHint: "Sending is controlled by allowed domains, balance, and role permissions. The Worker rejects unauthorized requests.",
+    close: "Close",
     noContent: "(No content)",
     verificationCode: "Code",
     emptyList: "No mail",
@@ -445,6 +478,77 @@ function MailHtmlView({ html }: { html: string }) {
 
   return <div className="mail-html-view" ref={hostRef} />;
 }
+
+type MailListRowProps = {
+  mail: ParsedMail;
+  selected: boolean;
+  locale: AppLocale;
+  noContent: string;
+  verificationCodeLabel: string;
+  copiedLabel: string;
+  copied: boolean;
+  onSelect: (mail: ParsedMail) => void;
+  onCopyVerificationCode: (mail: ParsedMail) => void;
+};
+
+const MailListRow = React.memo(function MailListRow({
+  mail,
+  selected,
+  locale,
+  noContent,
+  verificationCodeLabel,
+  copiedLabel,
+  copied,
+  onSelect,
+  onCopyVerificationCode,
+}: MailListRowProps) {
+  const sender = getSender(mail, locale);
+  const senderName = mail.from?.name || sender;
+  const senderAddress = mail.from?.address || sender;
+  const select = () => onSelect(mail);
+
+  return (
+    <div
+      className={`mail-row ${selected ? "selected" : ""}`}
+      role="button"
+      tabIndex={0}
+      onClick={select}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          select();
+        }
+      }}
+    >
+      <div className="mail-row-inner">
+        <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
+        <div className="mail-row-content">
+          <span className="mail-row-top">
+            <strong>{mail.subject}</strong>
+            <time>{formatDate(mail.date || mail.createdAt, locale)}</time>
+          </span>
+          <span className="mail-row-from">{sender}</span>
+          <span className="mail-row-preview">{mail.preview || noContent}</span>
+          {mail.verificationCode ? (
+            <span className="code-row">
+              <button
+                type="button"
+                className="code-pill code-copy-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCopyVerificationCode(mail);
+                }}
+              >
+                {verificationCodeLabel} {mail.verificationCode}
+              </button>
+              <em className={`code-copy-hint ${copied ? "visible" : ""}`} aria-live="polite">{copiedLabel}</em>
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+});
 
 export default function App() {
   const [session, setSession] = useState<WebmailSession | null>(null);
@@ -1130,7 +1234,7 @@ export default function App() {
     codeCopyTimerRef.current = window.setTimeout(() => setCopiedCodeMailId(null), 1500);
   }, [copy.codeCopied, showToast]);
 
-  const bodyText = selectedMail ? getMailBodyText(selectedMail) : "";
+  const bodyText = useMemo(() => (selectedMail ? getMailBodyText(selectedMail) : ""), [selectedMail]);
   const activeViewMode: MailViewMode = selectedMail?.html ? mailViewMode : mailViewMode === "source" ? "source" : "text";
   const selectedResolvedHtml = selectedMail?.html
     ? (resolvedHtml?.cacheKey === session?.cacheKey && resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : selectedMail.html)
@@ -1175,79 +1279,65 @@ export default function App() {
 
   if (!session) {
     return (
-      <div className="login-shell">
+      <div className="account-portal-shell mailbox-direct-shell">
         {toast ? <div className="toast">{toast}</div> : null}
-        <section className="login-card">
-          <div className="login-brand">
-            <BrandLogo variant="regular" />
-            <p>{copy.loginIntro}</p>
-          </div>
-
-          <form className="login-form" onSubmit={loginWithPassword}>
-            <label>
-              <span>{copy.emailLabel}</span>
-              <input
-                ref={emailInputRef}
-                type="email"
-                inputMode="email"
-                autoCapitalize="none"
-                autoComplete="username"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
-            <label>
-              <span>{copy.passwordLabel}</span>
-              <div className="password-input-wrap">
-                <input
-                  ref={passwordInputRef}
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  placeholder={copy.passwordPlaceholder}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  aria-label={showPassword ? copy.hidePassword : copy.showPassword}
-                  aria-pressed={showPassword}
-                  onClick={() => setShowPassword((visible) => !visible)}
-                >
-                  <PasswordVisibilityIcon visible={showPassword} />
-                </button>
-              </div>
-            </label>
-            {loginError || error ? <div className="login-error">{loginError || error}</div> : null}
-            <button className="primary-button login-button" disabled={loading === "login"} type="submit" aria-busy={loading === "login"}>
-              {loading === "login" ? <span className="button-spinner" aria-hidden="true" /> : null}
-              <span>{loading === "login" ? copy.loggingIn : copy.loginButton}</span>
-            </button>
-          </form>
-          <div className="login-language-switch" aria-label={copy.languageLabel}>
-            <span className="login-language-label"><LanguageGlyph className="login-language-icon" />{copy.languageLabel}</span>
-            <div className="login-language-options" role="group" aria-label={copy.languageLabel}>
-              <button
-                type="button"
-                className={locale === "zh-CN" ? "active" : ""}
-                aria-pressed={locale === "zh-CN"}
-                onClick={() => setLocale("zh-CN")}
-              >
-                中文
-              </button>
-              <span aria-hidden="true">/</span>
-              <button
-                type="button"
-                className={locale === "en-US" ? "active" : ""}
-                aria-pressed={locale === "en-US"}
-                onClick={() => setLocale("en-US")}
-              >
-                English
-              </button>
-            </div>
-          </div>
+        <section className="account-portal-hero" aria-hidden="true">
+          <BrandLogo variant="compact" />
         </section>
+        <main className="account-portal-panel mailbox-direct-panel" aria-label={copy.loginTitle}>
+          <div className="account-panel-inner mailbox-direct-panel-inner">
+            <div className="account-panel-top mailbox-direct-panel-top">
+              <BrandLogo variant="compact" />
+              <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
+            </div>
+            <section className="account-auth-card mailbox-direct-card">
+              <div className="account-title-block">
+                <h1>{copy.loginTitle}</h1>
+                <p>{copy.loginIntro}</p>
+              </div>
+              <form className="account-form mailbox-direct-form" onSubmit={loginWithPassword}>
+                <label>
+                  <span>{copy.emailLabel}</span>
+                  <input
+                    ref={emailInputRef}
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    autoComplete="username"
+                    inputMode="email"
+                    autoFocus
+                  />
+                </label>
+                <label>
+                  <span>{copy.passwordLabel}</span>
+                  <div className="password-input-wrap">
+                    <input
+                      ref={passwordInputRef}
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder={copy.passwordPlaceholder}
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      aria-label={showPassword ? copy.hidePassword : copy.showPassword}
+                      aria-pressed={showPassword}
+                      onClick={() => setShowPassword((visible) => !visible)}
+                    >
+                      <PasswordVisibilityIcon visible={showPassword} />
+                    </button>
+                  </div>
+                </label>
+                {loginError ? <div className="account-message error" role="alert">{loginError}</div> : null}
+                <button className="account-primary-button mailbox-direct-submit" type="submit" disabled={loading === "login"} aria-busy={loading === "login"}>
+                  {loading === "login" ? <><span className="button-spinner" aria-hidden="true" /> {copy.loggingIn}</> : copy.loginButton}
+                </button>
+              </form>
+            </section>
+          </div>
+        </main>
       </div>
     );
   }
@@ -1364,46 +1454,18 @@ export default function App() {
 
         <div className="mail-list" aria-label={copy.sidebarLabel}>
           {mails.map((mail) => (
-            <div
+            <MailListRow
               key={mail.id}
-              className={`mail-row ${mail.id === selectedMail?.id ? "selected" : ""}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => selectMail(mail)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  selectMail(mail);
-                }
-              }}
-            >
-              <div className="mail-row-inner">
-                <BrandAvatar sender={mail.from?.address || getSender(mail, locale)} senderName={mail.from?.name || getSender(mail, locale)} size={32} className="mail-list-brand-avatar" />
-                <div className="mail-row-content">
-                  <span className="mail-row-top">
-                    <strong>{mail.subject}</strong>
-                    <time>{formatDate(mail.date || mail.createdAt, locale)}</time>
-                  </span>
-                  <span className="mail-row-from">{getSender(mail, locale)}</span>
-                  <span className="mail-row-preview">{mail.preview || copy.noContent}</span>
-                  {mail.verificationCode ? (
-                    <span className="code-row">
-                      <button
-                        type="button"
-                        className="code-pill code-copy-button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void copyVerificationCode(mail);
-                        }}
-                      >
-                        {copy.verificationCode} {mail.verificationCode}
-                      </button>
-                      <em className={`code-copy-hint ${copiedCodeMailId === mail.id ? "visible" : ""}`} aria-live="polite">{copy.copied}</em>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
+              mail={mail}
+              selected={mail.id === selectedMail?.id}
+              locale={locale}
+              noContent={copy.noContent}
+              verificationCodeLabel={copy.verificationCode}
+              copiedLabel={copy.copied}
+              copied={copiedCodeMailId === mail.id}
+              onSelect={selectMail}
+              onCopyVerificationCode={copyVerificationCode}
+            />
           ))}
           {!mails.length && loading !== "sync" ? (
             <div className="list-empty">

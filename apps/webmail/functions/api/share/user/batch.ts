@@ -1,5 +1,5 @@
 import { corsHeaders, errorJson, json, withCors } from "../../../_lib/http";
-import { adminShare, getLatestMailCutoff, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareMailVisibility } from "../../../_lib/share";
+import { adminShare, deleteInactiveShareRecord, getLatestMailCutoff, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareMailVisibility } from "../../../_lib/share";
 import { getAllowedShareAddresses, shareBelongsToUser } from "../../../_lib/shareUser";
 import type { PagesHandler } from "../../../_lib/types";
 import { getUserToken, missingUserToken } from "../../../_lib/user";
@@ -30,12 +30,13 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
     const tokens = parseTokens(body?.tokens);
     if (!tokens.length) return withCors(errorJson(400, "请选择至少一个共享链接", "missing_tokens"), request, env, "admin");
     const action = String(body?.action || "").trim();
-    const allowedActions = new Set(["revoke", "restore", "update", "refresh-index"]);
+    const allowedActions = new Set(["revoke", "restore", "update", "refresh-index", "delete-inactive"]);
     if (!allowedActions.has(action)) return withCors(errorJson(400, "批量操作无效", "bad_batch_action"), request, env, "admin");
 
     const ttl = parseShareTtl(body?.expiresIn);
     const requestedVisibility: ShareMailVisibility | undefined = body?.mailVisibility === "new" || body?.mailVisibility === "all" ? body.mailVisibility : undefined;
     const results = [];
+    const deletedTokens = [];
     const failures = [];
 
     for (const token of tokens) {
@@ -44,7 +45,12 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
         if (!current) throw new Error("共享链接不存在");
         if (!shareBelongsToUser(current, allowed)) throw new Error("无权管理该共享链接");
         let share = null;
-        if (action === "revoke") {
+        if (action === "delete-inactive") {
+          const deleted = await deleteInactiveShareRecord(env, token);
+          if (!deleted) throw new Error("共享链接不存在");
+          deletedTokens.push(token);
+          continue;
+        } else if (action === "revoke") {
           share = await revokeShare(env, token);
         } else if (action === "refresh-index") {
           share = await updateShareRecord(env, token, (payload) => ({ ...payload, updatedAt: new Date().toISOString() }));
@@ -75,7 +81,7 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       }
     }
 
-    return withCors(json({ ok: failures.length === 0, results, failures }), request, env, "admin");
+    return withCors(json({ ok: failures.length === 0, results, deletedTokens, failures }), request, env, "admin");
   } catch (error) {
     return withCors(shareError(error), request, env, "admin");
   }

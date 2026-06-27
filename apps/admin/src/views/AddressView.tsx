@@ -7,6 +7,7 @@ import { cls, formatDateTime, normalizeSearch } from '../lib/format';
 import { sha256Hex } from '../lib/crypto';
 import { getRuntimeLocale, localeText } from '../lib/locale';
 import { buildAddressLoginUrl, copyText } from '../lib/clipboard';
+import { isLocalAdminOrigin, normalizeFrontendBaseUrl } from '../lib/frontendBase';
 import { readJsonStorage, readStorage, writeJsonStorage, writeLocalStorage } from '../lib/storage';
 import { parseRawMailListItem } from '../lib/mailParser';
 import type { AddressRecord, AddressUserFilter, BoundAddressRecord, ListResponse, OpenSettings, RawMailRecord, SenderAccessRecord, UserRecord } from '../types/api';
@@ -141,11 +142,6 @@ function shareSearchText(row: ShareAdminRecord): string {
   ].join(' '));
 }
 
-function currentAdminOrigin() {
-  if (typeof window === 'undefined') return '';
-  return window.location.origin.replace(/\/+$/, '');
-}
-
 function isShareApiNetworkError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || '');
   return error instanceof TypeError || /failed to fetch|networkerror|load failed|fetch failed/i.test(message);
@@ -153,12 +149,11 @@ function isShareApiNetworkError(error: unknown) {
 
 function shareApiNetworkHint(base: string, error: unknown) {
   const locale = getRuntimeLocale();
-  const adminOrigin = currentAdminOrigin() || (locale === 'en-US' ? '<current admin origin>' : '<当前后台 origin>');
   const original = error instanceof Error ? error.message : String(error || '');
-  const suffix = original ? (locale === 'en-US' ? ` Original error: ${original}` : ` 原始错误：${original}`) : '';
+  const suffix = original ? (locale === 'en-US' ? ` ${original}` : ` ${original}`) : '';
   return localeText(
-    `无法访问用户站共享接口（浏览器网络/CORS 失败）。请确认「系统设置 → 前端登录链接前缀」填写的是用户站地址：${base}；在用户站 Cloudflare Pages 环境变量设置 SHARE_ADMIN_CORS_ORIGINS=${adminOrigin}；并确认 SHARE_KV 与 SHARE_ENCRYPTION_SECRET 已配置。${suffix}`,
-    `Cannot reach the webmail share API (browser network/CORS failure). Check that Settings → Frontend login link prefix is the webmail URL: ${base}; set SHARE_ADMIN_CORS_ORIGINS=${adminOrigin} in the webmail Cloudflare Pages project; and confirm SHARE_KV plus SHARE_ENCRYPTION_SECRET are configured.${suffix}`,
+    `共享链接暂不可用：${base}${suffix}`,
+    `Share links unavailable: ${base}${suffix}`,
     locale
   );
 }
@@ -1053,6 +1048,8 @@ export function AddressView({
       return shareSearchText(row).includes(localQuery);
     });
   }, [shareList, shareListQuery, shareStatusFilter, shareStatusNow]);
+  const visibleInactiveShares = useMemo(() => visibleShareList.filter((row) => effectiveShareStatus(row, shareStatusNow) !== 'active'), [shareStatusNow, visibleShareList]);
+  const selectedInactiveShares = useMemo(() => selectedShares.filter((row) => effectiveShareStatus(row, shareStatusNow) !== 'active'), [selectedShares, shareStatusNow]);
   const allVisibleSharesSelected = visibleShareList.length > 0 && visibleShareList.every((row) => selectedShareTokens.has(row.token));
   const allVisibleSelected = data.length > 0 && data.every((row) => selectedIds.has(row.id));
   useEffect(() => {
@@ -1079,10 +1076,13 @@ export function AddressView({
     return next;
   });
   const frontendBase = () => {
-    const stored = readStorage(STORAGE_KEYS.frontendLoginBase, '').trim().replace(/\/+$/, '');
-    const currentOrigin = typeof window !== 'undefined' ? window.location.origin.replace(/\/+$/, '') : '';
-    const isLocalAdmin = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(currentOrigin);
-    if (FRONTEND_LOGIN_BASE) return FRONTEND_LOGIN_BASE;
+    const storedRaw = readStorage(STORAGE_KEYS.frontendLoginBase, '');
+    const stored = normalizeFrontendBaseUrl(storedRaw);
+    const configured = normalizeFrontendBaseUrl(FRONTEND_LOGIN_BASE);
+    const currentOrigin = normalizeFrontendBaseUrl(typeof window !== 'undefined' ? window.location.origin : '');
+    const isLocalAdmin = isLocalAdminOrigin(currentOrigin);
+    if (storedRaw && stored && storedRaw.trim().replace(/\/+$/, '') !== stored) writeLocalStorage(STORAGE_KEYS.frontendLoginBase, stored);
+    if (configured) return configured;
     if (stored && (stored !== currentOrigin || isLocalAdmin)) return stored;
     return isLocalAdmin ? currentOrigin : '';
   };
@@ -1217,6 +1217,54 @@ export function AddressView({
     if (selectedShares.length === 0) return;
     await copyText(selectedShares.map((row) => row.url).join('\n'));
     notify('success', locale === 'en-US' ? `${selectedShares.length} share link${selectedShares.length === 1 ? '' : 's'} copied` : `已复制 ${selectedShares.length} 条共享链接`);
+  };
+  const removeDeletedShareTokens = (tokens: string[]) => {
+    const deleted = new Set(tokens);
+    if (deleted.size === 0) return;
+    setShareList((current) => {
+      const next = current.filter((row) => !deleted.has(row.token));
+      writeJsonStorage(SHARE_LIST_CACHE_KEY, { version: LIST_CACHE_VERSION, savedAt: Date.now(), results: next, cursor: shareListCursorRef.current || null, hasMore: shareListHasMore });
+      return next;
+    });
+    setSelectedShareMap((current) => {
+      const next = { ...current };
+      deleted.forEach((token) => { delete next[token]; });
+      return next;
+    });
+  };
+  const cleanupInactiveShares = (rows: ShareAdminRecord[], scope: 'visible' | 'selected') => {
+    const inactiveRows = rows.filter((row) => effectiveShareStatus(row, shareStatusNow) !== 'active');
+    const skipped = rows.length - inactiveRows.length;
+    if (inactiveRows.length === 0) {
+      notify('error', t('没有可清理的失效共享链接', 'No inactive share links to clean'));
+      return;
+    }
+    ask({
+      title: scope === 'selected' ? t('清理已选失效链接', 'Clean selected inactive links') : t('清理当前失效链接', 'Clean current inactive links'),
+      body: skipped > 0
+        ? (locale === 'en-US' ? `${inactiveRows.length} inactive links will be permanently removed. ${skipped} active links will be skipped.` : `将永久清理 ${inactiveRows.length} 条失效链接；${skipped} 条有效链接会自动跳过。`)
+        : (locale === 'en-US' ? `${inactiveRows.length} inactive links will be permanently removed from the management list.` : `将从管理列表中永久清理 ${inactiveRows.length} 条失效链接。`),
+      actionLabel: t('清理', 'Clean'),
+      onConfirm: async () => {
+        const busyKey = `cleanup:${scope}`;
+        setShareActionBusy(busyKey);
+        try {
+          const res = await shareAdminRequest<{ deletedTokens?: string[]; failures?: Array<{ token: string; message: string }> }>('/batch', {
+            method: 'POST',
+            body: { action: 'delete-inactive', tokens: inactiveRows.map((row) => row.token) },
+          });
+          const deletedTokens = Array.isArray(res.deletedTokens) ? res.deletedTokens : [];
+          const failures = Array.isArray(res.failures) ? res.failures : [];
+          removeDeletedShareTokens(deletedTokens);
+          notify(failures.length ? 'error' : 'success', failures.length ? (locale === 'en-US' ? `Cleaned ${deletedTokens.length}, failed ${failures.length}` : `已清理 ${deletedTokens.length} 条，失败 ${failures.length} 条`) : (locale === 'en-US' ? `Cleaned ${deletedTokens.length} inactive links` : `已清理 ${deletedTokens.length} 条失效链接`));
+          if (shareListHasMore && deletedTokens.length) void loadShareList(false);
+        } catch (error) {
+          notify('error', error instanceof Error ? error.message : t('清理共享链接失败', 'Failed to clean share links'));
+        } finally {
+          setShareActionBusy(null);
+        }
+      },
+    });
   };
   const runShareBatch = async (action: 'revoke' | 'restore' | 'update' | 'refresh-index', body: Record<string, unknown> = {}) => {
     if (selectedShares.length === 0) return;
@@ -1636,7 +1684,6 @@ export function AddressView({
       <div className="address-page-head flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div className="address-page-title">
           <h2 className="text-2xl font-bold text-slate-800">{t("地址管理", "Address management")}</h2>
-          <p className="mt-1 text-sm text-slate-400">{t("创建、搜索、复制登录链接、批量管理收件箱/发件箱和删除地址。", "Create, search, copy login links, batch-manage inbox/sent, and delete addresses.")}</p>
           {!isAccountScoped && effectiveUserFilter && <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="filter-inline-clear text-slate-400 hover:text-slate-900">{t('清除', 'Clear')}</button></div>}
         </div>
         <div className="address-page-actions flex flex-wrap gap-2"><button className="btn-primary" onClick={() => { setNewAddress((current) => ({ ...current, domain: current.domain || defaultDomain })); setCreateOpen(true); }}><Plus size={16} /> <span>{t("新建地址", "New address")}</span></button><button className="btn-secondary" onClick={openShareManager}><Share2 size={16} /> <span>{t("共享链接管理", "Share links")}</span></button><button className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button></div>
@@ -1789,7 +1836,7 @@ export function AddressView({
             </div>
           </div>
         )}
-        {loading && data.length === 0 ? <LoadingState /> : data.length === 0 ? <div className="p-4 md:p-6"><EmptyState title={t("暂无地址", "No addresses")} body={t("可以通过右上角新建地址。", "Use New address in the top-right to create one.")} /></div> : (
+        {loading && data.length === 0 ? <LoadingState /> : data.length === 0 ? <div className="p-4 md:p-6"><EmptyState title={t("暂无地址", "No addresses")} /></div> : (
           <>
           <div className="space-y-2 p-3 md:hidden">
             {data.map(renderMobileAddressCard)}
@@ -1829,7 +1876,6 @@ export function AddressView({
             <ShieldCheck size={17} className="text-slate-600" />
             <span className="min-w-0">
               <strong className="block text-left text-sm text-slate-800">{t('发件权限', 'Sender access')}</strong>
-              <small className="block truncate text-left text-xs text-slate-400">{t('默认收起，只有需要管理发信额度时再打开。', 'Collapsed by default; open only when managing send quota.')}</small>
             </span>
           </span>
           <ChevronDown size={16} className={cls('shrink-0 text-slate-400 transition', senderPanelOpen && 'rotate-180')} />
@@ -1884,26 +1930,22 @@ export function AddressView({
           </div>
           <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
             {t('预览：', 'Preview: ')}<span className="font-semibold text-slate-800">{previewName}@{previewDomain}</span>
-            <span className="ml-2 text-slate-400">{t('长度只计算 @ 前名称', 'Length counts only the name before @')}</span>
           </div>
           {shouldWarnPrefixSeparatorStrip && (
             <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
-              {t('当前 Worker 的 ADDRESS_REGEX 会清理', 'The current Worker ADDRESS_REGEX will strip')} <code>.</code> / <code>_</code> / <code>-</code>{t('，创建结果可能丢失前缀符号。建议设置为', ', so the created address may lose prefix symbols. Recommended value:')} <code>{SEPARATOR_SAFE_ADDRESS_REGEX}</code>{t(' 后再创建。', ' before creating.')}
+              {t('前缀符号可能被清理', 'Prefix symbols may be stripped')}
             </p>
           )}
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={newAddress.enablePrefix} onChange={(e) => setNewAddress({ ...newAddress, enablePrefix: e.target.checked })} />{t('启用 Worker 前缀', 'Enable Worker prefix')}{effectiveSettings?.prefix ? ` (${effectiveSettings.prefix})` : ''}</label>
+            <label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={newAddress.enablePrefix} onChange={(e) => setNewAddress({ ...newAddress, enablePrefix: e.target.checked })} />{t('启用前缀', 'Enable prefix')}{effectiveSettings?.prefix ? ` (${effectiveSettings.prefix})` : ''}</label>
             <label className={cls('check-row rounded-xl bg-slate-50 px-3 py-2', !currentDomainAllowsRandomSubdomain && 'opacity-50')}><input type="checkbox" disabled={!currentDomainAllowsRandomSubdomain} checked={newAddress.enableRandomSubdomain && currentDomainAllowsRandomSubdomain} onChange={(e) => setNewAddress({ ...newAddress, enableRandomSubdomain: e.target.checked })} />{t('随机二级域名', 'Random subdomain')}</label>
           </div>
-          {domainOptions.length === 0 && <p className="text-xs text-rose-500">{t('没有从 API 解析到域名，请检查 Worker 的 DOMAINS / DEFAULT_DOMAINS。', 'No domains were parsed from the API. Check Worker DOMAINS / DEFAULT_DOMAINS.')}</p>}
+          {domainOptions.length === 0 && <p className="text-xs text-rose-500">{t('暂无可用域名', 'No domains')}</p>}
           <button className="btn-primary w-full" disabled={domainOptions.length === 0} onClick={createAddress}><Plus size={16} /> {t('创建', 'Create')}</button>
         </div>
       </Modal>}
       {shareOpen && <Modal title={locale === 'en-US' ? `Create revocable share link (${selectedRows.length})` : `创建可撤回共享链接（${selectedRows.length} 个）`} onClose={() => setShareOpen(false)}>
         <div className="space-y-4">
-          <p className="text-sm leading-6 text-slate-500">
-            {t('系统会把已选邮箱的 JWT 加密保存到单邮箱前端的 Cloudflare KV。单邮箱和多邮箱共享都会进入管理列表，后续可以随时撤销。', 'Selected mailbox JWTs are encrypted into the webmail Cloudflare KV. Single and multi-mailbox shares both appear in this list and can be revoked later.')}
-          </p>
           <div>
             <label className="form-label">{t('有效期', 'Expiry')}</label>
             <PopoverSelect ariaLabel={t('共享链接有效期', 'Share link expiry')} value={shareExpiry} options={shareExpiryOptions} onChange={(value) => setShareExpiry(value as ShareExpiryOption)} />
@@ -1936,10 +1978,7 @@ export function AddressView({
       </Modal>}
       {shareManageOpen && <Modal title={t('共享链接管理', 'Share link management')} onClose={() => setShareManageOpen(false)} wide>
         <div className="space-y-4">
-          <div className="rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-500">
-            {t('输入会立即匹配当前已加载的邮箱地址和链接后缀；刷新按钮只负责同步最新共享记录。', 'Typing filters the loaded mailboxes and link suffixes instantly; Refresh only syncs the latest share records.')}
-          </div>
-          <div className="grid gap-2 md:grid-cols-[1fr_150px_auto] md:items-center">
+          <div className="grid gap-2 md:grid-cols-[1fr_150px_auto_auto] md:items-center">
             <label className="toolbar-field address-search-field min-w-0" aria-label={t('搜索当前共享列表', 'Search current share list')}>
               <Search size={15} className="toolbar-icon" />
               <input
@@ -1952,6 +1991,9 @@ export function AddressView({
             <button className="btn-secondary compact" disabled={shareListLoading} onClick={() => loadShareList(true)}>
               <RefreshCw size={15} className={cls(shareListLoading && 'animate-spin')} /> {t('刷新', 'Refresh')}
             </button>
+            <button className="btn-secondary compact" disabled={visibleInactiveShares.length === 0 || shareActionBusy === 'cleanup:visible'} onClick={() => cleanupInactiveShares(visibleShareList, 'visible')}>
+              <Trash2 size={15} /> {t('清理失效', 'Clean inactive')}
+            </button>
           </div>
           {selectedShares.length > 0 && (
             <div className="share-bulk-bar">
@@ -1960,13 +2002,14 @@ export function AddressView({
               <button className="btn-secondary compact" disabled={shareActionBusy === 'batch:update'} onClick={() => runShareBatch('update', { expiresIn: '30d', mailVisibility: 'new' })}>{t('切到仅新增', 'Set new-only')}</button>
               <button className="btn-secondary compact" disabled={shareActionBusy === 'batch:restore'} onClick={() => runShareBatch('restore', { expiresIn: '30d' })}>{t('恢复/续期', 'Restore/extend')}</button>
               <button className="btn-danger compact" disabled={shareActionBusy === 'batch:revoke'} onClick={() => runShareBatch('revoke')}><Trash2 size={14} /> {t('批量撤销', 'Revoke selected')}</button>
+              <button className="btn-secondary compact" disabled={selectedInactiveShares.length === 0 || shareActionBusy === 'cleanup:selected'} onClick={() => cleanupInactiveShares(selectedShares, 'selected')}><Trash2 size={14} /> {t('清理已选失效', 'Clean selected inactive')}</button>
               <button className="text-xs font-semibold text-slate-400 hover:text-slate-700" onClick={() => setSelectedShareMap({})}>{t('清空选择', 'Clear selection')}</button>
             </div>
           )}
           {shareListLoading && shareList.length === 0 ? <LoadingState label={t('正在加载共享链接...', 'Loading share links...')} /> : shareList.length === 0 ? (
-            <EmptyState icon={Share2} title={t('暂无共享链接', 'No share links')} body={t('勾选地址后创建共享链接，记录会显示在这里。', 'Create share links from selected addresses and records will appear here.')} />
+            <EmptyState icon={Share2} title={t('暂无共享链接', 'No share links')} />
           ) : visibleShareList.length === 0 ? (
-            <EmptyState icon={Search} title={t('没有匹配结果', 'No matches')} body={t('当前已加载列表中没有匹配的邮箱地址或链接后缀。', 'No loaded mailbox address or link suffix matches this search.')} />
+            <EmptyState icon={Search} title={t('没有匹配结果', 'No matches')} />
           ) : (
             <div className="space-y-3">
               <div className="space-y-3 md:hidden">
@@ -2073,7 +2116,6 @@ export function AddressView({
       </Modal>}
       {credential && <Modal title={locale === 'en-US' ? `Address credentials: ${credential.address}` : `地址凭据：${credential.address}`} onClose={() => setCredential(null)} wide>
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">{t('该 JWT 可作为地址密码，用于访问', 'This JWT works as the address password for')} <code>/api/*</code>{t(' 或发送邮件。', ' or sending mail.')}</p>
           <textarea readOnly className="code-area h-48" value={credential.jwt} />
           <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-500">
             <p className="mb-2 font-medium text-slate-700">{t('一键登录链接', 'One-click login link')}</p>
@@ -2154,20 +2196,19 @@ function SenderAccessPanel({ request, notify, ask, embedded = false }: { request
       notify('error', error instanceof Error ? error.message : t('更新失败', 'Update failed'));
     }
   };
-  const remove = (row: SenderAccessRecord) => ask({ title: locale === 'en-US' ? `Delete sender access for ${row.address}` : `删除 ${row.address} 的发件权限`, body: t('将删除 address_sender 记录；如需恢复需由 Worker 逻辑重新创建或配置。', 'This deletes the address_sender record. Restore it through Worker logic or configuration if needed.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(`/admin/address_sender/${row.id}`, { method: 'DELETE' }); notify('success', t('发件权限已删除', 'Sender access deleted')); await fetchData(); } });
+  const remove = (row: SenderAccessRecord) => ask({ title: locale === 'en-US' ? `Delete sender access for ${row.address}` : `删除 ${row.address} 的发件权限`, body: t('确认删除？', 'Delete this item?'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(`/admin/address_sender/${row.id}`, { method: 'DELETE' }); notify('success', t('发件权限已删除', 'Sender access deleted')); await fetchData(); } });
 
   return <div className={cls('sender-access-panel overflow-hidden', !embedded && 'panel')}>
     <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-3 md:flex-row md:items-center">
       <div>
         <h3 className="panel-title"><ShieldCheck className="mr-2 inline h-5 w-5 text-slate-600" />{t('发件权限', 'Sender access')}</h3>
-        <p className="panel-subtitle">{t('官方', 'Official')} <code>/admin/address_sender</code>{t('：控制地址是否允许发信与剩余额度。', ': controls whether addresses can send mail and their remaining quota.')}</p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input className="form-input py-2 text-sm" value={address} onChange={(e) => { setAddress(e.target.value); setPage(1); }} placeholder={t('按地址筛选', 'Filter by address')} />
         <button className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button>
       </div>
     </div>
-    {loading && data.length === 0 ? <LoadingState /> : data.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={ShieldCheck} title={t('暂无发件权限记录', 'No sender access records')} body={t('发件权限记录通常在地址申请发件能力或余额配置后出现。', 'Sender access records usually appear after an address requests send capability or quota configuration.')} /></div> : <>
+    {loading && data.length === 0 ? <LoadingState /> : data.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={ShieldCheck} title={t('暂无发件权限记录', 'No sender access records')} /></div> : <>
       <div className="space-y-2 p-3 md:hidden">{data.map((row) => <article key={row.id} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{row.address}</p><p className="mt-1 text-[11px] text-slate-400">#{row.id}</p></div><span className={cls('status-pill', Boolean(row.enabled) && 'enabled')}>{Boolean(row.enabled) ? t('已启用', 'Enabled') : t('已禁用', 'Disabled')}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500"><div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('余额', 'Balance')}</span><span className="mt-0.5 block font-medium text-slate-700">{row.balance ?? 0}</span></div><div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('更新时间', 'Updated')}</span><span className="mt-0.5 block truncate">{formatDateTime(row.updated_at || row.created_at)}</span></div></div><div className="mt-3 grid grid-cols-2 gap-2"><button className="btn-secondary compact" onClick={() => openEdit(row)}><Edit3 size={14} /> {t('编辑', 'Edit')}</button><button className="btn-danger compact" onClick={() => remove(row)}><Trash2 size={14} /> {t('删除', 'Delete')}</button></div></article>)}</div>
       <div className="hidden overflow-auto md:block"><table className="data-table action-table"><thead><tr><th>ID</th><th>{t("地址", "Address")}</th><th>{t('余额', 'Balance')}</th><th>{t('状态', 'Status')}</th><th>{t("更新时间", "Updated")}</th><th className="text-right">{t('操作', 'Actions')}</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td className="font-mono text-xs text-slate-400">#{row.id}</td><td className="font-medium text-slate-800">{row.address}</td><td>{row.balance ?? 0}</td><td><span className={cls('status-pill', Boolean(row.enabled) && 'enabled')}>{Boolean(row.enabled) ? t('已启用', 'Enabled') : t('已禁用', 'Disabled')}</span></td><td>{formatDateTime(row.updated_at || row.created_at)}</td><td><div className="flex justify-end gap-2"><button className="table-action" onClick={() => openEdit(row)} title={t('编辑', 'Edit')}><Edit3 size={15} /></button><button className="table-action danger" onClick={() => remove(row)} title={t('删除', 'Delete')}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div>
     </>}
