@@ -19396,3 +19396,21 @@ body .address-view-shell .toolbar-field.address-search-field input {
     transform-origin: top right !important;
   }
 }
+
+/* Official repository entry: low-emphasis utility access for maintainers. */
+@media (min-width: 768px) {
+  .sidebar-reference-tools {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+.sidebar-reference-tools .sidebar-github-link,
+.mobile-more-menu .mobile-more-github-link {
+  text-decoration: none !important;
+  cursor: pointer;
+}
+
+.mobile-more-menu .mobile-more-github-link {
+  grid-column: 1 / -1;
+  justify-content: center;
+}

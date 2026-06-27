@@ -12,6 +12,7 @@ import "./styles.css";
 
 const PAGE_SIZE = 50;
 const AUTO_REFRESH_MS = 10_000;
+const OFFICIAL_GITHUB_URL = "https://github.com/Lur1N77777/loven7-mail-cloudflare-suite";
 
 type LoadingState = "boot" | "login" | "sync" | "idle";
 type MobilePane = "list" | "reader";
@@ -332,6 +333,8 @@ const UI_COPY = {
     hidden: "邮件已删除",
     deleteConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？`,
     deleted: "邮件已删除",
+    officialRepository: "官方 GitHub 仓库",
+    officialRepositoryTitle: "打开官方 GitHub 仓库",
   },
   "en-US": {
     bootLogin: "Verifying access",
@@ -422,6 +425,8 @@ const UI_COPY = {
     hidden: "Mail deleted",
     deleteConfirm: (subject: string) => `Delete “${subject || "this message"}”?`,
     deleted: "Mail deleted",
+    officialRepository: "Official GitHub repository",
+    officialRepositoryTitle: "Open official GitHub repository",
   },
 } as const;
 
@@ -1335,6 +1340,9 @@ export default function App() {
                   {loading === "login" ? <><span className="button-spinner" aria-hidden="true" /> {copy.loggingIn}</> : copy.loginButton}
                 </button>
               </form>
+              <a className="official-repository-link account-repository-link" href={OFFICIAL_GITHUB_URL} target="_blank" rel="noreferrer" title={copy.officialRepositoryTitle}>
+                {copy.officialRepository}
+              </a>
             </section>
           </div>
         </main>
@@ -1482,6 +1490,9 @@ export default function App() {
         ) : mails.length ? (
           <div className="end-note">{copy.allLoaded}</div>
         ) : null}
+        <a className="official-repository-link sidebar-repository-link" href={OFFICIAL_GITHUB_URL} target="_blank" rel="noreferrer" title={copy.officialRepositoryTitle}>
+          {copy.officialRepository}
+        </a>
       </aside>
 
       <main className="reader" aria-label={copy.readerLabel}>

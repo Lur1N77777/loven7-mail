@@ -2718,3 +2718,45 @@ textarea {
 .brand-wordmark > span {
   display: block;
 }
+
+.official-repository-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  color: rgba(32, 30, 26, .54);
+  font-size: 12px;
+  font-weight: var(--fw-medium);
+  line-height: 1.35;
+  text-decoration: none;
+  transition: color .18s cubic-bezier(.22,.61,.36,1), opacity .18s cubic-bezier(.22,.61,.36,1);
+}
+
+.official-repository-link:hover {
+  color: #181713;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.account-repository-link {
+  justify-self: start;
+  margin-top: -2px;
+}
+
+.sidebar-repository-link {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: 10px;
+  color: var(--lm-muted);
+}
+
+.sidebar-repository-link:hover {
+  color: var(--lm-text);
+}
+
+@media (max-width: 760px) {
+  .sidebar-repository-link {
+    margin-top: 8px;
+    padding-bottom: 2px;
+  }
+}
