@@ -15,6 +15,7 @@ const AUTO_REFRESH_MS = 10_000;
 const OFFICIAL_GITHUB_URL = "https://github.com/Lur1N77777/loven7-mail-cloudflare-suite";
 const MAIL_READ_HISTORY_MAX = 5000;
 const MAIL_STATE_MODE = "inbox";
+const MAIL_DELETE_EXIT_MS = 260;
 
 type LoadingState = "boot" | "login" | "sync" | "idle";
 type MobilePane = "list" | "reader";
@@ -432,7 +433,7 @@ const UI_COPY = {
     newMails: (count: number) => `新增 ${count} 封邮件`,
     newShort: (count: number) => `新增 ${count}`,
     hideNotAllowed: "该共享链接不允许删除邮件",
-    hideConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？删除后此链接将不再显示这封邮件。`,
+    hideConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？删除后管理站和共享页面都将不再显示。`,
     hidden: "邮件已删除",
     deleteConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？`,
     deleted: "邮件已删除",
@@ -525,7 +526,7 @@ const UI_COPY = {
     newMails: (count: number) => `${count} new message${count === 1 ? "" : "s"}`,
     newShort: (count: number) => `+${count} new`,
     hideNotAllowed: "This shared link does not allow deleting mail",
-    hideConfirm: (subject: string) => `Delete “${subject || "this message"}”? It will no longer appear in this shared link.`,
+    hideConfirm: (subject: string) => `Delete “${subject || "this message"}”? It will disappear from both admin and shared views.`,
     hidden: "Mail deleted",
     deleteConfirm: (subject: string) => `Delete “${subject || "this message"}”?`,
     deleted: "Mail deleted",
@@ -596,6 +597,8 @@ type MailListRowProps = {
   verificationCodeLabel: string;
   copiedLabel: string;
   copied: boolean;
+  deleting: boolean;
+  exiting: boolean;
   onSelect: (mail: ParsedMail) => void;
   onCopyVerificationCode: (mail: ParsedMail) => void;
 };
@@ -608,22 +611,29 @@ const MailListRow = React.memo(function MailListRow({
   verificationCodeLabel,
   copiedLabel,
   copied,
+  deleting,
+  exiting,
   onSelect,
   onCopyVerificationCode,
 }: MailListRowProps) {
   const sender = getSender(mail, locale);
   const senderName = mail.from?.name || sender;
   const senderAddress = mail.from?.address || sender;
-  const select = () => onSelect(mail);
+  const inert = deleting || exiting;
+  const select = () => {
+    if (!inert) onSelect(mail);
+  };
 
   return (
     <div
-      className={`mail-row ${selected ? "selected" : ""} ${mail.isUnread ? "unread" : "read"}`}
+      className={`mail-row ${selected ? "selected" : ""} ${mail.isUnread ? "unread" : "read"} ${deleting ? "deleting" : ""} ${exiting ? "removing" : ""}`}
       role="button"
-      tabIndex={0}
+      tabIndex={inert ? -1 : 0}
+      aria-disabled={inert || undefined}
+      aria-busy={deleting || undefined}
       onClick={select}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (!inert && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           select();
         }
@@ -643,8 +653,10 @@ const MailListRow = React.memo(function MailListRow({
               <button
                 type="button"
                 className="code-pill code-copy-button"
+                disabled={inert}
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (inert) return;
                   onCopyVerificationCode(mail);
                 }}
               >
@@ -683,6 +695,8 @@ export default function App() {
   const [addressCopied, setAddressCopied] = useState(false);
   const [mailboxMenuOpen, setMailboxMenuOpen] = useState(false);
   const [copiedCodeMailId, setCopiedCodeMailId] = useState<number | null>(null);
+  const [deletingMailId, setDeletingMailId] = useState<number | null>(null);
+  const [exitingMailIds, setExitingMailIds] = useState<Set<string>>(new Set());
   const [mailViewMode, setMailViewMode] = useState<MailViewMode>("html");
   const [resolvedHtml, setResolvedHtml] = useState<{ cacheKey: string; mailId: number; html: string } | null>(null);
   const syncRef = useRef<SyncTask | null>(null);
@@ -694,6 +708,9 @@ export default function App() {
   const refreshFeedbackTimerRef = useRef<number | null>(null);
   const autoRefreshTimerRef = useRef<number | null>(null);
   const isRefreshingRef = useRef(false);
+  const deletedMailIdsRef = useRef<Set<string>>(new Set());
+  const deleteExitTimersRef = useRef<Record<string, number>>({});
+  const mailsRef = useRef<ParsedMail[]>([]);
   const addressCopyTimerRef = useRef<number | null>(null);
   const codeCopyTimerRef = useRef<number | null>(null);
   const mailboxMenuRef = useRef<HTMLDivElement | null>(null);
@@ -711,6 +728,10 @@ export default function App() {
   useEffect(() => {
     mailReadStateRef.current = mailReadState;
   }, [mailReadState]);
+
+  useEffect(() => {
+    mailsRef.current = mails;
+  }, [mails]);
 
   const setActiveSession = useCallback((nextSession: WebmailSession | null) => {
     sessionRef.current = nextSession;
@@ -795,11 +816,15 @@ export default function App() {
 
   const resetMailboxState = useCallback(() => {
     clearImageMemoryCache();
+    Object.values(deleteExitTimersRef.current).forEach((timer) => window.clearTimeout(timer));
+    deleteExitTimersRef.current = {};
     setResolvedHtml(null);
     setMails([]);
+    mailsRef.current = [];
     setSelectedId(null);
     setNextOffset(0);
     setHasMoreHistory(false);
+    setExitingMailIds(new Set());
   }, []);
 
   const setSessionMailReadState = useCallback((activeSession: WebmailSession | null, state: MailReadState) => {
@@ -815,6 +840,40 @@ export default function App() {
   const applyCurrentMailReadState = useCallback((items: ParsedMail[]) => {
     return applyMailReadState(items, mailReadStateRef.current);
   }, []);
+
+  const deletedMailKey = useCallback((activeSession: WebmailSession, mailId: number) => `${activeSession.cacheKey}:${mailId}`, []);
+
+  const rememberDeletedMail = useCallback((activeSession: WebmailSession, mailId: number) => {
+    deletedMailIdsRef.current.add(deletedMailKey(activeSession, mailId));
+  }, [deletedMailKey]);
+
+  const filterDeletedMails = useCallback((activeSession: WebmailSession, items: ParsedMail[]) => {
+    return items.filter((mail) => !deletedMailIdsRef.current.has(deletedMailKey(activeSession, mail.id)));
+  }, [deletedMailKey]);
+
+  const isMailExiting = useCallback((activeSession: WebmailSession, mailId: number) => {
+    return exitingMailIds.has(deletedMailKey(activeSession, mailId));
+  }, [deletedMailKey, exitingMailIds]);
+
+  const addExitingMail = useCallback((activeSession: WebmailSession, mailId: number) => {
+    const key = deletedMailKey(activeSession, mailId);
+    setExitingMailIds((current) => {
+      if (current.has(key)) return current;
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
+  }, [deletedMailKey]);
+
+  const removeExitingMail = useCallback((activeSession: WebmailSession, mailId: number) => {
+    const key = deletedMailKey(activeSession, mailId);
+    setExitingMailIds((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+  }, [deletedMailKey]);
 
   const loadLocalMailReadState = useCallback((activeSession: WebmailSession | null) => {
     const state = activeSession && !isShareSession(activeSession) ? readLocalMailState(activeSession) : emptyMailReadState();
@@ -919,7 +978,7 @@ export default function App() {
     assertRunActive(run, activeSession);
     const parsed = await parseMailBatch(page.results);
     assertRunActive(run, activeSession);
-    const next = applyCurrentMailReadState(mergeMails([], parsed));
+    const next = filterDeletedMails(activeSession, applyCurrentMailReadState(mergeMails([], parsed)));
     setMails(next);
     setSelectedId((current) => current ?? next[0]?.id ?? null);
     const more = page.results.length === PAGE_SIZE && next.length < page.count;
@@ -934,19 +993,20 @@ export default function App() {
     setNextOffset(next.length);
     setHasMoreHistory(more);
     return next.length;
-  }, [applyCurrentMailReadState, assertRunActive, fetchSessionMailPage]);
+  }, [applyCurrentMailReadState, assertRunActive, fetchSessionMailPage, filterDeletedMails]);
 
   const syncIncremental = useCallback(
     async (activeSession: WebmailSession, currentMails: ParsedMail[], run: ActiveRun) => {
       assertRunActive(run, activeSession);
-      const sinceId = maxMailId(currentMails);
+      const visibleCurrentMails = filterDeletedMails(activeSession, currentMails);
+      const sinceId = maxMailId(visibleCurrentMails);
       if (!sinceId) return await loadFirstPage(activeSession, run);
 
       const rawNew = [];
       let offset = 0;
       let reachedAnchor = false;
       let reachedEnd = false;
-      let totalCount = currentMails.length;
+      let totalCount = visibleCurrentMails.length;
 
       while (!reachedAnchor && !reachedEnd && offset < PAGE_SIZE * 100) {
         assertRunActive(run, activeSession);
@@ -967,13 +1027,13 @@ export default function App() {
 
       if (!rawNew.length) {
         assertRunActive(run, activeSession);
-        setHasMoreHistory(currentMails.length < totalCount);
+        setHasMoreHistory(visibleCurrentMails.length < totalCount);
         return 0;
       }
 
       const parsed = await parseMailBatch(rawNew);
       assertRunActive(run, activeSession);
-      const next = applyCurrentMailReadState(mergeMails(currentMails, parsed));
+      const next = filterDeletedMails(activeSession, applyCurrentMailReadState(mergeMails(visibleCurrentMails, parsed)));
       setMails(next);
       setSelectedId((current) => current ?? next[0]?.id ?? null);
       await writeMailboxCache({
@@ -988,7 +1048,7 @@ export default function App() {
       setHasMoreHistory(next.length < totalCount);
       return rawNew.length;
     },
-    [applyCurrentMailReadState, assertRunActive, fetchSessionMailPage, loadFirstPage]
+    [applyCurrentMailReadState, assertRunActive, fetchSessionMailPage, filterDeletedMails, loadFirstPage]
   );
 
   const hydrateAndSync = useCallback(
@@ -1001,7 +1061,7 @@ export default function App() {
         const cached = await readMailboxCache(activeSession.cacheKey);
         assertRunActive(run, activeSession);
         if (cached?.mails?.length) {
-          let cachedMails = applyCurrentMailReadState(cached.mails);
+          let cachedMails = filterDeletedMails(activeSession, applyCurrentMailReadState(cached.mails));
           setMails(cachedMails);
           setSelectedId((current) => current ?? cachedMails[0]?.id ?? null);
           setNextOffset(cached.nextOffset || cachedMails.length);
@@ -1018,7 +1078,7 @@ export default function App() {
               }))
             );
             assertRunActive(run, activeSession);
-            cachedMails = applyCurrentMailReadState(mergeMails(cachedMails, reparsed));
+            cachedMails = filterDeletedMails(activeSession, applyCurrentMailReadState(mergeMails(cachedMails, reparsed)));
             setMails(cachedMails);
             await writeMailboxCache({
               cacheKey: activeSession.cacheKey,
@@ -1050,7 +1110,7 @@ export default function App() {
       syncRef.current = { runId: run.id, promise: task };
       return task;
     },
-    [applyCurrentMailReadState, assertRunActive, isRunActive, loadFirstPage, showToast, syncIncremental]
+    [applyCurrentMailReadState, assertRunActive, filterDeletedMails, isRunActive, loadFirstPage, showToast, syncIncremental]
   );
 
   const activateSession = useCallback(
@@ -1213,6 +1273,8 @@ export default function App() {
       if (autoRefreshTimerRef.current) window.clearInterval(autoRefreshTimerRef.current);
       if (addressCopyTimerRef.current) window.clearTimeout(addressCopyTimerRef.current);
       if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
+      Object.values(deleteExitTimersRef.current).forEach((timer) => window.clearTimeout(timer));
+      deleteExitTimersRef.current = {};
       clearImageMemoryCache();
     };
   }, [activateShareMailbox, assertRunActive, attachRunSession, beginRun, cancelRun, fetchSessionSettings, hydrateAndSync, isRunActive, loadLocalMailReadState, loginWithJwt, setActiveSession]);
@@ -1291,7 +1353,7 @@ export default function App() {
       assertRunActive(run, activeSession);
       const parsed = await parseMailBatch(page.results);
       assertRunActive(run, activeSession);
-      const next = applyCurrentMailReadState(mergeMails(mails, parsed));
+      const next = filterDeletedMails(activeSession, applyCurrentMailReadState(mergeMails(mails, parsed)));
       setMails(next);
       await persist(activeSession, next, next.length, page.results.length === PAGE_SIZE && next.length < page.count, run);
     } catch (err) {
@@ -1300,11 +1362,44 @@ export default function App() {
     } finally {
       if (isRunActive(run, activeSession)) setLoading("idle");
     }
-  }, [applyCurrentMailReadState, assertRunActive, copy.loadFailedToast, fetchSessionMailPage, getRunForSession, isRunActive, loading, mails, nextOffset, persist, session]);
+  }, [applyCurrentMailReadState, assertRunActive, copy.loadFailedToast, fetchSessionMailPage, filterDeletedMails, getRunForSession, isRunActive, loading, mails, nextOffset, persist, session]);
+
+  const finalizeDeletedMail = useCallback((activeSession: WebmailSession, mail: ParsedMail) => {
+    const key = deletedMailKey(activeSession, mail.id);
+    if (deleteExitTimersRef.current[key]) {
+      window.clearTimeout(deleteExitTimersRef.current[key]);
+      delete deleteExitTimersRef.current[key];
+    }
+    rememberDeletedMail(activeSession, mail.id);
+    removeExitingMail(activeSession, mail.id);
+    if (sessionRef.current?.cacheKey !== activeSession.cacheKey) return;
+
+    const next = filterDeletedMails(activeSession, mailsRef.current);
+    mailsRef.current = next;
+    setMails(next);
+    setSelectedId((current) => (current === mail.id ? next[0]?.id ?? null : current));
+    if (!next.length) setMobilePane("list");
+    setNextOffset(next.length);
+    void writeMailboxCache({
+      cacheKey: activeSession.cacheKey,
+      address: activeSession.address,
+      updatedAt: new Date().toISOString(),
+      nextOffset: next.length,
+      mails: next,
+    });
+  }, [deletedMailKey, filterDeletedMails, rememberDeletedMail, removeExitingMail]);
+
+  const startMailExit = useCallback((activeSession: WebmailSession, mail: ParsedMail) => {
+    const key = deletedMailKey(activeSession, mail.id);
+    addExitingMail(activeSession, mail.id);
+    if (deleteExitTimersRef.current[key]) window.clearTimeout(deleteExitTimersRef.current[key]);
+    deleteExitTimersRef.current[key] = window.setTimeout(() => finalizeDeletedMail(activeSession, mail), MAIL_DELETE_EXIT_MS);
+  }, [addExitingMail, deletedMailKey, finalizeDeletedMail]);
 
   const removeMail = useCallback(
     async (mail: ParsedMail) => {
       if (!session) return;
+      if (deletingMailId === mail.id || isMailExiting(session, mail.id)) return;
       const activeSession = session;
       const run = getRunForSession(activeSession);
       if (!isRunActive(run, activeSession)) return;
@@ -1315,35 +1410,29 @@ export default function App() {
             return;
           }
           if (!window.confirm(copy.hideConfirm(mail.subject))) return;
+          setDeletingMailId(mail.id);
           await hideSharedMail(activeSession.shareToken, activeSession.shareMailboxId, mail.id, { signal: run.controller.signal });
           assertRunActive(run, activeSession);
-          const next = mails.filter((item) => item.id !== mail.id);
-          setMails(next);
-          setSelectedId(next[0]?.id ?? null);
-          if (!next.length) setMobilePane("list");
-          await persist(activeSession, next, Math.max(0, nextOffset - 1), hasMoreHistory, run);
-          assertRunActive(run, activeSession);
+          startMailExit(activeSession, mail);
           showToast(copy.hidden);
           return;
         }
         if (!window.confirm(copy.deleteConfirm(mail.subject))) return;
+        setDeletingMailId(mail.id);
         await deleteMail(activeSession.jwt, mail.id, { signal: run.controller.signal });
         assertRunActive(run, activeSession);
-        const next = mails.filter((item) => item.id !== mail.id);
-        setMails(next);
-        setSelectedId(next[0]?.id ?? null);
-        if (!next.length) setMobilePane("list");
-        await persist(activeSession, next, Math.max(0, nextOffset - 1), hasMoreHistory, run);
-        assertRunActive(run, activeSession);
+        startMailExit(activeSession, mail);
         showToast(copy.deleted);
       } catch (err) {
         if (isAbortLike(err) || !isRunActive(run, activeSession)) return;
         const message = err instanceof Error ? err.message : copy.refreshFailed;
         setError(message);
         showToast(message);
+      } finally {
+        setDeletingMailId((current) => (current === mail.id ? null : current));
       }
     },
-    [assertRunActive, copy, getRunForSession, hasMoreHistory, isRunActive, mails, nextOffset, persist, session, shareInfo?.permissions?.hideMail, showToast]
+    [assertRunActive, copy, deletingMailId, getRunForSession, isMailExiting, isRunActive, session, shareInfo?.permissions?.hideMail, showToast, startMailExit]
   );
 
   const logout = useCallback(() => {
@@ -1539,7 +1628,7 @@ export default function App() {
                   </div>
                 </label>
                 {loginError ? <div className="account-message error" role="alert">{loginError}</div> : null}
-                <button className="account-primary-button mailbox-direct-submit" type="submit" disabled={loading === "login"} aria-busy={loading === "login"}>
+                <button className="account-primary-button login-button mailbox-direct-submit" type="submit" disabled={loading === "login"} aria-busy={loading === "login"}>
                   {loading === "login" ? <><span className="button-spinner" aria-hidden="true" /> {copy.loggingIn}</> : copy.loginButton}
                 </button>
               </form>
@@ -1674,6 +1763,8 @@ export default function App() {
               verificationCodeLabel={copy.verificationCode}
               copiedLabel={copy.copied}
               copied={copiedCodeMailId === mail.id}
+              deleting={deletingMailId === mail.id}
+              exiting={session ? isMailExiting(session, mail.id) : false}
               onSelect={selectMail}
               onCopyVerificationCode={copyVerificationCode}
             />
@@ -1724,7 +1815,7 @@ export default function App() {
                   </button>
                 ) : null}
                 <button type="button" className="ghost-button" onClick={() => void copyBodyText()}>{copy.copyBody}</button>
-                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button type="button" className="danger-button" onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
+                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button type="button" className="danger-button" disabled={deletingMailId === selectedMail.id || (session ? isMailExiting(session, selectedMail.id) : false)} onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
               </div>
             </header>
 

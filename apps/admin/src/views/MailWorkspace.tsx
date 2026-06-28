@@ -52,6 +52,7 @@ const MOBILE_MAIL_CHROME_COLLAPSE_TRAVEL = 360;
 const MOBILE_MAIL_CHROME_EXPAND_TRAVEL = 320;
 const MOBILE_MAIL_CHROME_SETTLE_DELAY = 220;
 const RECIPIENT_COPY_DRAG_TOLERANCE = 8;
+const MAIL_DELETE_EXIT_MS = 260;
 const isParsed = (mail: AnyMail): mail is ParsedMail => typeof (mail as ParsedMail).senderAddress === 'string';
 const mailStateMode = (mode: MailMode): MailMode => (mode === 'unknown' ? 'inbox' : mode);
 const storageId = (mode: MailMode, id: number) => `${mailStateMode(mode)}:${id}`;
@@ -68,6 +69,10 @@ function hasMailStateId(ids: Set<string>, mode: MailMode, id: number) {
 
 function deleteMailStateId(ids: Set<string>, mode: MailMode, id: number) {
   stateIdCandidates(mode, id).forEach((key) => ids.delete(key));
+}
+
+function addMailStateIds(ids: Set<string>, mode: MailMode, id: number) {
+  stateIdCandidates(mode, id).forEach((key) => ids.add(key));
 }
 
 function isCompactMailViewport(): boolean {
@@ -445,6 +450,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const [pullRefreshLabel, setPullRefreshLabel] = useState('');
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [deletingMailId, setDeletingMailId] = useState<number | null>(null);
+  const [exitingMailIds, setExitingMailIds] = useState<Set<string>>(new Set());
   const mailStateKeys = useMemo(() => getMailStateStorageKeys(mailStateScope), [mailStateScope]);
   const [readIds, setReadIds] = useState<Set<string>>(() => readMailState(mailStateKeys).readIds);
   const [readAllBefore, setReadAllBefore] = useState<Record<string, number>>(() => readMailState(mailStateKeys).readAllBefore);
@@ -458,6 +465,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const fetchSeqRef = useRef(0);
   const latestMailsRef = useRef<AnyMail[]>([]);
   const latestCountRef = useRef(0);
+  const deletedMailIdsRef = useRef<Set<string>>(new Set());
+  const deleteExitTimersRef = useRef<Record<string, number>>({});
   const fetchInFlightRef = useRef(false);
   const suppressNextFetchRef = useRef(false);
   const addressDebounceRef = useRef<number | null>(null);
@@ -590,6 +599,25 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     writeJsonStorage(mailStateKeys.starredIds, [...next].slice(-MAIL_READ_HISTORY_MAX));
     notifyMailStateChanged(mailStateKeys);
   }, [mailStateKeys]);
+  const filterDeletedMails = useCallback((items: AnyMail[]) => items.filter((mail) => !hasMailStateId(deletedMailIdsRef.current, mode, mail.id)), [mode]);
+  const rememberDeletedMail = useCallback((mail: AnyMail) => {
+    addMailStateIds(deletedMailIdsRef.current, mode, mail.id);
+  }, [mode]);
+  const isMailExiting = useCallback((mail: AnyMail) => hasMailStateId(exitingMailIds, mode, mail.id), [exitingMailIds, mode]);
+  const addExitingMail = useCallback((mail: AnyMail) => {
+    setExitingMailIds((current) => {
+      const next = new Set<string>(current);
+      addMailStateIds(next, mode, mail.id);
+      return next;
+    });
+  }, [mode]);
+  const removeExitingMail = useCallback((mail: AnyMail) => {
+    setExitingMailIds((current) => {
+      const next = new Set<string>(current);
+      deleteMailStateId(next, mode, mail.id);
+      return next;
+    });
+  }, [mode]);
   const patchRemoteMailState = useCallback((body: Record<string, unknown>) => {
     void request<RemoteMailState>('/api/mail-state', {
       method: 'PATCH',
@@ -623,11 +651,12 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     const cacheKey = mailListCacheKey(mode, targetPage, pageSize, targetAddress.trim());
     const cached = readJsonStorage<MailListCache | null>(cacheKey, null);
     if (!cached || cached.version !== MAIL_LIST_CACHE_VERSION || !Array.isArray(cached.items)) return false;
-    setMails(applyLocalState(cached.items, mode, readIds, starredIds, readAllBefore));
-    setCount(cached.count || cached.items.length);
-    setMailListExhausted(cached.items.length < pageSize);
+    const cachedItems = filterDeletedMails(applyLocalState(cached.items, mode, readIds, starredIds, readAllBefore));
+    setMails(cachedItems);
+    setCount(Math.max(cachedItems.length, (cached.count || cached.items.length) - (cached.items.length - cachedItems.length)));
+    setMailListExhausted(cachedItems.length < pageSize);
     return true;
-  }, [mode, pageSize, readAllBefore, readIds, starredIds]);
+  }, [filterDeletedMails, mode, pageSize, readAllBefore, readIds, starredIds]);
 
   const loadPage = useCallback(async (offset: number, forceRefresh = false, targetAddress = address, signal?: AbortSignal, limitOverride = pageSize) => {
     const normalizedAddress = targetAddress.trim();
@@ -653,7 +682,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     const abortController = new AbortController();
     fetchAbortRef.current = abortController;
     fetchInFlightRef.current = true;
-    const currentMails = latestMailsRef.current;
+    const currentMails = filterDeletedMails(latestMailsRef.current);
     if (incremental) setRefreshing(true);
     else if (currentMails.length === 0) setLoading(true);
     else setRefreshing(true);
@@ -661,9 +690,10 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       const offset = incremental ? 0 : (targetPage - 1) * pageSize;
       const { results, count: totalCount } = await loadPage(offset, forceNetwork, targetAddress, abortController.signal);
       if (seq !== fetchSeqRef.current) return;
-      const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
+      const parsed = filterDeletedMails(applyLocalState(results, mode, readIds, starredIds, readAllBefore));
       const reportedCount = typeof totalCount === 'number' ? totalCount : 0;
-      const nextCount = Math.max(reportedCount, parsed.length, incremental ? currentMails.length : 0);
+      const deletedFromPage = Math.max(0, results.length - parsed.length);
+      const nextCount = Math.max(reportedCount - deletedFromPage, parsed.length, incremental ? currentMails.length : 0);
       setCount(nextCount);
 
       if (incremental && targetPage !== 1) {
@@ -680,7 +710,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       if (incremental && currentMails.length > 0) {
         const existing = new Set(currentMails.map((mail) => mail.id));
         const added = parsed.filter((mail) => !existing.has(mail.id));
-        const merged = mergeMailLists(parsed, currentMails);
+        const merged = filterDeletedMails(mergeMailLists(parsed, currentMails));
         setMails(merged);
         const mergedCount = Math.max(nextCount, merged.length);
         setCount(mergedCount);
@@ -707,7 +737,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         if (fetchAbortRef.current === abortController) fetchAbortRef.current = null;
       }
     }
-  }, [address, autoSeconds, loadPage, locale, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds, t]);
+  }, [address, autoSeconds, filterDeletedMails, loadPage, locale, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds, t]);
 
   const loadSearchIndex = useCallback(async (forceRefresh = false) => {
     const normalizedAddress = address.trim();
@@ -736,13 +766,13 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         const { results } = await loadSearchIndexPage(offset, abortController.signal, targetAddress);
         if (abortController.signal.aborted || seq !== searchIndexSeqRef.current) return;
         if (!results.length) break;
-        const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
+        const parsed = filterDeletedMails(applyLocalState(results, mode, readIds, starredIds, readAllBefore));
         collected.push(...parsed);
-        setSearchIndex((current) => mergeMailLists(current, parsed));
+        setSearchIndex((current) => filterDeletedMails(mergeMailLists(current, parsed)));
         offset += results.length;
       }
       if (seq === searchIndexSeqRef.current) {
-        setSearchIndex((current) => mergeMailLists(current, collected));
+        setSearchIndex((current) => filterDeletedMails(mergeMailLists(current, collected)));
         searchIndexCompleteRef.current = true;
       }
     } catch (error) {
@@ -753,7 +783,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         setSearchIndexLoading(false);
       }
     }
-  }, [address, deferredAddressQuery, loadSearchIndexPage, mails, mode, readAllBefore, readIds, starredIds]);
+  }, [address, deferredAddressQuery, filterDeletedMails, loadSearchIndexPage, mails, mode, readAllBefore, readIds, starredIds]);
 
   const closeMobileDetail = useCallback(() => {
     setIsMobileDetail(false);
@@ -788,8 +818,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     latestMailsRef.current = mails;
   }, [mails]);
   useEffect(() => {
-    setSearchIndex((current) => mergeMailLists(current, mails));
-  }, [mails]);
+    setSearchIndex((current) => filterDeletedMails(mergeMailLists(current, mails)));
+  }, [filterDeletedMails, mails]);
   useEffect(() => {
     const currentUrls = getAttachmentObjectUrls(mails);
     attachmentUrlsRef.current.forEach((url) => {
@@ -800,6 +830,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   useEffect(() => () => {
     fetchAbortRef.current?.abort();
     searchIndexAbortRef.current?.abort();
+    (Object.values(deleteExitTimersRef.current) as number[]).forEach((timer) => window.clearTimeout(timer));
+    deleteExitTimersRef.current = {};
     if (pullRefreshRafRef.current !== null) window.cancelAnimationFrame(pullRefreshRafRef.current);
     if (pullRefreshResetTimerRef.current !== null) window.clearTimeout(pullRefreshResetTimerRef.current);
     if (mobileLoadMoreRafRef.current !== null) window.cancelAnimationFrame(mobileLoadMoreRafRef.current);
@@ -1177,9 +1209,9 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, [active, compactViewport, immersiveMobileMail, isMobileDetail, mode, setMobileMailChromeProgress]);
 
   const searchSource = useMemo(() => {
-    if (!deferredQuery && !deferredAddressQuery) return mails;
-    return mergeMailLists(searchIndex, mails);
-  }, [deferredAddressQuery, deferredQuery, mails, searchIndex]);
+    if (!deferredQuery && !deferredAddressQuery) return filterDeletedMails(mails);
+    return filterDeletedMails(mergeMailLists(searchIndex, mails));
+  }, [deferredAddressQuery, deferredQuery, filterDeletedMails, mails, searchIndex]);
   const filtered = useMemo(() => searchSource.filter((mail) => {
     const matchesQuery = !deferredQuery || getSearchText(mail).includes(deferredQuery);
     const matchesAddress = !deferredAddressQuery || getAddressSearchText(mail).includes(deferredAddressQuery);
@@ -1380,7 +1412,55 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       notify('error', error instanceof Error ? error.message : t('复制失败，请手动复制', 'Copy failed. Please copy manually.'));
     }
   }, [mode, notify, t]);
-  const deleteMail = (mail: AnyMail) => ask({ title: t(`删除邮件 #${mail.id}`, `Delete mail #${mail.id}`), body: mode === 'sent' ? t('将删除该发件箱记录。', 'This deletes the sent-mail record.') : t('将删除该原始邮件记录。', 'This deletes the raw mail record.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(mode === 'sent' ? `/admin/sendbox/${mail.id}` : `/admin/mails/${mail.id}`, { method: 'DELETE' }); notify('success', t('邮件已删除', 'Mail deleted')); setSelectedId(null); setMails((current) => current.filter((item) => item.id !== mail.id)); await fetchData(true); } });
+  const finalizeDeletedMail = useCallback((mail: AnyMail) => {
+    const timerKey = storageId(mode, mail.id);
+    if (deleteExitTimersRef.current[timerKey]) {
+      window.clearTimeout(deleteExitTimersRef.current[timerKey]);
+      delete deleteExitTimersRef.current[timerKey];
+    }
+    rememberDeletedMail(mail);
+    removeExitingMail(mail);
+    const nextMails = latestMailsRef.current.filter((item) => item.id !== mail.id);
+    latestMailsRef.current = nextMails;
+    setMails(nextMails);
+    setSearchIndex((current) => current.filter((item) => item.id !== mail.id));
+    setNewIds((current) => {
+      if (!current.has(mail.id)) return current;
+      const next = new Set(current);
+      next.delete(mail.id);
+      return next;
+    });
+    setSelectedId((current) => (current === mail.id ? null : current));
+    const nextCount = Math.max(nextMails.length, latestCountRef.current - 1);
+    setCount(nextCount);
+    saveListCache(nextMails, nextCount);
+    void fetchData(false, { forceRefresh: true });
+  }, [fetchData, mode, rememberDeletedMail, removeExitingMail, saveListCache]);
+  const startMailExit = useCallback((mail: AnyMail) => {
+    const timerKey = storageId(mode, mail.id);
+    addExitingMail(mail);
+    if (deleteExitTimersRef.current[timerKey]) window.clearTimeout(deleteExitTimersRef.current[timerKey]);
+    deleteExitTimersRef.current[timerKey] = window.setTimeout(() => finalizeDeletedMail(mail), MAIL_DELETE_EXIT_MS);
+  }, [addExitingMail, finalizeDeletedMail, mode]);
+  const deleteMail = (mail: AnyMail) => ask({
+    title: t(`删除邮件 #${mail.id}`, `Delete mail #${mail.id}`),
+    body: mode === 'sent' ? t('将删除该发件箱记录。', 'This deletes the sent-mail record.') : t('将删除该原始邮件记录。', 'This deletes the raw mail record.'),
+    actionLabel: t('删除', 'Delete'),
+    onConfirm: async () => {
+      if (deletingMailId === mail.id) return;
+      setDeletingMailId(mail.id);
+      try {
+        await request(mode === 'sent' ? `/admin/sendbox/${mail.id}` : `/admin/mails/${mail.id}`, {
+          method: 'DELETE',
+          invalidates: ['/admin/mails', '/admin/mails_unknow', '/admin/sendbox', '/admin/statistics'],
+        });
+        startMailExit(mail);
+        notify('success', t('邮件已删除', 'Mail deleted'));
+      } finally {
+        setDeletingMailId((current) => (current === mail.id ? null : current));
+      }
+    },
+  });
   const composeFromMail = (mail: AnyMail, kind: 'reply' | 'forward') => {
     if (isParsed(mail)) setComposeSeed({ from_mail: mail.address || '', to_mail: kind === 'reply' ? mail.senderAddress : '', to_name: kind === 'reply' ? mail.senderName : '', subject: `${kind === 'reply' ? 'Re' : 'Fwd'}: ${mail.subject}`, content: `\n\n---- ${t('原邮件', 'Original Message')} ----\n${mail.text || mail.preview}`, is_html: false });
     else setComposeSeed({ from_mail: mail.address, subject: `Fwd: ${mail.subject}`, content: mail.content, is_html: mail.is_html });
@@ -1583,6 +1663,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
                 mode={mode}
                 selected={selected?.id === entry.mail.id}
                 isNew={newIds.has(entry.mail.id)}
+                deleting={deletingMailId === entry.mail.id}
+                exiting={isMailExiting(entry.mail)}
                 copiedKey={copiedKey}
                 onOpen={markRead}
                 onCopy={copyValue}
@@ -1596,6 +1678,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
                 selectedId={selected?.id ?? null}
                 expanded={expandedMailStacks.has(entry.key)}
                 isNew={entry.mails.some((mail) => newIds.has(mail.id))}
+                deletingMailId={deletingMailId}
+                isMailExiting={isMailExiting}
                 copiedKey={copiedKey}
                 onOpen={markRead}
                 onCopy={copyValue}
@@ -1612,25 +1696,27 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         </div>
       </div>
       <div className="mail-detail-pane hidden h-full min-w-0 flex-1 flex-col lg:flex">
-        {!compactViewport && <MailDetail mail={selected} mode={mode} theme={theme} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} />}
+        {!compactViewport && <MailDetail mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} />}
       </div>
       {isMobileDetail && (
         <div
           className={cls('mobile-mail-detail absolute inset-0 z-40 flex h-full min-h-0 flex-col bg-white lg:hidden', mobileDetailSettling && 'mobile-detail-settling')}
           style={{ transform: `translate3d(${mobileDetailDragX}px, 0, 0)` }}
         >
-          <MailDetail mail={selected} mode={mode} theme={theme} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} mobile />
+          <MailDetail mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} mobile />
         </div>
       )}
     </div>
   );
 }
 
-const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, copiedKey, onOpen, onCopy, onToggleStar }: {
+const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, deleting, exiting, copiedKey, onOpen, onCopy, onToggleStar }: {
   mail: AnyMail;
   mode: MailMode;
   selected: boolean;
   isNew: boolean;
+  deleting: boolean;
+  exiting: boolean;
   copiedKey: string | null;
   onOpen: (mail: AnyMail) => void;
   onCopy: (value: string, label?: string, key?: string) => void;
@@ -1643,10 +1729,12 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
   const recipientAddress = getRecipient(mail);
   const recipientCopyKey = `recipient-list-${mode}-${mail.id}`;
   const recipientPressRef = useRef<PressPoint | null>(null);
+  const inert = deleting || exiting;
   return (
     <div
-      onClick={() => onOpen(mail)}
-      className={cls('mail-list-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', mail.isUnread && 'mail-row-unread', isNew && 'animate-mail-in')}
+      onClick={() => { if (!inert) onOpen(mail); }}
+      className={cls('mail-list-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', mail.isUnread && 'mail-row-unread', isNew && 'animate-mail-in', deleting && 'mail-row-deleting', exiting && 'mail-row-removing')}
+      aria-busy={deleting || undefined}
     >
       <div className="flex min-w-0 items-start gap-2.5">
         <div className="mail-avatar-wrap">
@@ -1690,7 +1778,7 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
       </div>
       <div className="flex items-center gap-2 md:gap-3">
         <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-        <button type="button" onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} aria-label={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+        <button type="button" disabled={inert} onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} aria-label={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
           <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
         </button>
       </div>
@@ -1700,12 +1788,14 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
   );
 });
 
-const MailListStackItem = memo(function MailListStackItem({ entry, mode, selectedId, expanded, isNew, copiedKey, onOpen, onCopy, onToggleStar, onToggle }: {
+const MailListStackItem = memo(function MailListStackItem({ entry, mode, selectedId, expanded, isNew, deletingMailId, isMailExiting, copiedKey, onOpen, onCopy, onToggleStar, onToggle }: {
   entry: Extract<MailListEntry, { type: 'stack' }>;
   mode: MailMode;
   selectedId: number | null;
   expanded: boolean;
   isNew: boolean;
+  deletingMailId: number | null;
+  isMailExiting: (mail: AnyMail) => boolean;
   copiedKey: string | null;
   onOpen: (mail: AnyMail) => void;
   onCopy: (value: string, label?: string, key?: string) => void;
@@ -1720,11 +1810,16 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
   const recipientAddress = getRecipient(mail);
   const recipientCopyKey = `recipient-stack-${mode}-${mail.id}`;
   const selected = entry.mails.some((item) => item.id === selectedId);
+  const stackDeleting = entry.mails.some((item) => item.id === deletingMailId);
+  const stackHasExiting = entry.mails.some(isMailExiting);
+  const stackRemoving = stackHasExiting && (!expanded || entry.mails.every(isMailExiting) || isMailExiting(mail));
+  const stackInert = stackDeleting || stackRemoving;
   const recipientPressRef = useRef<PressPoint | null>(null);
   return (
     <div
-      onClick={() => onOpen(mail)}
-      className={cls('mail-list-item mail-stack-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', entry.unreadCount > 0 && 'mail-row-unread', isNew && 'animate-mail-in', expanded && 'mail-stack-expanded')}
+      onClick={() => { if (!stackInert) onOpen(mail); }}
+      className={cls('mail-list-item mail-stack-item group relative mb-1 w-full cursor-pointer px-3 py-1.5 text-left transition-all md:mb-1 md:px-3.5 md:py-2', selected ? 'mail-row-selected' : 'mail-row-idle', entry.unreadCount > 0 && 'mail-row-unread', isNew && 'animate-mail-in', expanded && 'mail-stack-expanded', stackDeleting && 'mail-row-deleting', stackRemoving && 'mail-row-removing', stackHasExiting && !stackRemoving && 'mail-stack-updating')}
+      aria-busy={stackDeleting || undefined}
     >
       <div className="flex min-w-0 items-start gap-2.5">
         <div className="mail-avatar-wrap">
@@ -1767,6 +1862,7 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
               <button
                 type="button"
                 className="mail-stack-expand-button"
+                disabled={stackInert}
                 onClick={(event) => { event.stopPropagation(); onToggle(); }}
                 aria-expanded={expanded}
               >
@@ -1776,21 +1872,26 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
           </div>
           <div className="flex items-center gap-2 md:gap-3">
             <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-            <button type="button" onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} aria-label={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+            <button type="button" disabled={stackInert} onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} aria-label={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
               <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
             </button>
           </div>
           <div className={cls('mail-stack-children-shell', expanded && 'open')} aria-hidden={!expanded}>
             <div className="mail-stack-children" onClick={(event) => event.stopPropagation()}>
               {entry.mails.map((stackMail, index) => {
+                const childDeleting = deletingMailId === stackMail.id;
+                const childExiting = isMailExiting(stackMail);
+                const childInert = childDeleting || childExiting;
                 return (
                   <div
                     key={stackMail.id}
                     role="button"
                     tabIndex={expanded ? 0 : -1}
-                    className={cls('mail-stack-child', selectedId === stackMail.id && 'active', stackMail.isUnread && 'unread')}
-                    onClick={() => onOpen(stackMail)}
+                    className={cls('mail-stack-child', selectedId === stackMail.id && 'active', stackMail.isUnread && 'unread', childDeleting && 'mail-row-deleting', childExiting && 'mail-row-removing')}
+                    aria-busy={childDeleting || undefined}
+                    onClick={() => { if (!childInert) onOpen(stackMail); }}
                     onKeyDown={(event) => {
+                      if (childInert) return;
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         onOpen(stackMail);
@@ -1817,6 +1918,7 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
 function MailDetail({
   mail,
   mode,
+  deletingMailId,
   onDelete,
   onReply,
   onForward,
@@ -1833,6 +1935,7 @@ function MailDetail({
   mail: AnyMail | null;
   mode: MailMode;
   theme: 'light' | 'dark';
+  deletingMailId: number | null;
   onDelete: (mail: AnyMail) => void;
   onReply: (mail: AnyMail) => void;
   onForward: (mail: AnyMail) => void;
@@ -1864,6 +1967,7 @@ function MailDetail({
   const senderName = getSenderName(mail);
   const subtitle = parsed ? mail.senderAddress : t('发件记录', 'Sent record');
   const recipientAddress = getRecipient(mail);
+  const deleting = deletingMailId === mail.id;
   const recipientLabel = mode === 'sent'
     ? `${t('to', 'to')} ${recipientAddress || t('unknown', 'unknown')}`
     : t('to me', 'to me');
@@ -1874,7 +1978,7 @@ function MailDetail({
           <div className="mail-detail-topbar shrink-0">
             <div className="mail-detail-topbar-actions">
               <button type="button" onClick={onClose} className="mail-detail-icon-action mail-detail-close" title={t('关闭', 'Close')} aria-label={t('关闭邮件详情', 'Close message detail')}><X size={18} /></button>
-              <button type="button" onClick={() => onDelete(mail)} className="mail-detail-icon-action" title={t('删除', 'Delete')} aria-label={t('删除', 'Delete')}><Trash2 size={16} /></button>
+              <button type="button" onClick={() => onDelete(mail)} className="mail-detail-icon-action" disabled={deleting} title={deleting ? t('删除中...', 'Deleting...') : t('删除', 'Delete')} aria-label={deleting ? t('删除中...', 'Deleting...') : t('删除', 'Delete')}><Trash2 size={16} /></button>
               {parsed && mail.raw && emlUrl ? (
                 <a className="mail-detail-icon-action" href={emlUrl} download={`${mail.id}.eml`} title={t('下载 EML', 'Download EML')} aria-label={t('下载 EML', 'Download EML')}><Archive size={16} /></a>
               ) : (
