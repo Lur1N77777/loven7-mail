@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type TouchEvent, type UIEvent } from 'react';
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type TouchEvent, type UIEvent } from 'react';
 import { Archive, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Download, MoreHorizontal, Paperclip, RefreshCw, Reply, Star, Trash2, X } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { ADDRESS_INPUT_DEBOUNCE_MS, CACHE_TTL, COPY_HINT_MS, DEFAULT_PAGE_SIZE, MAIL_READ_HISTORY_MAX, NEW_MAIL_FLASH_MS, STORAGE_KEYS } from '../lib/constants';
@@ -463,6 +463,9 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const addressDebounceRef = useRef<number | null>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
   const mobileLoadMoreSeqRef = useRef(0);
+  const mobileLoadMoreInFlightRef = useRef(false);
+  const mobileLoadMoreRafRef = useRef<number | null>(null);
+  const mobileListContextRef = useRef('');
   const mobileLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const mailWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const mailListPanelRef = useRef<HTMLDivElement | null>(null);
@@ -491,12 +494,20 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const mailSearchQuery = normalizeSearch(addressInput);
   const deferredAddressQuery = useDeferredValue(mailSearchQuery);
   const isSearchMode = Boolean(deferredQuery || deferredAddressQuery);
+  const mobileListContext = useMemo(() => `${mode}|${pageSize}|${address.trim()}|${isSearchMode ? 'search' : 'list'}`, [address, isSearchMode, mode, pageSize]);
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
   const immersiveMobileMail = mode === 'inbox' || mode === 'sent';
   const ownsMobileChrome = visualActive && immersiveMobileMail && compactViewport && !isMobileDetail;
   const currentListCacheKey = useMemo(() => mailListCacheKey(mode, page, pageSize, address), [address, mode, page, pageSize]);
+
+  useEffect(() => {
+    mobileListContextRef.current = mobileListContext;
+    mobileLoadMoreSeqRef.current += 1;
+    mobileLoadMoreInFlightRef.current = false;
+    setMobileLoadingMore(false);
+  }, [mobileListContext]);
 
   useEffect(() => {
     ownsMobileChromeRef.current = ownsMobileChrome;
@@ -791,6 +802,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     searchIndexAbortRef.current?.abort();
     if (pullRefreshRafRef.current !== null) window.cancelAnimationFrame(pullRefreshRafRef.current);
     if (pullRefreshResetTimerRef.current !== null) window.clearTimeout(pullRefreshResetTimerRef.current);
+    if (mobileLoadMoreRafRef.current !== null) window.cancelAnimationFrame(mobileLoadMoreRafRef.current);
     attachmentUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     attachmentUrlsRef.current.clear();
   }, []);
@@ -852,12 +864,25 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, [active]);
   useEffect(() => {
     const onGlobalRefresh = (event: Event) => {
-      const targetMenu = (event as CustomEvent<{ menu?: string }>).detail?.menu;
+      const detail = (event as CustomEvent<{ menu?: string; source?: string }>).detail || {};
+      const targetMenu = detail.menu;
+      if (targetMenu === mode && detail.source === 'repeat-menu-click' && compactViewport) {
+        setIsMobileDetail(false);
+        setMobileDetailDragX(0);
+        setDetailClosed(false);
+        mobileDetailHistoryRef.current = false;
+        const viewport = mailListViewportRef.current;
+        if (viewport) {
+          viewport.scrollTo({ top: 0, behavior: 'auto' });
+          mobileChromeRef.current.lastScrollTop = 0;
+        }
+        return;
+      }
       if (!targetMenu || targetMenu === mode) fetchData(true);
     };
     window.addEventListener('loven7-global-refresh', onGlobalRefresh);
     return () => window.removeEventListener('loven7-global-refresh', onGlobalRefresh);
-  }, [fetchData, mode]);
+  }, [compactViewport, fetchData, mode]);
   useEffect(() => {
     if (!active || !autoRefresh) return undefined;
     const id = window.setInterval(() => {
@@ -1182,28 +1207,36 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, []);
 
   const loadMoreMobile = useCallback(async () => {
-    if (mobileLoadingMore || loading || refreshing || !mobileHasMore) return;
+    if (mobileLoadMoreInFlightRef.current || loading || refreshing || !mobileHasMore) return;
+    const requestContext = mobileListContextRef.current;
     const nextPage = mobileLoadedPages + 1;
     const nextOffset = latestMailsRef.current.length;
     const seq = ++mobileLoadMoreSeqRef.current;
+    mobileLoadMoreInFlightRef.current = true;
     setMobileLoadingMore(true);
     try {
       const { results, count: totalCount } = await loadPage(nextOffset, false, address);
       if (seq !== mobileLoadMoreSeqRef.current) return;
+      if (requestContext !== mobileListContextRef.current) return;
       const parsed = applyLocalState(results, mode, readIds, starredIds, readAllBefore);
       const existing = new Set(latestMailsRef.current.map((mail) => mail.id));
       const added = parsed.filter((mail) => !existing.has(mail.id));
       const merged = [...latestMailsRef.current, ...added];
-      setMails(merged);
-      setCount(Math.max(count, typeof totalCount === 'number' ? totalCount : 0, merged.length));
-      setMailListExhausted(results.length < pageSize || added.length === 0);
-      setMobileLoadedPages(nextPage);
+      startTransition(() => {
+        setMails(merged);
+        setCount(Math.max(count, typeof totalCount === 'number' ? totalCount : 0, merged.length));
+        setMailListExhausted(results.length < pageSize || added.length === 0);
+        setMobileLoadedPages(nextPage);
+      });
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('加载更多邮件失败', 'Failed to load more mail'));
     } finally {
-      if (seq === mobileLoadMoreSeqRef.current) setMobileLoadingMore(false);
+      if (seq === mobileLoadMoreSeqRef.current) {
+        mobileLoadMoreInFlightRef.current = false;
+        setMobileLoadingMore(false);
+      }
     }
-  }, [address, count, loadPage, loading, mobileHasMore, mobileLoadedPages, mobileLoadingMore, mode, notify, pageSize, readAllBefore, readIds, refreshing, starredIds, t]);
+  }, [address, count, loadPage, loading, mobileHasMore, mobileLoadedPages, mode, notify, pageSize, readAllBefore, readIds, refreshing, starredIds, t]);
 
   useEffect(() => {
     if (!mobileLoadMoreRef.current) return undefined;
@@ -1211,7 +1244,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     const root = mailListViewportRef.current;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) void loadMoreMobile();
-    }, { root, rootMargin: '520px 0px 520px 0px', threshold: 0.01 });
+    }, { root, rootMargin: '900px 0px 900px 0px', threshold: 0.01 });
     observer.observe(target);
     return () => observer.disconnect();
   }, [loadMoreMobile, filtered.length]);
@@ -1220,17 +1253,25 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     if (!active || !mailListViewportRef.current) return undefined;
     const viewport = mailListViewportRef.current;
     const checkNearBottom = () => {
-      if (!mobileHasMore || mobileLoadingMore || loading || refreshing) return;
-      const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      if (distance < 760) void loadMoreMobile();
+      if (mobileLoadMoreRafRef.current !== null) return;
+      mobileLoadMoreRafRef.current = window.requestAnimationFrame(() => {
+        mobileLoadMoreRafRef.current = null;
+        if (!mobileHasMore || mobileLoadMoreInFlightRef.current || loading || refreshing) return;
+        const distance = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        if (distance < 980) void loadMoreMobile();
+      });
     };
     viewport.addEventListener('scroll', checkNearBottom, { passive: true });
     const timer = window.setTimeout(checkNearBottom, 90);
     return () => {
       viewport.removeEventListener('scroll', checkNearBottom);
       window.clearTimeout(timer);
+      if (mobileLoadMoreRafRef.current !== null) {
+        window.cancelAnimationFrame(mobileLoadMoreRafRef.current);
+        mobileLoadMoreRafRef.current = null;
+      }
     };
-  }, [active, loadMoreMobile, loading, mobileHasMore, mobileLoadingMore, refreshing, mails.length, filtered.length]);
+  }, [active, loadMoreMobile, loading, mobileHasMore, refreshing, mails.length, filtered.length]);
 
   const clearAddressFilter = useCallback(() => {
     if (addressDebounceRef.current !== null) {
@@ -1464,6 +1505,19 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
                         {activeTab === key && <span className="mail-filter-selected-dot" />}
                       </button>
                     ))}
+                    {mode !== 'sent' && (
+                      <>
+                        <div className="mail-filter-menu-divider" role="presentation" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="mail-filter-menu-action"
+                          onClick={() => { markAllRead(); setFilterMenuOpen(false); }}
+                        >
+                          <span><CheckCheck size={14} />{t('全部已读', 'All read')}</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

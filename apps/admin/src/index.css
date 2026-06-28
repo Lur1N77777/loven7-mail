@@ -5851,6 +5851,29 @@ select,
   color: var(--color-text);
 }
 
+.mail-filter-menu-divider {
+  height: 1px;
+  margin: .28rem .18rem;
+  background: var(--color-border);
+  opacity: .78;
+}
+
+.mail-filter-menu button.mail-filter-menu-action {
+  color: var(--color-text);
+  font-weight: 650;
+}
+
+.mail-filter-menu button.mail-filter-menu-action span {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+}
+
+.mail-filter-menu button.mail-filter-menu-action svg {
+  color: var(--color-primary);
+  stroke-width: 2.1;
+}
+
 .mail-filter-selected-dot {
   width: .42rem;
   height: .42rem;
@@ -17794,7 +17817,7 @@ body .mobile-mail-shell .mail-list-recipient-text {
   body .mobile-mail-shell .mail-filter-menu {
     top: calc(100% + 8px) !important;
     right: 0 !important;
-    min-width: 132px !important;
+    min-width: 148px !important;
     border: 0 !important;
     border-radius: 14px !important;
     background: var(--admin-panel) !important;
@@ -17807,6 +17830,14 @@ body .mobile-mail-shell .mail-list-recipient-text {
     border-radius: 10px !important;
     font-size: 13px !important;
     font-weight: 480 !important;
+  }
+
+  body .mobile-mail-shell .mail-filter-menu button.mail-filter-menu-action {
+    font-weight: 640 !important;
+  }
+
+  body .mobile-mail-shell .mail-filter-menu-divider {
+    margin: 5px 4px !important;
   }
 
   body .mobile-mail-shell .mail-list-viewport,
@@ -19389,8 +19420,8 @@ body .address-view-shell .toolbar-field.address-search-field input {
     right: 0 !important;
     inset-inline-start: auto !important;
     inset-inline-end: 0 !important;
-    width: min(132px, calc(100vw - 32px)) !important;
-    min-width: min(132px, calc(100vw - 32px)) !important;
+    width: min(148px, calc(100vw - 32px)) !important;
+    min-width: min(148px, calc(100vw - 32px)) !important;
     max-width: calc(100vw - 32px) !important;
     box-sizing: border-box !important;
     transform-origin: top right !important;
