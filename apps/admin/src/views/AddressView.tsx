@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Copy, Edit3, ExternalLink, Inbox, KeyRound, ListFilter, Lock, MailOpen, MoreHorizontal, Plus, RefreshCw, Save, Search, Send, Share2, ShieldCheck, Trash2, UserRound, X } from 'lucide-react';
+import { ChevronDown, Copy, Edit3, ExternalLink, Inbox, KeyRound, ListFilter, Loader2, Lock, MailOpen, MoreHorizontal, Plus, RefreshCw, Save, Search, Send, Share2, ShieldCheck, Trash2, UserRound, X } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { CACHE_TTL, DEFAULT_PAGE_SIZE, FRONTEND_LOGIN_BASE, STORAGE_KEYS } from '../lib/constants';
 import { cls, formatDateTime, normalizeSearch } from '../lib/format';
@@ -526,6 +526,7 @@ export function AddressView({
   const [allAddressIndexReady, setAllAddressIndexReady] = useState(false);
   const [allAddressIndexComplete, setAllAddressIndexComplete] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
   const [newAddress, setNewAddress] = useState<NewAddressForm>(() => readStoredNewAddressDraft());
   const [fallbackOpenSettings, setFallbackOpenSettings] = useState<OpenSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
@@ -550,6 +551,7 @@ export function AddressView({
   const [shareListQuery, setShareListQuery] = useState('');
   const [shareStatusFilter, setShareStatusFilter] = useState<ShareStatusFilter>('all');
   const [shareActionBusy, setShareActionBusy] = useState<string | null>(null);
+  const [addressActionBusy, setAddressActionBusy] = useState<string | null>(null);
   const [shareEditTarget, setShareEditTarget] = useState<ShareAdminRecord | null>(null);
   const [shareEditExpiry, setShareEditExpiry] = useState<ShareExpiryOption>('30d');
   const [shareEditVisibility, setShareEditVisibility] = useState<ShareMailVisibility>('new');
@@ -1087,15 +1089,23 @@ export function AddressView({
     return isLocalAdmin ? currentOrigin : '';
   };
   const copyLoginUrl = async (row: AddressRecord) => {
+    const busyKey = `login:${row.id}`;
+    if (addressActionBusy) return;
+    setAddressActionBusy(busyKey);
     try {
       const res = await request<{ jwt: string }>(isAccountScoped ? `/user_api/bind_address_jwt/${row.id}` : `/admin/show_password/${row.id}`, { forceRefresh: true });
       await copyText(buildAddressLoginUrl(res.jwt, frontendBase()));
       notify('success', locale === 'en-US' ? `Login link for ${row.name} copied` : `已复制 ${row.name} 的登录链接`);
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('复制登录链接失败', 'Failed to copy login link'));
+    } finally {
+      setAddressActionBusy(null);
     }
   };
   const copyMailboxPassword = async (row: AddressRecord) => {
+    const busyKey = `password:${row.id}`;
+    if (addressActionBusy) return;
+    setAddressActionBusy(busyKey);
     try {
       const res = await request<{ jwt?: string; password?: string; credential?: string }>(isAccountScoped ? `/user_api/bind_address_jwt/${row.id}` : `/admin/show_password/${row.id}`, { forceRefresh: true });
       const secret = String(res.password || res.credential || res.jwt || '').trim();
@@ -1104,6 +1114,8 @@ export function AddressView({
       notify('success', res.password ? (locale === 'en-US' ? `Mailbox password for ${row.name} copied` : `已复制 ${row.name} 的邮箱密码`) : (locale === 'en-US' ? `Mailbox password/JWT for ${row.name} copied` : `已复制 ${row.name} 的邮箱密码/JWT`));
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('复制邮箱密码失败', 'Failed to copy mailbox password'));
+    } finally {
+      setAddressActionBusy(null);
     }
   };
   const shareAdminRequest = useCallback(async <T,>(path: string, init: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {}): Promise<T> => {
@@ -1533,6 +1545,9 @@ export function AddressView({
     return pickRandom(pool.length ? pool : available);
   };
   const createAddress = async () => {
+    if (createBusy) return;
+    setCreateBusy(true);
+    try {
     const requestedRandomSubdomain = Boolean(newAddress.enableRandomSubdomain && currentDomainAllowsRandomSubdomain);
     const selectedDomain = pickCreateDomain(requestedRandomSubdomain);
     if (!selectedDomain) {
@@ -1576,6 +1591,9 @@ export function AddressView({
       }
     }
     notify('error', lastError instanceof Error ? lastError.message : t('创建失败', 'Create failed'));
+    } finally {
+      setCreateBusy(false);
+    }
   };
   const showJwt = async (row: AddressRecord) => {
     try {
@@ -1626,7 +1644,7 @@ export function AddressView({
       <article key={row.id} className="mobile-address-card">
         <div className="mobile-address-head">
           <div className="min-w-0">
-            <button className="address-strong block max-w-full truncate text-left" onClick={() => copyAddressValue(row.name, t("已复制邮箱地址", "Mailbox address copied"))} title={t("点击复制邮箱地址", "Copy mailbox address")}>{row.name}</button>
+            <button type="button" className="address-strong block max-w-full truncate text-left" onClick={() => copyAddressValue(row.name, t("已复制邮箱地址", "Mailbox address copied"))} title={t("点击复制邮箱地址", "Copy mailbox address")}>{row.name}</button>
             <p className="mobile-address-meta">
               <span>#{row.id}</span>
               {(row.user_email || row.owner) && <span>{row.user_email || row.owner}</span>}
@@ -1656,14 +1674,14 @@ export function AddressView({
             </button>
             {menuVisible && (
               <div className={cls('mobile-address-action-menu', menuClosing && 'is-closing')} role="menu">
-                <button role="menuitem" onClick={() => runMobileAction(() => copyLoginUrl(row))}><Copy size={15} />{t("复制登录链接", "Copy login link")}</button>
-                <button role="menuitem" onClick={() => runMobileAction(() => copyMailboxPassword(row))}><KeyRound size={15} />{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
-                <button role="menuitem" onClick={() => runMobileAction(() => onOpenInbox?.(row.name))}><MailOpen size={15} />{t("查看收件箱", "View inbox")}</button>
-                <button role="menuitem" disabled={shareActionBusy === `create:${row.id}`} onClick={() => runMobileAction(() => createSingleShareLink(row))}><Share2 size={15} className={cls(shareActionBusy === `create:${row.id}` && 'animate-pulse')} />{t("创建分享", "Create share")}</button>
-                {!isAccountScoped && <button role="menuitem" onClick={() => runMobileAction(() => { setResetTarget(row); setResetPassword(''); })}><Lock size={15} />{t("重置密码", "Reset password")}</button>}
-                {!isAccountScoped && <button role="menuitem" onClick={() => runMobileAction(() => actionClearInbox(row))}><Inbox size={15} />{t("清空收件", "Clear inbox")}</button>}
-                {!isAccountScoped && <button role="menuitem" onClick={() => runMobileAction(() => actionClearSent(row))}><Send size={15} />{t("清空发件", "Clear sent")}</button>}
-                {!isAccountScoped && <button role="menuitem" className="danger" onClick={() => runMobileAction(() => actionDelete(row))}><Trash2 size={15} />{t("删除地址", "Delete address")}</button>}
+                <button type="button" role="menuitem" disabled={addressActionBusy === `login:${row.id}`} onClick={() => runMobileAction(() => copyLoginUrl(row))}>{addressActionBusy === `login:${row.id}` ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}{t("复制登录链接", "Copy login link")}</button>
+                <button type="button" role="menuitem" disabled={addressActionBusy === `password:${row.id}`} onClick={() => runMobileAction(() => copyMailboxPassword(row))}>{addressActionBusy === `password:${row.id}` ? <Loader2 size={15} className="animate-spin" /> : <KeyRound size={15} />}{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
+                <button type="button" role="menuitem" onClick={() => runMobileAction(() => onOpenInbox?.(row.name))}><MailOpen size={15} />{t("查看收件箱", "View inbox")}</button>
+                <button type="button" role="menuitem" disabled={shareActionBusy === `create:${row.id}`} onClick={() => runMobileAction(() => createSingleShareLink(row))}><Share2 size={15} className={cls(shareActionBusy === `create:${row.id}` && 'animate-pulse')} />{t("创建分享", "Create share")}</button>
+                {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => { setResetTarget(row); setResetPassword(''); })}><Lock size={15} />{t("重置密码", "Reset password")}</button>}
+                {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => actionClearInbox(row))}><Inbox size={15} />{t("清空收件", "Clear inbox")}</button>}
+                {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => actionClearSent(row))}><Send size={15} />{t("清空发件", "Clear sent")}</button>}
+                {!isAccountScoped && <button type="button" role="menuitem" className="danger" onClick={() => runMobileAction(() => actionDelete(row))}><Trash2 size={15} />{t("删除地址", "Delete address")}</button>}
               </div>
             )}
           </div>
@@ -1686,7 +1704,7 @@ export function AddressView({
           <h2 className="text-2xl font-bold text-slate-800">{t("地址管理", "Address management")}</h2>
           {!isAccountScoped && effectiveUserFilter && <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="filter-inline-clear text-slate-400 hover:text-slate-900">{t('清除', 'Clear')}</button></div>}
         </div>
-        <div className="address-page-actions flex flex-wrap gap-2"><button className="btn-primary" onClick={() => { setNewAddress((current) => ({ ...current, domain: current.domain || defaultDomain })); setCreateOpen(true); }}><Plus size={16} /> <span>{t("新建地址", "New address")}</span></button><button className="btn-secondary" onClick={openShareManager}><Share2 size={16} /> <span>{t("共享链接管理", "Share links")}</span></button><button className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button></div>
+        <div className="address-page-actions flex flex-wrap gap-2"><button type="button" className="btn-primary" onClick={() => { setNewAddress((current) => ({ ...current, domain: current.domain || defaultDomain })); setCreateOpen(true); }}><Plus size={16} /> <span>{t("新建地址", "New address")}</span></button><button type="button" className="btn-secondary" onClick={openShareManager}><Share2 size={16} /> <span>{t("共享链接管理", "Share links")}</span></button><button type="button" className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button></div>
       </div>
 
       <div className={cls('panel overflow-hidden', desktopActionMenuId !== null && 'address-panel-menu-open')}>
@@ -1782,8 +1800,8 @@ export function AddressView({
             )}
           </label>
           <PopoverSelect className="address-sort-select" ariaLabel={t("地址排序字段", "Address sort field")} value={sortBy} options={addressSortOptions} onChange={setSortBy} />
-          <button className="btn-secondary compact toolbar-action sort-order-action" title={sortOrder === 'ascend' ? t('当前升序，点击切换', 'Currently ascending. Click to toggle.') : t('当前降序，点击切换', 'Currently descending. Click to toggle.')} onClick={() => setSortOrder(sortOrder === 'ascend' ? 'descend' : 'ascend')}><ListFilter size={15} /> <span>{sortOrder === 'ascend' ? t('升序', 'Asc') : t('降序', 'Desc')}</span></button>
-          <button className="btn-secondary compact toolbar-action address-toolbar-refresh" title={t("刷新地址列表", "Refresh address list")} aria-label={t("刷新地址列表", "Refresh address list")} onClick={() => fetchData(true)}><RefreshCw size={15} className={cls((loading || usersLoading) && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button>
+          <button type="button" className="btn-secondary compact toolbar-action sort-order-action" title={sortOrder === 'ascend' ? t('当前升序，点击切换', 'Currently ascending. Click to toggle.') : t('当前降序，点击切换', 'Currently descending. Click to toggle.')} onClick={() => setSortOrder(sortOrder === 'ascend' ? 'descend' : 'ascend')}><ListFilter size={15} /> <span>{sortOrder === 'ascend' ? t('升序', 'Asc') : t('降序', 'Desc')}</span></button>
+          <button type="button" className="btn-secondary compact toolbar-action address-toolbar-refresh" title={t("刷新地址列表", "Refresh address list")} aria-label={t("刷新地址列表", "Refresh address list")} onClick={() => fetchData(true)}><RefreshCw size={15} className={cls((loading || usersLoading) && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button>
         </div>
         {selectedRows.length > 0 && (
           <div className={cls('address-bulk-bar', mobileBulkMenuOpen && 'mobile-expanded')}>
@@ -1822,16 +1840,16 @@ export function AddressView({
                 </span>
               )}
               <div className="address-bulk-actions">
-                {!isAccountScoped && <button className="btn-secondary compact" disabled={batchScanRunning || !batchKeyword.trim()} onClick={batchFilterSelectedByMailKeyword}>
+                {!isAccountScoped && <button type="button" className="btn-secondary compact" disabled={batchScanRunning || !batchKeyword.trim()} onClick={batchFilterSelectedByMailKeyword}>
                   <Search size={15} /> {t('检测并重选', 'Scan and reselect')}
                 </button>}
-                {batchScanRunning && <button className="btn-secondary compact" onClick={cancelBatchScan}><X size={15} /> {t('取消', 'Cancel')}</button>}
-                <button className="btn-secondary compact" disabled={batchScanRunning} onClick={openShareDialog}><Share2 size={15} /> {t('创建共享链接', 'Create share link')}</button>
-                <button className="btn-secondary compact" disabled={batchScanRunning} onClick={openShareManager}><ListFilter size={15} /> {t('管理共享', 'Manage shares')}</button>
-                {!isAccountScoped && <button className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearInbox}><Inbox size={15} /> {t('清空收件', 'Clear inbox')}</button>}
-                {!isAccountScoped && <button className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearSent}><Send size={15} /> {t('清空发件', 'Clear sent')}</button>}
-                {!isAccountScoped && <button className="btn-danger compact" disabled={batchScanRunning} onClick={batchDelete}><Trash2 size={15} /> {t('删除', 'Delete')}</button>}
-                <button className="btn-secondary compact mobile-bulk-clear" disabled={batchScanRunning} onClick={() => { setSelectedAddressMap({}); setMobileBulkMenuOpen(false); setMobileBulkSearchOpen(false); }}><X size={15} /> {t('清除选择', 'Clear selection')}</button>
+                {batchScanRunning && <button type="button" className="btn-secondary compact" onClick={cancelBatchScan}><X size={15} /> {t('取消', 'Cancel')}</button>}
+                <button type="button" className="btn-secondary compact" disabled={batchScanRunning} onClick={openShareDialog}><Share2 size={15} /> {t('创建共享链接', 'Create share link')}</button>
+                <button type="button" className="btn-secondary compact" disabled={batchScanRunning} onClick={openShareManager}><ListFilter size={15} /> {t('管理共享', 'Manage shares')}</button>
+                {!isAccountScoped && <button type="button" className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearInbox}><Inbox size={15} /> {t('清空收件', 'Clear inbox')}</button>}
+                {!isAccountScoped && <button type="button" className="btn-secondary compact" disabled={batchScanRunning} onClick={batchClearSent}><Send size={15} /> {t('清空发件', 'Clear sent')}</button>}
+                {!isAccountScoped && <button type="button" className="btn-danger compact" disabled={batchScanRunning} onClick={batchDelete}><Trash2 size={15} /> {t('删除', 'Delete')}</button>}
+                <button type="button" className="btn-secondary compact mobile-bulk-clear" disabled={batchScanRunning} onClick={() => { setSelectedAddressMap({}); setMobileBulkMenuOpen(false); setMobileBulkSearchOpen(false); }}><X size={15} /> {t('清除选择', 'Clear selection')}</button>
               </div>
             </div>
           </div>
@@ -1847,7 +1865,7 @@ export function AddressView({
               <tbody>{data.map((row) => <tr key={row.id}>
                 <td><input className="row-check" type="checkbox" checked={selectedIds.has(row.id)} onChange={() => toggleSelected(row)} aria-label={locale === 'en-US' ? `Select ${row.name}` : `选择 ${row.name}`} /></td>
                 <td className="font-mono text-xs text-slate-400">#{row.id}</td>
-                <td><button className="address-strong" onClick={() => copyAddressValue(row.name, t("已复制邮箱地址", "Mailbox address copied"))} title={t("点击复制邮箱地址", "Copy mailbox address")}>{row.name}</button>{(row.user_email || row.owner) && <p className="mt-1 text-xs text-slate-400">{row.user_email || row.owner}</p>}</td>
+                <td><button type="button" className="address-strong" onClick={() => copyAddressValue(row.name, t("已复制邮箱地址", "Mailbox address copied"))} title={t("点击复制邮箱地址", "Copy mailbox address")}>{row.name}</button>{(row.user_email || row.owner) && <p className="mt-1 text-xs text-slate-400">{row.user_email || row.owner}</p>}</td>
                 <td>{row.source_meta || '-'}</td>
                 <td>{row.mail_count ?? 0}</td>
                 <td>{row.send_count ?? 0}</td>
@@ -1855,10 +1873,10 @@ export function AddressView({
                 <td className="address-actions-cell">
                   <div className="address-desktop-actions-root">
                     <div className="address-desktop-actions">
-                      <button className="table-action" onClick={() => copyLoginUrl(row)} title={t("一键复制登录链接", "Copy login link")}><Copy size={15} /></button>
-                      <button className="table-action" disabled={shareActionBusy === `create:${row.id}`} onClick={() => createSingleShareLink(row)} title={t("创建可撤回分享链接", "Create revocable share link")}><Share2 size={15} className={cls(shareActionBusy === `create:${row.id}` && 'animate-pulse')} /></button>
-                      <button className="table-action" onClick={() => onOpenInbox?.(row.name)} title={t("查看收件箱", "View inbox")}><MailOpen size={15} /></button>
-                      <button className={cls('table-action', desktopActionMenuId === row.id && 'active')} onClick={(event) => toggleDesktopActionMenu(row, event.currentTarget)} title={t("更多操作", "More actions")} aria-haspopup="menu" aria-expanded={desktopActionMenuId === row.id}><MoreHorizontal size={16} /></button>
+                      <button type="button" className="table-action" disabled={addressActionBusy === `login:${row.id}`} onClick={() => copyLoginUrl(row)} title={t("一键复制登录链接", "Copy login link")}>{addressActionBusy === `login:${row.id}` ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}</button>
+                      <button type="button" className="table-action" disabled={shareActionBusy === `create:${row.id}`} onClick={() => createSingleShareLink(row)} title={t("创建可撤回分享链接", "Create revocable share link")}><Share2 size={15} className={cls(shareActionBusy === `create:${row.id}` && 'animate-pulse')} /></button>
+                      <button type="button" className="table-action" onClick={() => onOpenInbox?.(row.name)} title={t("查看收件箱", "View inbox")}><MailOpen size={15} /></button>
+                      <button type="button" className={cls('table-action', desktopActionMenuId === row.id && 'active')} onClick={(event) => toggleDesktopActionMenu(row, event.currentTarget)} title={t("更多操作", "More actions")} aria-haspopup="menu" aria-expanded={desktopActionMenuId === row.id}><MoreHorizontal size={16} /></button>
                     </div>
                   </div>
                 </td>
@@ -1889,7 +1907,7 @@ export function AddressView({
           role="menu"
           style={{ top: desktopActionMenu.top, left: desktopActionMenu.left }}
         >
-          <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); copyMailboxPassword(row); }}><KeyRound size={15} />{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
+          <button type="button" role="menuitem" disabled={addressActionBusy === `password:${desktopActionMenu.row.id}`} onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); copyMailboxPassword(row); }}>{addressActionBusy === `password:${desktopActionMenu.row.id}` ? <Loader2 size={15} className="animate-spin" /> : <KeyRound size={15} />}{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
           {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); setResetTarget(row); setResetPassword(''); }}><Lock size={15} />{t("重置密码", "Reset password")}</button>}
           {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearInbox(row); }}><Inbox size={15} />{t('清空收件箱', 'Clear inbox')}</button>}
           {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearSent(row); }}><Send size={15} />{t('清空发件箱', 'Clear sent')}</button>}
@@ -1941,7 +1959,9 @@ export function AddressView({
             <label className={cls('check-row rounded-xl bg-slate-50 px-3 py-2', !currentDomainAllowsRandomSubdomain && 'opacity-50')}><input type="checkbox" disabled={!currentDomainAllowsRandomSubdomain} checked={newAddress.enableRandomSubdomain && currentDomainAllowsRandomSubdomain} onChange={(e) => setNewAddress({ ...newAddress, enableRandomSubdomain: e.target.checked })} />{t('随机二级域名', 'Random subdomain')}</label>
           </div>
           {domainOptions.length === 0 && <p className="text-xs text-rose-500">{t('暂无可用域名', 'No domains')}</p>}
-          <button className="btn-primary w-full" disabled={domainOptions.length === 0} onClick={createAddress}><Plus size={16} /> {t('创建', 'Create')}</button>
+          <button type="button" className="btn-primary w-full" disabled={createBusy || domainOptions.length === 0} onClick={createAddress}>
+            {createBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />} {createBusy ? t('创建中...', 'Creating...') : t('创建', 'Create')}
+          </button>
         </div>
       </Modal>}
       {shareOpen && <Modal title={locale === 'en-US' ? `Create revocable share link (${selectedRows.length})` : `创建可撤回共享链接（${selectedRows.length} 个）`} onClose={() => setShareOpen(false)}>
@@ -1955,7 +1975,7 @@ export function AddressView({
           <div className="max-h-36 overflow-y-auto rounded-2xl bg-slate-50 p-3 text-xs text-slate-500">
             {selectedRows.map((row) => <div key={row.id} className="truncate py-0.5">#{row.id} · {row.name}</div>)}
           </div>
-          <button className="btn-primary w-full" disabled={shareBusy || selectedRows.length === 0} onClick={createShareLink}>
+          <button type="button" className="btn-primary w-full" disabled={shareBusy || selectedRows.length === 0} onClick={createShareLink}>
             <Share2 size={16} /> {shareBusy ? t('正在创建…', 'Creating...') : t('创建并复制共享链接', 'Create and copy share link')}
           </button>
           {shareResult && (
@@ -1965,7 +1985,7 @@ export function AddressView({
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded-xl bg-white px-3 py-2 text-xs text-slate-500">{shareResult.url}</code>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="btn-secondary compact" onClick={() => copyAddressValue(shareResult.url, t('已复制共享链接', 'Share link copied'))}><Copy size={15} /> {t('复制', 'Copy')}</button>
+                <button type="button" className="btn-secondary compact" onClick={() => copyAddressValue(shareResult.url, t('已复制共享链接', 'Share link copied'))}><Copy size={15} /> {t('复制', 'Copy')}</button>
                 <a className="btn-secondary compact" href={shareResult.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> {t('打开测试', 'Open test')}</a>
               </div>
               <p className="text-xs text-slate-400">
@@ -1988,22 +2008,22 @@ export function AddressView({
               />
             </label>
             <PopoverSelect ariaLabel={t('共享链接状态筛选', 'Share link status filter')} value={shareStatusFilter} options={shareStatusFilterOptions} onChange={(value) => { setShareStatusFilter(value as ShareStatusFilter); setShareStatusNow(Date.now()); }} />
-            <button className="btn-secondary compact" disabled={shareListLoading} onClick={() => loadShareList(true)}>
+            <button type="button" className="btn-secondary compact" disabled={shareListLoading} onClick={() => loadShareList(true)}>
               <RefreshCw size={15} className={cls(shareListLoading && 'animate-spin')} /> {t('刷新', 'Refresh')}
             </button>
-            <button className="btn-secondary compact" disabled={visibleInactiveShares.length === 0 || shareActionBusy === 'cleanup:visible'} onClick={() => cleanupInactiveShares(visibleShareList, 'visible')}>
+            <button type="button" className="btn-secondary compact" disabled={visibleInactiveShares.length === 0 || shareActionBusy === 'cleanup:visible'} onClick={() => cleanupInactiveShares(visibleShareList, 'visible')}>
               <Trash2 size={15} /> {t('清理失效', 'Clean inactive')}
             </button>
           </div>
           {selectedShares.length > 0 && (
             <div className="share-bulk-bar">
               <strong>{locale === 'en-US' ? `${selectedShares.length} share links selected` : `已选择 ${selectedShares.length} 条共享链接`}</strong>
-              <button className="btn-secondary compact" onClick={copySelectedShareUrls}><Copy size={14} /> {t('复制链接', 'Copy links')}</button>
-              <button className="btn-secondary compact" disabled={shareActionBusy === 'batch:update'} onClick={() => runShareBatch('update', { expiresIn: '30d', mailVisibility: 'new' })}>{t('切到仅新增', 'Set new-only')}</button>
-              <button className="btn-secondary compact" disabled={shareActionBusy === 'batch:restore'} onClick={() => runShareBatch('restore', { expiresIn: '30d' })}>{t('恢复/续期', 'Restore/extend')}</button>
-              <button className="btn-danger compact" disabled={shareActionBusy === 'batch:revoke'} onClick={() => runShareBatch('revoke')}><Trash2 size={14} /> {t('批量撤销', 'Revoke selected')}</button>
-              <button className="btn-secondary compact" disabled={selectedInactiveShares.length === 0 || shareActionBusy === 'cleanup:selected'} onClick={() => cleanupInactiveShares(selectedShares, 'selected')}><Trash2 size={14} /> {t('清理已选失效', 'Clean selected inactive')}</button>
-              <button className="text-xs font-semibold text-slate-400 hover:text-slate-700" onClick={() => setSelectedShareMap({})}>{t('清空选择', 'Clear selection')}</button>
+              <button type="button" className="btn-secondary compact" onClick={copySelectedShareUrls}><Copy size={14} /> {t('复制链接', 'Copy links')}</button>
+              <button type="button" className="btn-secondary compact" disabled={shareActionBusy === 'batch:update'} onClick={() => runShareBatch('update', { expiresIn: '30d', mailVisibility: 'new' })}>{t('切到仅新增', 'Set new-only')}</button>
+              <button type="button" className="btn-secondary compact" disabled={shareActionBusy === 'batch:restore'} onClick={() => runShareBatch('restore', { expiresIn: '30d' })}>{t('恢复/续期', 'Restore/extend')}</button>
+              <button type="button" className="btn-danger compact" disabled={shareActionBusy === 'batch:revoke'} onClick={() => runShareBatch('revoke')}><Trash2 size={14} /> {t('批量撤销', 'Revoke selected')}</button>
+              <button type="button" className="btn-secondary compact" disabled={selectedInactiveShares.length === 0 || shareActionBusy === 'cleanup:selected'} onClick={() => cleanupInactiveShares(selectedShares, 'selected')}><Trash2 size={14} /> {t('清理已选失效', 'Clean selected inactive')}</button>
+              <button type="button" className="text-xs font-semibold text-slate-400 hover:text-slate-700" onClick={() => setSelectedShareMap({})}>{t('清空选择', 'Clear selection')}</button>
             </div>
           )}
           {shareListLoading && shareList.length === 0 ? <LoadingState label={t('正在加载共享链接...', 'Loading share links...')} /> : shareList.length === 0 ? (
@@ -2036,10 +2056,10 @@ export function AddressView({
                     </div>
                     <p className="mt-2 truncate font-mono text-[11px] text-slate-400">{shareLinkSuffix(row)}</p>
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button className="btn-secondary compact" onClick={() => copyShareUrl(row.url)}><Copy size={14} /> {t('复制', 'Copy')}</button>
+                      <button type="button" className="btn-secondary compact" onClick={() => copyShareUrl(row.url)}><Copy size={14} /> {t('复制', 'Copy')}</button>
                       <a className="btn-secondary compact" href={row.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {t('打开', 'Open')}</a>
-                      <button className="btn-secondary compact" onClick={() => { setShareEditTarget(row); setShareEditExpiry('30d'); setShareEditVisibility(row.mailVisibility || 'all'); }}><Save size={14} /> {t('改期限', 'Edit expiry')}</button>
-                      <button className="btn-danger compact" disabled={effectiveShareStatus(row, shareStatusNow) === 'revoked' || shareActionBusy === `revoke:${row.token}`} onClick={() => revokeShareLink(row)}><Trash2 size={14} /> {t('撤销', 'Revoke')}</button>
+                      <button type="button" className="btn-secondary compact" onClick={() => { setShareEditTarget(row); setShareEditExpiry('30d'); setShareEditVisibility(row.mailVisibility || 'all'); }}><Save size={14} /> {t('改期限', 'Edit expiry')}</button>
+                      <button type="button" className="btn-danger compact" disabled={effectiveShareStatus(row, shareStatusNow) === 'revoked' || shareActionBusy === `revoke:${row.token}`} onClick={() => revokeShareLink(row)}><Trash2 size={14} /> {t('撤销', 'Revoke')}</button>
                     </div>
                   </article>
                 ))}
@@ -2074,10 +2094,10 @@ export function AddressView({
                       </td>
                       <td className="share-actions-cell">
                         <div className="share-row-actions">
-                          <button className="table-action" onClick={() => copyShareUrl(row.url)} title={t('复制链接', 'Copy link')}><Copy size={15} /></button>
+                          <button type="button" className="table-action" onClick={() => copyShareUrl(row.url)} title={t('复制链接', 'Copy link')}><Copy size={15} /></button>
                           <a className="table-action" href={row.url} target="_blank" rel="noreferrer" title={t('打开测试', 'Open test')}><ExternalLink size={15} /></a>
-                          <button className="table-action" onClick={() => { setShareEditTarget(row); setShareEditExpiry('30d'); setShareEditVisibility(row.mailVisibility || 'all'); }} title={t('修改有效期', 'Edit expiry')}><Save size={15} /></button>
-                          <button className="table-action danger" disabled={effectiveShareStatus(row, shareStatusNow) === 'revoked' || shareActionBusy === `revoke:${row.token}`} onClick={() => revokeShareLink(row)} title={t('撤销链接', 'Revoke link')}><Trash2 size={15} /></button>
+                          <button type="button" className="table-action" onClick={() => { setShareEditTarget(row); setShareEditExpiry('30d'); setShareEditVisibility(row.mailVisibility || 'all'); }} title={t('修改有效期', 'Edit expiry')}><Save size={15} /></button>
+                          <button type="button" className="table-action danger" disabled={effectiveShareStatus(row, shareStatusNow) === 'revoked' || shareActionBusy === `revoke:${row.token}`} onClick={() => revokeShareLink(row)} title={t('撤销链接', 'Revoke link')}><Trash2 size={15} /></button>
                         </div>
                       </td>
                     </tr>
@@ -2085,7 +2105,7 @@ export function AddressView({
                 </table>
               </div>
               {shareListHasMore && (
-                <button className="btn-secondary w-full" disabled={shareListLoading} onClick={() => loadShareList(false)}>
+                <button type="button" className="btn-secondary w-full" disabled={shareListLoading} onClick={() => loadShareList(false)}>
                   <RefreshCw size={15} className={cls(shareListLoading && 'animate-spin')} /> {t('加载更多共享链接', 'Load more share links')}
                 </button>
               )}
@@ -2109,7 +2129,7 @@ export function AddressView({
             {renderShareVisibilitySwitch('shareEditVisibility', shareEditVisibility, setShareEditVisibility, t('切换为仅新增会以当前时刻重新记录 cutoff。', 'Switching to new-only records a fresh cutoff from now.'))}
           </div>
           {shareEditTarget.status === 'revoked' && <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{t('保存后会同时恢复这个已撤销的共享链接。', 'Saving will also restore this revoked share link.')}</p>}
-          <button className="btn-primary w-full" disabled={shareActionBusy === `update:${shareEditTarget.token}`} onClick={updateShareExpiry}>
+          <button type="button" className="btn-primary w-full" disabled={shareActionBusy === `update:${shareEditTarget.token}`} onClick={updateShareExpiry}>
             <Save size={16} /> {shareActionBusy === `update:${shareEditTarget.token}` ? t('保存中...', 'Saving...') : t('保存有效期', 'Save expiry')}
           </button>
         </div>
@@ -2122,21 +2142,24 @@ export function AddressView({
             <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded-xl bg-white px-3 py-2 text-xs text-slate-500">{credentialLoginUrl}</code>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button className="btn-primary" onClick={() => copyAddressValue(credential.jwt, t('已复制 JWT', 'JWT copied'))}><KeyRound size={16} /> {t('复制 JWT', 'Copy JWT')}</button>
+            <button type="button" className="btn-primary" onClick={() => copyAddressValue(credential.jwt, t('已复制 JWT', 'JWT copied'))}><KeyRound size={16} /> {t('复制 JWT', 'Copy JWT')}</button>
             <a className="btn-secondary" href={credentialLoginUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} /> {t('一键登录该地址', 'Login to this address')}</a>
-            <button className="btn-secondary" onClick={() => copyAddressValue(credentialLoginUrl, t('已复制登录地址链接', 'Login link copied'))}><Copy size={16} /> {t('一键复制登录地址链接', 'Copy login link')}</button>
+            <button type="button" className="btn-secondary" onClick={() => copyAddressValue(credentialLoginUrl, t('已复制登录地址链接', 'Login link copied'))}><Copy size={16} /> {t('一键复制登录地址链接', 'Copy login link')}</button>
           </div>
         </div>
       </Modal>}
       {resetTarget && <Modal title={locale === 'en-US' ? `Reset address password: ${resetTarget.name}` : `重置地址密码：${resetTarget.name}`} onClose={() => setResetTarget(null)}>
         <div className="space-y-4">
           <input className="form-input" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} type="password" placeholder={t('新密码（会 SHA-256 后提交）', 'New password (submitted after SHA-256)')} />
-          <button className="btn-primary w-full" onClick={async () => {
+          <button type="button" className="btn-primary w-full" disabled={addressActionBusy === `reset:${resetTarget.id}`} onClick={async () => {
+            if (addressActionBusy) return;
             const trimmed = resetPassword.trim();
             if (trimmed.length < 6) { notify('error', t('请填写至少 6 位新密码', 'Enter at least 6 characters for the new password')); return; }
-            try { await request(`/admin/address/${resetTarget.id}/reset_password`, { method: 'POST', body: { password: await sha256Hex(trimmed) } }); notify('success', t('地址密码已重置', 'Address password reset')); setResetTarget(null); }
+            setAddressActionBusy(`reset:${resetTarget.id}`);
+            try { await request(`/admin/address/${resetTarget.id}/reset_password`, { method: 'POST', body: { password: await sha256Hex(trimmed) } }); notify('success', t('地址密码已重置', 'Address password reset')); setResetTarget(null); setResetPassword(''); }
             catch (error) { notify('error', error instanceof Error ? error.message : t('重置失败', 'Reset failed')); }
-          }}><Save size={16} /> {t('保存', 'Save')}</button>
+            finally { setAddressActionBusy(null); }
+          }}>{addressActionBusy === `reset:${resetTarget.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />} {addressActionBusy === `reset:${resetTarget.id}` ? t('保存中...', 'Saving...') : t('保存', 'Save')}</button>
         </div>
       </Modal>}
     </div>
@@ -2205,14 +2228,14 @@ function SenderAccessPanel({ request, notify, ask, embedded = false }: { request
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input className="form-input py-2 text-sm" value={address} onChange={(e) => { setAddress(e.target.value); setPage(1); }} placeholder={t('按地址筛选', 'Filter by address')} />
-        <button className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button>
+        <button type="button" className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button>
       </div>
     </div>
     {loading && data.length === 0 ? <LoadingState /> : data.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={ShieldCheck} title={t('暂无发件权限记录', 'No sender access records')} /></div> : <>
-      <div className="space-y-2 p-3 md:hidden">{data.map((row) => <article key={row.id} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{row.address}</p><p className="mt-1 text-[11px] text-slate-400">#{row.id}</p></div><span className={cls('status-pill', Boolean(row.enabled) && 'enabled')}>{Boolean(row.enabled) ? t('已启用', 'Enabled') : t('已禁用', 'Disabled')}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500"><div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('余额', 'Balance')}</span><span className="mt-0.5 block font-medium text-slate-700">{row.balance ?? 0}</span></div><div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('更新时间', 'Updated')}</span><span className="mt-0.5 block truncate">{formatDateTime(row.updated_at || row.created_at)}</span></div></div><div className="mt-3 grid grid-cols-2 gap-2"><button className="btn-secondary compact" onClick={() => openEdit(row)}><Edit3 size={14} /> {t('编辑', 'Edit')}</button><button className="btn-danger compact" onClick={() => remove(row)}><Trash2 size={14} /> {t('删除', 'Delete')}</button></div></article>)}</div>
-      <div className="hidden overflow-auto md:block"><table className="data-table action-table"><thead><tr><th>ID</th><th>{t("地址", "Address")}</th><th>{t('余额', 'Balance')}</th><th>{t('状态', 'Status')}</th><th>{t("更新时间", "Updated")}</th><th className="text-right">{t('操作', 'Actions')}</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td className="font-mono text-xs text-slate-400">#{row.id}</td><td className="font-medium text-slate-800">{row.address}</td><td>{row.balance ?? 0}</td><td><span className={cls('status-pill', Boolean(row.enabled) && 'enabled')}>{Boolean(row.enabled) ? t('已启用', 'Enabled') : t('已禁用', 'Disabled')}</span></td><td>{formatDateTime(row.updated_at || row.created_at)}</td><td><div className="flex justify-end gap-2"><button className="table-action" onClick={() => openEdit(row)} title={t('编辑', 'Edit')}><Edit3 size={15} /></button><button className="table-action danger" onClick={() => remove(row)} title={t('删除', 'Delete')}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div>
+      <div className="space-y-2 p-3 md:hidden">{data.map((row) => <article key={row.id} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{row.address}</p><p className="mt-1 text-[11px] text-slate-400">#{row.id}</p></div><span className={cls('status-pill', Boolean(row.enabled) && 'enabled')}>{Boolean(row.enabled) ? t('已启用', 'Enabled') : t('已禁用', 'Disabled')}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500"><div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('余额', 'Balance')}</span><span className="mt-0.5 block font-medium text-slate-700">{row.balance ?? 0}</span></div><div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('更新时间', 'Updated')}</span><span className="mt-0.5 block truncate">{formatDateTime(row.updated_at || row.created_at)}</span></div></div><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" className="btn-secondary compact" onClick={() => openEdit(row)}><Edit3 size={14} /> {t('编辑', 'Edit')}</button><button type="button" className="btn-danger compact" onClick={() => remove(row)}><Trash2 size={14} /> {t('删除', 'Delete')}</button></div></article>)}</div>
+      <div className="hidden overflow-auto md:block"><table className="data-table action-table"><thead><tr><th>ID</th><th>{t("地址", "Address")}</th><th>{t('余额', 'Balance')}</th><th>{t('状态', 'Status')}</th><th>{t("更新时间", "Updated")}</th><th className="text-right">{t('操作', 'Actions')}</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td className="font-mono text-xs text-slate-400">#{row.id}</td><td className="font-medium text-slate-800">{row.address}</td><td>{row.balance ?? 0}</td><td><span className={cls('status-pill', Boolean(row.enabled) && 'enabled')}>{Boolean(row.enabled) ? t('已启用', 'Enabled') : t('已禁用', 'Disabled')}</span></td><td>{formatDateTime(row.updated_at || row.created_at)}</td><td><div className="flex justify-end gap-2"><button type="button" className="table-action" onClick={() => openEdit(row)} title={t('编辑', 'Edit')}><Edit3 size={15} /></button><button type="button" className="table-action danger" onClick={() => remove(row)} title={t('删除', 'Delete')}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div>
     </>}
     <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} />
-    {editTarget && <Modal title={locale === 'en-US' ? `Sender access: ${editTarget.address}` : `发件权限：${editTarget.address}`} onClose={() => setEditTarget(null)}><div className="space-y-4"><label className="check-row"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />{t('启用发件', 'Enable sending')}</label><div><label className="form-label">{t('发件余额', 'Send balance')}</label><input className="form-input" type="number" min={0} max={1000} value={balance} onChange={(e) => setBalance(Number(e.target.value))} /></div><button className="btn-primary w-full" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}
+    {editTarget && <Modal title={locale === 'en-US' ? `Sender access: ${editTarget.address}` : `发件权限：${editTarget.address}`} onClose={() => setEditTarget(null)}><div className="space-y-4"><label className="check-row"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />{t('启用发件', 'Enable sending')}</label><div><label className="form-label">{t('发件余额', 'Send balance')}</label><input className="form-input" type="number" min={0} max={1000} value={balance} onChange={(e) => setBalance(Number(e.target.value))} /></div><button type="button" className="btn-primary w-full" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}
   </div>;
 }

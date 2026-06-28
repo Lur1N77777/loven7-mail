@@ -144,7 +144,7 @@ function UserCredentialButton({ profile, locale, onSignOut }: { profile: Account
   ];
   return (
     <>
-      <button className="sidebar-mini-btn credential-button" onClick={() => setOpen(true)} title={title || t('当前账号凭据', 'Current account credential')} aria-label={t('凭据', 'Credential')}>
+      <button type="button" className="sidebar-mini-btn credential-button" onClick={() => setOpen(true)} title={title || t('当前账号凭据', 'Current account credential')} aria-label={t('凭据', 'Credential')}>
         <KeyRound size={15} />
         {t('凭据', 'Auth')}
       </button>
@@ -165,8 +165,8 @@ function UserCredentialButton({ profile, locale, onSignOut }: { profile: Account
             </div>
             {notice ? <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">{notice}</div> : null}
             <div className="grid gap-2 sm:grid-cols-2">
-              <button className="btn-secondary justify-center" onClick={copyCredential}><Copy size={16} />{t('复制凭据', 'Copy credential')}</button>
-              <button className="btn-danger justify-center" onClick={onSignOut}><LogOut size={16} />{t('退出登录', 'Sign out')}</button>
+              <button type="button" className="btn-secondary justify-center" onClick={copyCredential}><Copy size={16} />{t('复制凭据', 'Copy credential')}</button>
+              <button type="button" className="btn-danger justify-center" onClick={onSignOut}><LogOut size={16} />{t('退出登录', 'Sign out')}</button>
             </div>
           </div>
         </Modal>
@@ -204,8 +204,8 @@ function AccountDashboardView({ stats, profile, loading, locale, refresh, setAct
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button onClick={refresh} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><RefreshCw className={cls('mr-2 inline h-4 w-4', loading && 'animate-spin')} />{loading ? t('同步中', 'Syncing') : t('刷新', 'Refresh')}</button>
-              <button onClick={() => setActiveMenu('address')} className="btn-primary rounded-2xl px-4 py-3 text-sm font-semibold"><Plus className="mr-2 inline h-4 w-4" />{t('新建地址', 'New address')}</button>
+              <button type="button" onClick={refresh} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><RefreshCw className={cls('mr-2 inline h-4 w-4', loading && 'animate-spin')} />{loading ? t('同步中', 'Syncing') : t('刷新', 'Refresh')}</button>
+              <button type="button" onClick={() => setActiveMenu('address')} className="btn-primary rounded-2xl px-4 py-3 text-sm font-semibold"><Plus className="mr-2 inline h-4 w-4" />{t('新建地址', 'New address')}</button>
             </div>
           </div>
         </section>
@@ -229,7 +229,7 @@ function AccountDashboardView({ stats, profile, loading, locale, refresh, setAct
             {quickActions.map((action) => {
               const Icon = action.icon;
               return (
-                <button key={action.menu} onClick={() => setActiveMenu(action.menu)} className="dashboard-quick-card text-left transition">
+                <button type="button" key={action.menu} onClick={() => setActiveMenu(action.menu)} className="dashboard-quick-card text-left transition">
                   <span className="dashboard-quick-logo"><Icon className="dashboard-logo-svg" /></span>
                   <p className="dashboard-quick-title font-semibold text-slate-800">{action.title}</p>
                 </button>
@@ -255,7 +255,7 @@ function AccountStatsView({ stats, locale, refresh, loading }: { stats: Statisti
           <div>
             <h2 className="page-title">{t('统计', 'Stats')}</h2>
           </div>
-          <button className="btn-secondary compact" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} />{t('刷新', 'Refresh')}</button>
+          <button type="button" className="btn-secondary compact" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} />{t('刷新', 'Refresh')}</button>
         </div>
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="dashboard-stat-card rounded-3xl border border-slate-100 bg-white p-4 shadow-sm"><div className="dashboard-logo-frame dashboard-logo-address mb-4"><AddressLogo className="dashboard-logo-svg" /></div><p className="dashboard-stat-label text-sm text-slate-400">{t('地址数量', 'Addresses')}</p><p className="dashboard-stat-value mt-2 text-3xl font-bold text-slate-800">{stats.addressCount}</p></div>
@@ -388,7 +388,7 @@ function MailboxReader({ apiBase, jwt, address, locale, mode = 'inbox', refreshK
               </div>
               <div className="mail-auto-refresh-note mt-1 truncate text-[11px] font-medium text-slate-500">{address || t('当前账号', 'Current account')}</div>
             </div>
-            <button className="mail-tool-btn primary mail-search-refresh" onClick={() => void load()} title={t('刷新', 'Refresh')} aria-label={t('刷新', 'Refresh')}>
+            <button type="button" className="mail-tool-btn primary mail-search-refresh" onClick={() => void load()} title={t('刷新', 'Refresh')} aria-label={t('刷新', 'Refresh')}>
               <RefreshCw size={15} className={cls(loading && 'animate-spin')} />
               <span className="mail-tool-text">{t('刷新', 'Refresh')}</span>
             </button>
@@ -632,10 +632,10 @@ function AddressManagementView({
         <div className="flex items-start gap-3">
           <input className="row-check mt-1" type="checkbox" checked={checked} onChange={() => toggleSelected(row)} aria-label={locale === 'en-US' ? `Select ${row.name}` : `选择 ${row.name}`} />
           <div className="min-w-0 flex-1">
-            <button className="address-strong max-w-full truncate text-left" onClick={() => void copyAddress(row.name)}>{row.name}</button>
+            <button type="button" className="address-strong max-w-full truncate text-left" onClick={() => void copyAddress(row.name)}>{row.name}</button>
             <p className="mt-1 text-xs text-slate-400">#{row.id} · {roleLabel} · {getAddressDomain(row.name) || '-'}</p>
           </div>
-          <button className="table-action" onClick={() => void copyAddress(row.name)} title={t('复制地址', 'Copy address')}><Copy size={15} /></button>
+          <button type="button" className="table-action" onClick={() => void copyAddress(row.name)} title={t('复制地址', 'Copy address')}><Copy size={15} /></button>
         </div>
         <div className="mobile-address-stats mt-3 grid grid-cols-3 gap-2 text-xs text-slate-500">
           <div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('前缀', 'Local')}</span><span className="mt-0.5 block truncate font-medium text-slate-700">{getAddressLocal(row.name)}</span></div>
@@ -643,9 +643,9 @@ function AddressManagementView({
           <div className="rounded-xl bg-slate-50 px-2.5 py-2"><span className="block text-[10px] text-slate-400">{t('更新', 'Updated')}</span><span className="mt-0.5 block truncate">{formatDateTime(row.updated_at || row.created_at)}</span></div>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
-          <button className="btn-secondary compact justify-center" onClick={() => openInbox(row)}><MailOpen size={14} /> {t('收件', 'Inbox')}</button>
-          <button className="btn-secondary compact justify-center" onClick={() => openSent(row)}><Send size={14} /> {t('发件', 'Sent')}</button>
-          <button className="btn-secondary compact justify-center" disabled={shareActionBusy === row.id} onClick={() => void runShare([row], row.id, '30d', 'new')}><Share2 size={14} className={cls(shareActionBusy === row.id && 'animate-pulse')} /> {t('分享', 'Share')}</button>
+          <button type="button" className="btn-secondary compact justify-center" onClick={() => openInbox(row)}><MailOpen size={14} /> {t('收件', 'Inbox')}</button>
+          <button type="button" className="btn-secondary compact justify-center" onClick={() => openSent(row)}><Send size={14} /> {t('发件', 'Sent')}</button>
+          <button type="button" className="btn-secondary compact justify-center" disabled={shareActionBusy === row.id} onClick={() => void runShare([row], row.id, '30d', 'new')}><Share2 size={14} className={cls(shareActionBusy === row.id && 'animate-pulse')} /> {t('分享', 'Share')}</button>
         </div>
       </article>
     );
@@ -658,9 +658,9 @@ function AddressManagementView({
           <h2 className="text-2xl font-bold text-slate-800">{t('地址管理', 'Address management')}</h2>
         </div>
         <div className="address-page-actions flex flex-wrap gap-2">
-          <button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> <span>{t('新建地址', 'New address')}</span></button>
-          <button className="btn-secondary" onClick={openShareDialog}><Share2 size={16} /> <span>{t('创建共享链接', 'Create share link')}</span></button>
-          <button className="btn-secondary" onClick={() => void loadAddresses()}><RefreshCw size={15} className={cls(busy === 'list' && 'animate-spin')} /> <span>{t('刷新', 'Refresh')}</span></button>
+          <button type="button" className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> <span>{t('新建地址', 'New address')}</span></button>
+          <button type="button" className="btn-secondary" onClick={openShareDialog}><Share2 size={16} /> <span>{t('创建共享链接', 'Create share link')}</span></button>
+          <button type="button" className="btn-secondary" onClick={() => void loadAddresses()}><RefreshCw size={15} className={cls(busy === 'list' && 'animate-spin')} /> <span>{t('刷新', 'Refresh')}</span></button>
         </div>
       </div>
 
@@ -696,8 +696,8 @@ function AddressManagementView({
             )}
           </label>
           <PopoverSelect className="address-sort-select" ariaLabel={t('地址排序字段', 'Address sort field')} value={sortBy} options={sortOptions} onChange={(value) => setSortBy(value as AddressSortKey)} />
-          <button className="btn-secondary compact toolbar-action sort-order-action" title={sortOrder === 'ascend' ? t('当前升序，点击切换', 'Currently ascending. Click to toggle.') : t('当前降序，点击切换', 'Currently descending. Click to toggle.')} onClick={() => setSortOrder(sortOrder === 'ascend' ? 'descend' : 'ascend')}><ListFilter size={15} /> <span>{sortOrder === 'ascend' ? t('升序', 'Asc') : t('降序', 'Desc')}</span></button>
-          <button className="btn-secondary compact toolbar-action address-toolbar-refresh" title={t('刷新地址列表', 'Refresh address list')} aria-label={t('刷新地址列表', 'Refresh address list')} onClick={() => void loadAddresses()}><RefreshCw size={15} className={cls(busy === 'list' && addresses.length > 0 && 'animate-spin')} /> <span>{t('刷新', 'Refresh')}</span></button>
+          <button type="button" className="btn-secondary compact toolbar-action sort-order-action" title={sortOrder === 'ascend' ? t('当前升序，点击切换', 'Currently ascending. Click to toggle.') : t('当前降序，点击切换', 'Currently descending. Click to toggle.')} onClick={() => setSortOrder(sortOrder === 'ascend' ? 'descend' : 'ascend')}><ListFilter size={15} /> <span>{sortOrder === 'ascend' ? t('升序', 'Asc') : t('降序', 'Desc')}</span></button>
+          <button type="button" className="btn-secondary compact toolbar-action address-toolbar-refresh" title={t('刷新地址列表', 'Refresh address list')} aria-label={t('刷新地址列表', 'Refresh address list')} onClick={() => void loadAddresses()}><RefreshCw size={15} className={cls(busy === 'list' && addresses.length > 0 && 'animate-spin')} /> <span>{t('刷新', 'Refresh')}</span></button>
         </div>
         {selectedRows.length > 0 && (
           <div className="address-bulk-bar">
@@ -706,8 +706,8 @@ function AddressManagementView({
               <span>{t('可批量生成多邮箱共享链接。', 'Create a multi-mailbox share link in one action.')}</span>
             </div>
             <div className="address-bulk-actions">
-              <button className="btn-secondary compact" onClick={openShareDialog}><Share2 size={15} /> {t('创建共享链接', 'Create share link')}</button>
-              <button className="btn-secondary compact mobile-bulk-clear" onClick={() => setSelectedMap({})}><X size={15} /> {t('清除选择', 'Clear selection')}</button>
+              <button type="button" className="btn-secondary compact" onClick={openShareDialog}><Share2 size={15} /> {t('创建共享链接', 'Create share link')}</button>
+              <button type="button" className="btn-secondary compact mobile-bulk-clear" onClick={() => setSelectedMap({})}><X size={15} /> {t('清除选择', 'Clear selection')}</button>
             </div>
           </div>
         )}
@@ -739,17 +739,17 @@ function AddressManagementView({
                     <tr key={row.id} className={cls(selectedAddress?.id === row.id && 'user-row-expanded')}>
                       <td><input className="row-check" type="checkbox" checked={selectedIds.has(row.id)} onChange={() => toggleSelected(row)} aria-label={locale === 'en-US' ? `Select ${row.name}` : `选择 ${row.name}`} /></td>
                       <td className="font-mono text-xs text-slate-400">#{row.id}</td>
-                      <td><button className="address-strong" onClick={() => void copyAddress(row.name)} title={t('点击复制邮箱地址', 'Copy mailbox address')}>{row.name}</button><p className="mt-1 text-xs text-slate-400">{profile.userEmail || '-'}</p></td>
+                      <td><button type="button" className="address-strong" onClick={() => void copyAddress(row.name)} title={t('点击复制邮箱地址', 'Copy mailbox address')}>{row.name}</button><p className="mt-1 text-xs text-slate-400">{profile.userEmail || '-'}</p></td>
                       <td>{roleLabel}</td>
                       <td>{row.mail_count ?? 0}</td>
                       <td>{row.send_count ?? 0}</td>
                       <td>{formatDateTime(row.updated_at || row.created_at)}</td>
                       <td className="address-actions-cell">
                         <div className="address-desktop-actions">
-                          <button className="table-action" onClick={() => void copyAddress(row.name)} title={t('复制邮箱地址', 'Copy mailbox address')}><Copy size={15} /></button>
-                          <button className="table-action" disabled={shareActionBusy === row.id} onClick={() => void runShare([row], row.id, '30d', 'new')} title={t('创建共享链接', 'Create share link')}><Share2 size={15} className={cls(shareActionBusy === row.id && 'animate-pulse')} /></button>
-                          <button className="table-action" onClick={() => openInbox(row)} title={t('查看收件箱', 'View inbox')}><MailOpen size={15} /></button>
-                          <button className="table-action" onClick={() => openSent(row)} title={t('查看发件箱', 'View sent')}><Send size={15} /></button>
+                          <button type="button" className="table-action" onClick={() => void copyAddress(row.name)} title={t('复制邮箱地址', 'Copy mailbox address')}><Copy size={15} /></button>
+                          <button type="button" className="table-action" disabled={shareActionBusy === row.id} onClick={() => void runShare([row], row.id, '30d', 'new')} title={t('创建共享链接', 'Create share link')}><Share2 size={15} className={cls(shareActionBusy === row.id && 'animate-pulse')} /></button>
+                          <button type="button" className="table-action" onClick={() => openInbox(row)} title={t('查看收件箱', 'View inbox')}><MailOpen size={15} /></button>
+                          <button type="button" className="table-action" onClick={() => openSent(row)} title={t('查看发件箱', 'View sent')}><Send size={15} /></button>
                         </div>
                       </td>
                     </tr>
@@ -785,7 +785,7 @@ function AddressManagementView({
             </div>
             <label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={randomSubdomain} onChange={(event) => setRandomSubdomain(event.target.checked)} />{t('随机二级域名', 'Random subdomain')}</label>
             {error ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">{error}</p> : null}
-            <button className="btn-primary w-full" disabled={busy === 'create'} onClick={() => void handleCreateAddress()}>
+            <button type="button" className="btn-primary w-full" disabled={busy === 'create'} onClick={() => void handleCreateAddress()}>
               {busy === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />} {busy === 'create' ? t('创建中...', 'Creating...') : t('创建', 'Create')}
             </button>
           </div>
@@ -807,14 +807,14 @@ function AddressManagementView({
               <PopoverSelect ariaLabel={t('共享邮件范围', 'Shared mail range')} value={shareMailVisibility} options={shareVisibilityOptions} onChange={(value) => setShareMailVisibility(value as UserShareMailVisibility)} />
             </div>
             <label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={shareAllowHideMail} onChange={(event) => setShareAllowHideMail(event.target.checked)} />{t('允许访客从分享页隐藏邮件', 'Allow visitors to hide mail in the share page')}</label>
-            <button className="btn-primary w-full" disabled={shareBusy || selectedRows.length === 0} onClick={() => void runShare(selectedRows, 'bulk')}>
+            <button type="button" className="btn-primary w-full" disabled={shareBusy || selectedRows.length === 0} onClick={() => void runShare(selectedRows, 'bulk')}>
               {shareBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 size={16} />} {shareBusy ? t('正在创建...', 'Creating...') : t('创建并复制共享链接', 'Create and copy share link')}
             </button>
             {shareResult ? (
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded-xl bg-white px-3 py-2 text-xs text-slate-500">{shareResult.url}</code>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button className="btn-secondary compact" onClick={() => void copyText(shareResult.url)}><Copy size={15} /> {t('复制', 'Copy')}</button>
+                  <button type="button" className="btn-secondary compact" onClick={() => void copyText(shareResult.url)}><Copy size={15} /> {t('复制', 'Copy')}</button>
                   <a className="btn-secondary compact" href={shareResult.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> {t('打开测试', 'Open test')}</a>
                 </div>
               </div>
@@ -862,7 +862,7 @@ export function DirectMailboxConsole({ apiBase, jwt, address, locale, theme, set
           miniActionColumns={2}
           sidebarSubtitle={localeText('邮箱直达', 'Mailbox', locale)}
         >
-          <button className="sidebar-mini-btn" onClick={onSignOut} title={localeText('退出登录', 'Sign out', locale)}><LogOut size={15} />{localeText('退出', 'Sign out', locale)}</button>
+          <button type="button" className="sidebar-mini-btn" onClick={onSignOut} title={localeText('退出登录', 'Sign out', locale)}><LogOut size={15} />{localeText('退出', 'Sign out', locale)}</button>
         </Sidebar>
         <main className="mobile-page-swipe-zone mobile-mail-shell relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-surface)]">
           <Header activeMenu="inbox" setActiveMenu={() => undefined} query="" setQuery={() => undefined} refresh={() => setMailRefreshKey((value) => value + 1)} apiBase={apiBase} locale={locale} />

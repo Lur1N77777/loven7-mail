@@ -364,6 +364,7 @@ const UI_COPY = {
     sharedMailbox: "共享邮箱",
     selectMailbox: "选择邮箱",
     copied: "已复制",
+    copyFailed: "复制失败，请手动复制",
     copyAddressAction: "复制",
     copyAddressTitle: "点击复制邮箱地址",
     autoRefreshTitleOn: "已开启：每 10 秒自动刷新",
@@ -456,6 +457,7 @@ const UI_COPY = {
     sharedMailbox: "Shared mailbox",
     selectMailbox: "Choose mailbox",
     copied: "Copied",
+    copyFailed: "Copy failed. Please copy manually.",
     copyAddressAction: "Copy",
     copyAddressTitle: "Copy mailbox address",
     autoRefreshTitleOn: "On: auto refresh every 10 seconds",
@@ -1407,24 +1409,40 @@ export default function App() {
 
   const copyCurrentAddress = useCallback(async () => {
     if (!session?.address) return;
-    await copyText(session.address);
-    setAddressCopied(true);
-    if (addressCopyTimerRef.current) window.clearTimeout(addressCopyTimerRef.current);
-    addressCopyTimerRef.current = window.setTimeout(() => setAddressCopied(false), 1600);
-  }, [session?.address]);
+    try {
+      await copyText(session.address);
+      setAddressCopied(true);
+      if (addressCopyTimerRef.current) window.clearTimeout(addressCopyTimerRef.current);
+      addressCopyTimerRef.current = window.setTimeout(() => setAddressCopied(false), 1600);
+    } catch {
+      showToast(copy.copyFailed);
+    }
+  }, [copy.copyFailed, session?.address, showToast]);
 
 
 
   const copyVerificationCode = useCallback(async (mail: ParsedMail) => {
     if (!mail.verificationCode) return;
-    await copyText(mail.verificationCode);
-    setCopiedCodeMailId(mail.id);
-    showToast(copy.codeCopied);
-    if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
-    codeCopyTimerRef.current = window.setTimeout(() => setCopiedCodeMailId(null), 1500);
-  }, [copy.codeCopied, showToast]);
+    try {
+      await copyText(mail.verificationCode);
+      setCopiedCodeMailId(mail.id);
+      showToast(copy.codeCopied);
+      if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
+      codeCopyTimerRef.current = window.setTimeout(() => setCopiedCodeMailId(null), 1500);
+    } catch {
+      showToast(copy.copyFailed);
+    }
+  }, [copy.codeCopied, copy.copyFailed, showToast]);
 
   const bodyText = useMemo(() => (selectedMail ? getMailBodyText(selectedMail) : ""), [selectedMail]);
+  const copyBodyText = useCallback(async () => {
+    try {
+      await copyText(bodyText);
+      showToast(copy.bodyCopied);
+    } catch {
+      showToast(copy.copyFailed);
+    }
+  }, [bodyText, copy.bodyCopied, copy.copyFailed, showToast]);
   const activeViewMode: MailViewMode = selectedMail?.html ? mailViewMode : mailViewMode === "source" ? "source" : "text";
   const selectedResolvedHtml = selectedMail?.html
     ? (resolvedHtml?.cacheKey === session?.cacheKey && resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : selectedMail.html)
@@ -1606,7 +1624,7 @@ export default function App() {
         </div>
 
         <div className="toolbar">
-          <button
+          <button type="button"
             className={`primary-button refresh-button ${autoRefreshEnabled ? "auto-refresh-active" : ""}`}
             disabled={loading === "sync" || isRefreshing}
             aria-busy={isRefreshing}
@@ -1642,7 +1660,7 @@ export default function App() {
             <span>{copy.auto}</span>
           </button>
           <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
-          <button className="ghost-button" onClick={logout}>{copy.logout}</button>
+          <button type="button" className="ghost-button" onClick={logout}>{copy.logout}</button>
         </div>
 
         <div className="mail-list" aria-label={copy.sidebarLabel}>
@@ -1669,7 +1687,7 @@ export default function App() {
         </div>
 
         {hasMoreHistory ? (
-          <button className="load-more" disabled={loading === "sync"} onClick={loadMore}>
+          <button type="button" className="load-more" disabled={loading === "sync"} onClick={loadMore}>
             {copy.loadMore}
           </button>
         ) : mails.length ? (
@@ -1685,14 +1703,14 @@ export default function App() {
           <section className="empty-state error-state">
             <h1>{copy.loadFailed}</h1>
             <p>{error}</p>
-            <button className="primary-button" onClick={() => {
+            <button type="button" className="primary-button" onClick={() => {
               const run = getRunForSession(session);
               void hydrateAndSync(session, run);
             }}>{copy.retry}</button>
           </section>
         ) : selectedMail ? (
           <article className="mail-detail">
-            <button className="mobile-back" onClick={() => setMobilePane("list")}>{copy.backToList}</button>
+            <button type="button" className="mobile-back" onClick={() => setMobilePane("list")}>{copy.backToList}</button>
             <header className="detail-header">
               <BrandAvatar sender={selectedMail.from?.address || getSender(selectedMail, locale)} senderName={selectedMail.from?.name || getSender(selectedMail, locale)} size={42} className="mail-detail-brand-avatar" />
               <div className="detail-title-block">
@@ -1701,12 +1719,12 @@ export default function App() {
               </div>
               <div className="detail-actions">
                 {selectedMail.verificationCode ? (
-                  <button className="primary-button" onClick={() => copyVerificationCode(selectedMail)}>
+                  <button type="button" className="primary-button" onClick={() => copyVerificationCode(selectedMail)}>
                     {copy.copyCode}
                   </button>
                 ) : null}
-                <button className="ghost-button" onClick={() => copyText(bodyText).then(() => showToast(copy.bodyCopied))}>{copy.copyBody}</button>
-                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button className="danger-button" onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
+                <button type="button" className="ghost-button" onClick={() => void copyBodyText()}>{copy.copyBody}</button>
+                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button type="button" className="danger-button" onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
               </div>
             </header>
 
@@ -1719,25 +1737,22 @@ export default function App() {
             </dl>
 
             <div className="mail-view-tabs" role="tablist" aria-label={copy.mailFormat}>
-              <button
+              <button type="button"
                 className={activeViewMode === "html" ? "active" : ""}
                 disabled={!selectedMail.html}
                 onClick={() => setMailViewMode("html")}
-                type="button"
               >
                 {copy.htmlFormat}
               </button>
-              <button
+              <button type="button"
                 className={activeViewMode === "text" ? "active" : ""}
                 onClick={() => setMailViewMode("text")}
-                type="button"
               >
                 {copy.textFormat}
               </button>
-              <button
+              <button type="button"
                 className={activeViewMode === "source" ? "active" : ""}
                 onClick={() => setMailViewMode("source")}
-                type="button"
               >
                 {copy.sourceFormat}
               </button>

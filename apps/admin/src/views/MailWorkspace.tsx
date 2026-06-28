@@ -1521,8 +1521,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
                   </div>
                 )}
               </div>
-              <button className="mail-tool-btn mail-read-btn" onClick={markVisibleRead} title={t('将当前筛选结果标记为已读', 'Mark current filtered results as read')} aria-label={t('一键已读', 'Mark visible read')}><CheckCheck size={15} /><span className="mail-tool-text">{t('一键已读', 'Mark read')}</span></button>
-              <button className="mail-tool-btn mail-read-btn" onClick={markAllRead} title={t('将当前邮箱已存在邮件全部标记为已读', 'Mark all existing mail in this mailbox as read')} aria-label={t('全部已读', 'Mark all read')}><CheckCheck size={15} /><span className="mail-tool-text">{t('全部已读', 'All read')}</span></button>
+              <button type="button" className="mail-tool-btn mail-read-btn" onClick={markVisibleRead} title={t('将当前筛选结果标记为已读', 'Mark current filtered results as read')} aria-label={t('一键已读', 'Mark visible read')}><CheckCheck size={15} /><span className="mail-tool-text">{t('一键已读', 'Mark read')}</span></button>
+              <button type="button" className="mail-tool-btn mail-read-btn" onClick={markAllRead} title={t('将当前邮箱已存在邮件全部标记为已读', 'Mark all existing mail in this mailbox as read')} aria-label={t('全部已读', 'Mark all read')}><CheckCheck size={15} /><span className="mail-tool-text">{t('全部已读', 'All read')}</span></button>
             </div>
           </div>
           <div className="mail-address-search-row mt-2" data-no-page-swipe="true">
@@ -1553,7 +1553,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
                 </button>
               )}
             </div>
-            <button className="mail-tool-btn primary mail-search-refresh" onClick={() => fetchData(true)} title={t('增量刷新', 'Refresh incrementally')} aria-label={t('增量刷新', 'Refresh incrementally')}><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">{t('刷新', 'Refresh')}</span></button>
+            <button type="button" className="mail-tool-btn primary mail-search-refresh" onClick={() => fetchData(true)} title={t('增量刷新', 'Refresh incrementally')} aria-label={t('增量刷新', 'Refresh incrementally')}><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span className="mail-tool-text">{t('刷新', 'Refresh')}</span></button>
           </div>
         </div>
         {compactViewport && (
@@ -1690,9 +1690,9 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, c
       </div>
       <div className="flex items-center gap-2 md:gap-3">
         <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-        <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+        <button type="button" onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} aria-label={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
           <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
-        </span>
+        </button>
       </div>
         </div>
       </div>
@@ -1776,9 +1776,9 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
           </div>
           <div className="flex items-center gap-2 md:gap-3">
             <p className="line-clamp-1 min-w-0 flex-1 text-[12px] leading-5 text-slate-500 md:text-xs">{mail.preview}</p>
-            <span onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
+            <button type="button" onClick={(event) => { event.stopPropagation(); onToggleStar(mail); }} title={t('收藏', 'Star')} aria-label={t('收藏', 'Star')} className={cls('mail-star-toggle shrink-0 rounded-full p-1 transition', mail.isStarred ? 'text-slate-700' : 'text-slate-300 opacity-0 group-hover:opacity-100')}>
               <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
-            </span>
+            </button>
           </div>
           <div className={cls('mail-stack-children-shell', expanded && 'open')} aria-hidden={!expanded}>
             <div className="mail-stack-children" onClick={(event) => event.stopPropagation()}>
@@ -1893,7 +1893,7 @@ function MailDetail({
               <div className="min-w-0">
                 <h1 className="mail-detail-subject truncate text-[1.05rem] font-bold leading-snug text-slate-800 sm:text-[1.25rem] md:text-[1.45rem]">{mail.subject}</h1>
               </div>
-              <button onClick={() => onToggleStar(mail)} className={cls('mail-detail-star rounded-full p-2 transition hover:bg-slate-100', mail.isStarred ? 'text-slate-800' : 'text-slate-300 hover:text-slate-600')} title={t('星星代表收藏/标记，点击后可在列表“标注”里筛选', 'Starred mail appears in the Starred filter')}><Star size={21} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
+              <button type="button" onClick={() => onToggleStar(mail)} className={cls('mail-detail-star rounded-full p-2 transition hover:bg-slate-100', mail.isStarred ? 'text-slate-800' : 'text-slate-300 hover:text-slate-600')} title={t('星星代表收藏/标记，点击后可在列表“标注”里筛选', 'Starred mail appears in the Starred filter')}><Star size={21} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
             </div>
             <div className="mail-detail-sender-row mt-2.5 flex gap-2.5 md:mt-3">
               <BrandAvatar sender={senderAddress} senderName={senderName} size={40} className="mail-detail-brand-avatar" />
@@ -1907,9 +1907,9 @@ function MailDetail({
               <div className="mail-detail-sender-actions hidden shrink-0 lg:flex">
                 <time className="mail-detail-inline-time">{formatShortDate(mail.created_at)}</time>
                 <div className="mail-detail-action-row">
-                  <button onClick={() => onReply(mail)} className="detail-action" title={t('回复', 'Reply')}><Reply size={16} /></button>
-                  <button onClick={() => onToggleStar(mail)} className="detail-action" title={t('星标', 'Star')}><Star size={16} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
-                  <button onClick={() => onForward(mail)} className="detail-action" title={t('更多', 'More')}><MoreHorizontal size={16} /></button>
+                  <button type="button" onClick={() => onReply(mail)} className="detail-action" title={t('回复', 'Reply')}><Reply size={16} /></button>
+                  <button type="button" onClick={() => onToggleStar(mail)} className="detail-action" title={t('星标', 'Star')}><Star size={16} fill={mail.isStarred ? 'currentColor' : 'none'} /></button>
+                  <button type="button" onClick={() => onForward(mail)} className="detail-action" title={t('更多', 'More')}><MoreHorizontal size={16} /></button>
                 </div>
               </div>
             </div>

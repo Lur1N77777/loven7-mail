@@ -44,7 +44,7 @@ function decodeAccessToken(token: string): DecodedAccessToken | null {
 export function CredentialButton({ onClick, label }: { onClick: () => void; label?: string }) {
   const locale = getRuntimeLocale();
   return (
-    <button onClick={onClick} className="sidebar-mini-btn credential-button" aria-label={label || localeText('凭据设置', 'Credential settings', locale)}>
+    <button type="button" onClick={onClick} className="sidebar-mini-btn credential-button" aria-label={label || localeText('凭据设置', 'Credential settings', locale)}>
       <GateLogo className="credential-button-logo" />
       <span className="credential-button-label">{label || localeText('凭据', 'Auth', locale)}</span>
     </button>

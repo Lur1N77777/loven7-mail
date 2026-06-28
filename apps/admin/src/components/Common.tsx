@@ -53,7 +53,7 @@ export function Modal({
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-3.5">
           <h3 className="min-w-0 truncate text-base font-semibold text-slate-800 sm:text-lg">{title}</h3>
-          <button onClick={onClose} aria-label={localeText('关闭', 'Close', locale)} className="ml-3 shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+          <button type="button" onClick={onClose} aria-label={localeText('关闭', 'Close', locale)} className="ml-3 shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
             <X size={18} />
           </button>
         </div>
@@ -93,8 +93,8 @@ export function useConfirm() {
     <Modal title={confirmState.title} onClose={close}>
       <p className="text-sm leading-6 text-slate-500">{confirmState.body || localeText('该操作不可撤销，请确认。', 'This action cannot be undone. Please confirm.', locale)}</p>
       <div className="mt-6 flex justify-end gap-3">
-        <button className="btn-secondary" disabled={busy} onClick={close}>{localeText('取消', 'Cancel', locale)}</button>
-        <button className="btn-danger" disabled={busy} onClick={handleConfirm}>
+        <button type="button" className="btn-secondary" disabled={busy} onClick={close}>{localeText('取消', 'Cancel', locale)}</button>
+        <button type="button" className="btn-danger" disabled={busy} onClick={handleConfirm}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           {confirmState.actionLabel || localeText('确认', 'Confirm', locale)}
         </button>
@@ -354,8 +354,8 @@ export function Pagination({ page, setPage, pageSize, setPageSize, totalPages, c
           </button>
           {variant === 'floating' ? (typeof document === 'undefined' ? menu : createPortal(menu, document.body)) : menu}
         </div>
-        <button className="page-btn compact" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={localeText('上一页', 'Previous page', locale)}>‹</button>
-        <button className="page-btn compact" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={localeText('下一页', 'Next page', locale)}>›</button>
+        <button type="button" className="page-btn compact" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label={localeText('上一页', 'Previous page', locale)}>‹</button>
+        <button type="button" className="page-btn compact" disabled={page >= totalPages} onClick={() => setPage(page + 1)} aria-label={localeText('下一页', 'Next page', locale)}>›</button>
       </div>
     </div>
   );

@@ -207,9 +207,9 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button onClick={refresh} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><RefreshCw className={cls('mr-2 inline h-4 w-4', loading && 'animate-spin')} />{loading ? t('同步中', 'Syncing') : t('刷新', 'Refresh')}</button>
-              <button onClick={() => setActiveMenu('compose')} className="btn-primary rounded-2xl px-4 py-3 text-sm font-semibold"><PenLine className="mr-2 inline h-4 w-4" />{t('写邮件', 'Compose')}</button>
-              <button onClick={() => setActiveMenu('settings')} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><Settings className="mr-2 inline h-4 w-4" />{t('系统设置', 'Settings')}</button>
+              <button type="button" onClick={refresh} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><RefreshCw className={cls('mr-2 inline h-4 w-4', loading && 'animate-spin')} />{loading ? t('同步中', 'Syncing') : t('刷新', 'Refresh')}</button>
+              <button type="button" onClick={() => setActiveMenu('compose')} className="btn-primary rounded-2xl px-4 py-3 text-sm font-semibold"><PenLine className="mr-2 inline h-4 w-4" />{t('写邮件', 'Compose')}</button>
+              <button type="button" onClick={() => setActiveMenu('settings')} className="dashboard-hero-ghost rounded-2xl px-4 py-3 text-sm font-medium transition"><Settings className="mr-2 inline h-4 w-4" />{t('系统设置', 'Settings')}</button>
             </div>
           </div>
         </section>
@@ -235,7 +235,7 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
               {quickActions.map((action) => {
                 const QuickIcon = action.icon;
                 return (
-                  <button key={action.menu} onClick={() => setActiveMenu(action.menu)} className="dashboard-quick-card text-left transition">
+                  <button type="button" key={action.menu} onClick={() => setActiveMenu(action.menu)} className="dashboard-quick-card text-left transition">
                     <span className="dashboard-quick-logo"><QuickIcon className="dashboard-logo-svg" /></span>
                     <p className="dashboard-quick-title font-semibold text-slate-800">{t(action.titleZh, action.titleEn)}</p>
                   </button>
@@ -337,7 +337,7 @@ export function StatsView({ stats, loading, openSettings, refresh }: { stats: St
     <div className="stats-view-shell dashboard-view-typography h-full min-h-0 overflow-y-auto p-3 md:p-4 xl:p-6">
       <div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div><h2 className="page-title">{t('统计', 'Stats')}</h2></div>
-        <button className="btn-secondary" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} /> {loading ? t('同步中', 'Syncing') : t('刷新统计', 'Refresh stats')}</button>
+        <button type="button" className="btn-secondary" onClick={refresh}><RefreshCw size={16} className={cls(loading && 'animate-spin')} /> {loading ? t('同步中', 'Syncing') : t('刷新统计', 'Refresh stats')}</button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={InboxLogo} label={t('收件总数', 'Inbox total')} value={stats.mailCount} tone="mint" />

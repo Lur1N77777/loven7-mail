@@ -1,5 +1,5 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronUp, Filter, Link2, Lock, Plus, RefreshCw, Save, Shield, Trash2, UserRoundCog } from 'lucide-react';
+import { ChevronUp, Filter, Link2, Loader2, Lock, Plus, RefreshCw, Save, Shield, Trash2, UserRoundCog } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { CACHE_TTL, DEFAULT_PAGE_SIZE, STORAGE_KEYS } from '../lib/constants';
 import { cls, formatDateTime } from '../lib/format';
@@ -50,6 +50,7 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', password: '' });
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [roleTarget, setRoleTarget] = useState<UserRecord | null>(null);
   const [resetTarget, setResetTarget] = useState<UserRecord | null>(null);
   const [expandedUser, setExpandedUser] = useState<UserRecord | null>(null);
@@ -127,10 +128,12 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
 
   const totalPages = Math.max(1, Math.ceil(count / pageSize));
   const createUser = async () => {
+    if (actionBusy) return;
     const email = newUser.email.trim();
     const password = newUser.password.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { notify('error', t('请填写有效的用户邮箱', 'Enter a valid user email')); return; }
     if (password.length < 6) { notify('error', t('请填写至少 6 位密码', 'Enter at least 6 password characters')); return; }
+    setActionBusy('create');
     try {
       await request('/admin/users', { method: 'POST', body: { email, password: await sha256Hex(password) } });
       notify('success', t('用户已创建', 'User created'));
@@ -139,6 +142,8 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
       await fetchData();
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('创建用户失败', 'Failed to create user'));
+    } finally {
+      setActionBusy(null);
     }
   };
   const loadUserAddresses = useCallback(async (user: UserRecord, forceRefresh = false) => {
@@ -183,8 +188,11 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   }, [finishInlineAddressRequest, notify, request, t, updateInlineAddressCache]);
 
   const bindUserAddress = useCallback(async (user: UserRecord, address: string) => {
+    const busyKey = `bind:${user.id}`;
+    if (actionBusy) return false;
     const trimmed = address.trim();
     if (!trimmed) { notify('error', t('请填写邮箱地址', 'Enter an email address')); return false; }
+    setActionBusy(busyKey);
     try {
       await request('/admin/users/bind_address', { method: 'POST', body: { user_id: user.id, user_email: user.user_email, address: trimmed } });
       notify('success', t('地址已绑定', 'Address bound'));
@@ -193,8 +201,42 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
     } catch (error) {
       notify('error', error instanceof Error ? error.message : t('绑定失败', 'Bind failed'));
       return false;
+    } finally {
+      setActionBusy(null);
     }
-  }, [loadUserAddresses, notify, request, t]);
+  }, [actionBusy, loadUserAddresses, notify, request, t]);
+
+  const updateUserRole = async (user: UserRecord, roleText: string) => {
+    if (actionBusy) return;
+    setActionBusy(`role:${user.id}:${roleText || 'default'}`);
+    try {
+      await request('/admin/user_roles', { method: 'POST', body: { user_id: user.id, role_text: roleText } });
+      notify('success', roleText ? t('角色已更新', 'Role updated') : t('已恢复默认角色', 'Default role restored'));
+      setRoleTarget(null);
+      await fetchData();
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : t('角色更新失败', 'Failed to update role'));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
+  const resetUserPassword = async () => {
+    if (!resetTarget || actionBusy) return;
+    const trimmed = password.trim();
+    if (trimmed.length < 6) { notify('error', t('请填写至少 6 位新密码', 'Enter at least 6 characters for the new password')); return; }
+    setActionBusy(`reset:${resetTarget.id}`);
+    try {
+      await request(`/admin/users/${resetTarget.id}/reset_password`, { method: 'POST', body: { password: await sha256Hex(trimmed) } });
+      notify('success', t('密码已重置', 'Password reset'));
+      setResetTarget(null);
+      setPassword('');
+    } catch (error) {
+      notify('error', error instanceof Error ? error.message : t('重置失败', 'Reset failed'));
+    } finally {
+      setActionBusy(null);
+    }
+  };
 
   useEffect(() => {
     const target = expandedUser;
@@ -262,11 +304,11 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
         </div>
         <div className="mt-2 text-[11px] text-slate-400">{formatDateTime(user.updated_at || user.created_at)}</div>
         <div className="mt-3 grid grid-cols-3 gap-1.5">
-          <button className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); toggleUser(user); }}><Link2 size={14} /> {t('地址', 'Addresses')}</button>
-          <button className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }}><Filter size={14} /> {t('筛选', 'Filter')}</button>
-          <button className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }}><Shield size={14} /> {t('角色', 'Role')}</button>
-          <button className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }}><Lock size={14} /> {t('密码', 'Password')}</button>
-          <button className="btn-danger compact col-span-2" onClick={(event) => { event.stopPropagation(); deleteUser(user); }}><Trash2 size={14} /> {t('删除', 'Delete')}</button>
+          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); toggleUser(user); }}><Link2 size={14} /> {t('地址', 'Addresses')}</button>
+          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }}><Filter size={14} /> {t('筛选', 'Filter')}</button>
+          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }}><Shield size={14} /> {t('角色', 'Role')}</button>
+          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }}><Lock size={14} /> {t('密码', 'Password')}</button>
+          <button type="button" className="btn-danger compact col-span-2" onClick={(event) => { event.stopPropagation(); deleteUser(user); }}><Trash2 size={14} /> {t('删除', 'Delete')}</button>
         </div>
       </article>
       {renderInline && <div className={cls('user-inline-mobile-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
@@ -286,11 +328,11 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
         <div>{user.address_count ?? 0}</div>
         <div>{formatDateTime(user.updated_at || user.created_at)}</div>
         <div className="flex justify-end gap-2">
-          <button className="table-action" onClick={(event) => { event.stopPropagation(); toggleUser(user); }} title={t('查看地址', 'View addresses')}>{expanded && !closing ? <ChevronUp size={15} /> : <Link2 size={15} />}</button>
-          <button className="table-action" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }} title={t('在地址管理筛选', 'Filter in address management')}><Filter size={15} /></button>
-          <button className="table-action" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }} title={t('角色', 'Role')}><Shield size={15} /></button>
-          <button className="table-action" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }} title={t('重置密码', 'Reset password')}><Lock size={15} /></button>
-          <button className="table-action danger" onClick={(event) => { event.stopPropagation(); deleteUser(user); }} title={t('删除', 'Delete')}><Trash2 size={15} /></button>
+          <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); toggleUser(user); }} title={t('查看地址', 'View addresses')}>{expanded && !closing ? <ChevronUp size={15} /> : <Link2 size={15} />}</button>
+          <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }} title={t('在地址管理筛选', 'Filter in address management')}><Filter size={15} /></button>
+          <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }} title={t('角色', 'Role')}><Shield size={15} /></button>
+          <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }} title={t('重置密码', 'Reset password')}><Lock size={15} /></button>
+          <button type="button" className="table-action danger" onClick={(event) => { event.stopPropagation(); deleteUser(user); }} title={t('删除', 'Delete')}><Trash2 size={15} /></button>
         </div>
       </div>
       {renderInline && <div className={cls('user-inline-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
@@ -298,18 +340,13 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   };
 
   return <div className="users-view-shell h-full space-y-4 overflow-y-auto p-3 md:p-4 xl:p-6">
-    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('用户管理', 'User management')}</h2></div><button className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> {t('新建用户', 'New user')}</button></div>
-    <div className="panel overflow-hidden"><div className="flex flex-col gap-3 border-b border-slate-100 p-3 md:flex-row"><input className="form-input compact-control" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder={t('搜索用户邮箱', 'Search user email')} /><button className="btn-secondary compact" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && users.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button></div>{loading && users.length === 0 ? <LoadingState /> : users.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={UserRoundCog} title={t('暂无用户', 'No users')} /></div> : <>
+    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('用户管理', 'User management')}</h2></div><button type="button" className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> {t('新建用户', 'New user')}</button></div>
+    <div className="panel overflow-hidden"><div className="flex flex-col gap-3 border-b border-slate-100 p-3 md:flex-row"><input className="form-input compact-control" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder={t('搜索用户邮箱', 'Search user email')} /><button type="button" className="btn-secondary compact" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && users.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button></div>{loading && users.length === 0 ? <LoadingState /> : users.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={UserRoundCog} title={t('暂无用户', 'No users')} /></div> : <>
       {isDesktopUsers ? <div className="user-grid-scroll"><div className="user-grid-list" role="table" aria-label={t('用户列表', 'User list')}><div className="user-grid-row user-grid-header" role="row"><div>ID</div><div>{t('邮箱', 'Email')}</div><div>{t('角色', 'Role')}</div><div>{t('地址数', 'Addresses')}</div><div>{t('更新时间', 'Updated')}</div><div className="text-right">{t('操作', 'Actions')}</div></div>{users.map(renderDesktopUser)}</div></div> : <div className="space-y-2 p-3">{users.map(renderMobileUser)}</div>}
     </>}<Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} /></div>
-    {createOpen && <Modal title={t('新建用户', 'New user')} onClose={() => setCreateOpen(false)}><div className="space-y-4"><input className="form-input" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder={t('用户邮箱', 'User email')} /><input className="form-input" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder={t('用户密码', 'User password')} /><button className="btn-primary w-full" onClick={createUser}><Plus size={16} /> {t('创建', 'Create')}</button></div></Modal>}
-    {roleTarget && <Modal title={t(`修改角色：${roleTarget.user_email}`, `Change role: ${roleTarget.user_email}`)} onClose={() => setRoleTarget(null)}><div className="space-y-3"><button className="btn-secondary w-full justify-start" onClick={async () => { await request('/admin/user_roles', { method: 'POST', body: { user_id: roleTarget.id, role_text: '' } }); notify('success', t('已恢复默认角色', 'Default role restored')); setRoleTarget(null); await fetchData(); }}>{t('默认角色', 'Default role')}</button>{roles.map((role) => <button key={role.role} className="btn-secondary w-full justify-start" onClick={async () => { await request('/admin/user_roles', { method: 'POST', body: { user_id: roleTarget.id, role_text: role.role } }); notify('success', t('角色已更新', 'Role updated')); setRoleTarget(null); await fetchData(); }}>{role.label || role.role}</button>)}</div></Modal>}
-    {resetTarget && <Modal title={t(`重置密码：${resetTarget.user_email}`, `Reset password: ${resetTarget.user_email}`)} onClose={() => setResetTarget(null)}><div className="space-y-4"><input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('新密码', 'New password')} /><button className="btn-primary w-full" onClick={async () => {
-      const trimmed = password.trim();
-      if (trimmed.length < 6) { notify('error', t('请填写至少 6 位新密码', 'Enter at least 6 characters for the new password')); return; }
-      try { await request(`/admin/users/${resetTarget.id}/reset_password`, { method: 'POST', body: { password: await sha256Hex(trimmed) } }); notify('success', t('密码已重置', 'Password reset')); setResetTarget(null); }
-      catch (error) { notify('error', error instanceof Error ? error.message : t('重置失败', 'Reset failed')); }
-    }}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}
+    {createOpen && <Modal title={t('新建用户', 'New user')} onClose={() => setCreateOpen(false)}><div className="space-y-4"><input className="form-input" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder={t('用户邮箱', 'User email')} /><input className="form-input" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder={t('用户密码', 'User password')} /><button type="button" className="btn-primary w-full" disabled={actionBusy === 'create'} onClick={createUser}>{actionBusy === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />} {actionBusy === 'create' ? t('创建中...', 'Creating...') : t('创建', 'Create')}</button></div></Modal>}
+    {roleTarget && <Modal title={t(`修改角色：${roleTarget.user_email}`, `Change role: ${roleTarget.user_email}`)} onClose={() => setRoleTarget(null)}><div className="space-y-3"><button type="button" className="btn-secondary w-full justify-start" disabled={Boolean(actionBusy)} onClick={() => void updateUserRole(roleTarget, '')}>{actionBusy === `role:${roleTarget.id}:default` ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t('默认角色', 'Default role')}</button>{roles.map((role) => <button type="button" key={role.role} className="btn-secondary w-full justify-start" disabled={Boolean(actionBusy)} onClick={() => void updateUserRole(roleTarget, role.role)}>{actionBusy === `role:${roleTarget.id}:${role.role}` ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{role.label || role.role}</button>)}</div></Modal>}
+    {resetTarget && <Modal title={t(`重置密码：${resetTarget.user_email}`, `Reset password: ${resetTarget.user_email}`)} onClose={() => setResetTarget(null)}><div className="space-y-4"><input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('新密码', 'New password')} /><button type="button" className="btn-primary w-full" disabled={actionBusy === `reset:${resetTarget.id}`} onClick={() => void resetUserPassword()}>{actionBusy === `reset:${resetTarget.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />} {actionBusy === `reset:${resetTarget.id}` ? t('保存中...', 'Saving...') : t('保存', 'Save')}</button></div></Modal>}
   </div>;
 }
 
@@ -317,18 +354,25 @@ function UserAddressInline({ user, data, loading, onBind, onManage, onClose }: {
   const locale = getRuntimeLocale();
   const t = useCallback((zh: string, en: string) => localeText(zh, en, locale), [locale]);
   const [address, setAddress] = useState('');
+  const [binding, setBinding] = useState(false);
 
   const bind = async () => {
-    const ok = await onBind(address);
-    if (ok) setAddress('');
+    if (binding || loading) return;
+    setBinding(true);
+    try {
+      const ok = await onBind(address);
+      if (ok) setAddress('');
+    } finally {
+      setBinding(false);
+    }
   };
 
   return <div className="user-address-inline">
     <div className="user-address-inline-head">
       <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{locale === 'en-US' ? `${user.user_email} addresses` : `${user.user_email} 的地址`}</p><p className="text-xs text-slate-400">{locale === 'en-US' ? `${data.length} total` : `共 ${data.length} 个`}</p></div>
-      <div className="flex shrink-0 gap-2"><button className="btn-secondary compact" onClick={onManage}><Filter size={14} /> {t('地址管理筛选', 'Filter in addresses')}</button><button className="btn-secondary compact" onClick={onClose}><ChevronUp size={14} /> {t('收起', 'Collapse')}</button></div>
+      <div className="flex shrink-0 gap-2"><button type="button" className="btn-secondary compact" onClick={onManage}><Filter size={14} /> {t('地址管理筛选', 'Filter in addresses')}</button><button type="button" className="btn-secondary compact" onClick={onClose}><ChevronUp size={14} /> {t('收起', 'Collapse')}</button></div>
     </div>
-    <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input className="form-input compact-control" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t('绑定完整邮箱地址，例如 test@example.com', 'Bind full mailbox address, e.g. test@example.com')} /><button className="btn-primary compact" onClick={bind}><Link2 size={14} /> {t('绑定', 'Bind')}</button></div>
+    <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input className="form-input compact-control" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t('绑定完整邮箱地址，例如 test@example.com', 'Bind full mailbox address, e.g. test@example.com')} /><button type="button" className="btn-primary compact" disabled={binding || loading} onClick={bind}>{binding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 size={14} />} {binding ? t('绑定中', 'Binding') : t('绑定', 'Bind')}</button></div>
     {loading ? <LoadingState label={t('正在加载用户地址...', 'Loading user addresses...')} /> : data.length === 0 ? <div className="mt-3"><EmptyState icon={Link2} title={t('暂无绑定地址', 'No bound addresses')} /></div> : <div className="user-address-inline-list">{data.map((row) => <div key={row.id} className="user-address-inline-item"><div className="min-w-0"><p className="truncate font-semibold text-slate-800">{row.name}</p><p className="text-[11px] text-slate-400">#{row.id} · {formatDateTime(row.updated_at || row.created_at)}</p></div><div className="user-address-inline-stats"><span>{t('收', 'In')} {row.mail_count ?? 0}</span><span>{t('发', 'Out')} {row.send_count ?? 0}</span></div></div>)}</div>}
   </div>;
 }
