@@ -1,24 +1,27 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { createSession, deleteMail, fetchMailPage, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail } from "./api";
+import { createSession, deleteMail, fetchMailPage, fetchMailState, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail, patchMailState } from "./api";
 import { clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
 import { clearMailboxCache, readMailboxCache, writeMailboxCache } from "./cache";
 import { clearImageMemoryCache, resolveMailImageAssets } from "./imageMemoryCache";
 import { getMailBodyText, mergeMails, parseMailBatch, sanitizeMailHtml } from "./mailParser";
 import { BrandAvatar } from "./brandIdentity";
 import { applyRuntimeLocale, readInitialLocale, writeLocale, type AppLocale } from "./locale";
-import type { MailPage, ParsedMail, SafeSettings, ShareInfo, SharedMailbox, WebmailSession } from "./types";
+import type { MailPage, ParsedMail, RemoteMailState, SafeSettings, ShareInfo, SharedMailbox, WebmailSession } from "./types";
 import "./styles.css";
 
 const PAGE_SIZE = 50;
 const AUTO_REFRESH_MS = 10_000;
 const OFFICIAL_GITHUB_URL = "https://github.com/Lur1N77777/loven7-mail-cloudflare-suite";
+const MAIL_READ_HISTORY_MAX = 5000;
+const MAIL_STATE_MODE = "inbox";
 
 type LoadingState = "boot" | "login" | "sync" | "idle";
 type MobilePane = "list" | "reader";
 type MailViewMode = "html" | "text" | "source";
 type ActiveRun = { id: number; controller: AbortController; cacheKey?: string };
 type SyncTask = { runId: number; promise: Promise<void> };
+type MailReadState = { readIds: Set<string>; readAllBefore: number };
 
 const STALE_SESSION_MESSAGE = "loven7_session_changed";
 
@@ -57,6 +60,105 @@ function getSender(mail: ParsedMail, locale: AppLocale = "zh-CN") {
 
 function maxMailId(mails: ParsedMail[]) {
   return mails.reduce((max, mail) => Math.max(max, mail.id), 0);
+}
+
+function emptyMailReadState(): MailReadState {
+  return { readIds: new Set(), readAllBefore: 0 };
+}
+
+function mailStateId(id: number) {
+  return `${MAIL_STATE_MODE}:${id}`;
+}
+
+function normalizeMailStateId(value: unknown): string {
+  const raw = String(value || "").trim();
+  const numeric = Number(raw.includes(":") ? raw.split(":").pop() || "" : raw);
+  return Number.isInteger(numeric) && numeric > 0 ? mailStateId(numeric) : "";
+}
+
+function compactReadIds(ids: Iterable<string>, readAllBefore = 0) {
+  const next = new Set<string>();
+  for (const id of ids) {
+    const normalized = normalizeMailStateId(id);
+    const numeric = Number(normalized.split(":").pop() || 0);
+    if (!normalized || (readAllBefore > 0 && numeric > 0 && numeric <= readAllBefore)) continue;
+    next.add(normalized);
+  }
+  return new Set([...next].slice(-MAIL_READ_HISTORY_MAX));
+}
+
+function localMailStateScope(session: WebmailSession) {
+  return encodeURIComponent((session.address || session.cacheKey || "default").trim().toLowerCase());
+}
+
+function localMailStateKey(session: WebmailSession, name: "readIds" | "readAllBefore") {
+  return `loven7.webmail.mailState.${name}.${localMailStateScope(session)}`;
+}
+
+function readLocalMailState(session: WebmailSession | null): MailReadState {
+  if (!session || typeof localStorage === "undefined") return emptyMailReadState();
+  try {
+    const readIds = JSON.parse(localStorage.getItem(localMailStateKey(session, "readIds")) || "[]");
+    const readAllBefore = Number(localStorage.getItem(localMailStateKey(session, "readAllBefore")) || 0) || 0;
+    return {
+      readIds: compactReadIds(Array.isArray(readIds) ? readIds : [], readAllBefore),
+      readAllBefore: Math.max(0, readAllBefore),
+    };
+  } catch {
+    return emptyMailReadState();
+  }
+}
+
+function writeLocalMailState(session: WebmailSession | null, state: MailReadState) {
+  if (!session || typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(localMailStateKey(session, "readIds"), JSON.stringify([...compactReadIds(state.readIds, state.readAllBefore)]));
+    localStorage.setItem(localMailStateKey(session, "readAllBefore"), String(Math.max(0, state.readAllBefore || 0)));
+  } catch {
+    // Local persistence is best-effort; remote state remains the source of truth.
+  }
+}
+
+function readAllBeforeFromRemote(remote: RemoteMailState | null | undefined) {
+  const values = remote?.readAllBefore || {};
+  return Math.max(0, Number(values.inbox || 0) || 0, Number(values.unknown || 0) || 0);
+}
+
+function normalizeRemoteMailReadState(remote: RemoteMailState | null | undefined): MailReadState {
+  const readAllBefore = readAllBeforeFromRemote(remote);
+  return {
+    readIds: compactReadIds(remote?.readIds || [], readAllBefore),
+    readAllBefore,
+  };
+}
+
+function mergeMailReadState(left: MailReadState, right: MailReadState): MailReadState {
+  const readAllBefore = Math.max(left.readAllBefore, right.readAllBefore);
+  return {
+    readIds: compactReadIds([...left.readIds, ...right.readIds], readAllBefore),
+    readAllBefore,
+  };
+}
+
+function isMailRead(state: MailReadState, mailId: number) {
+  return mailId <= state.readAllBefore || state.readIds.has(mailStateId(mailId));
+}
+
+function applyMailReadState(mails: ParsedMail[], state: MailReadState) {
+  return mails.map((mail) => ({ ...mail, isUnread: !isMailRead(state, mail.id) }));
+}
+
+function localReadHasRemoteMiss(local: MailReadState, remote: MailReadState) {
+  if (local.readAllBefore > remote.readAllBefore) return true;
+  for (const id of local.readIds) {
+    const numeric = Number(id.split(":").pop() || 0);
+    if (numeric > remote.readAllBefore && !remote.readIds.has(id)) return true;
+  }
+  return false;
+}
+
+function isMobileListViewport() {
+  return typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
 }
 
 function readShareTokenFromPath() {
@@ -514,7 +616,7 @@ const MailListRow = React.memo(function MailListRow({
 
   return (
     <div
-      className={`mail-row ${selected ? "selected" : ""}`}
+      className={`mail-row ${selected ? "selected" : ""} ${mail.isUnread ? "unread" : "read"}`}
       role="button"
       tabIndex={0}
       onClick={select}
@@ -529,7 +631,7 @@ const MailListRow = React.memo(function MailListRow({
         <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
         <div className="mail-row-content">
           <span className="mail-row-top">
-            <strong>{mail.subject}</strong>
+            <strong><span className="mail-unread-dot" aria-hidden="true" />{mail.subject}</strong>
             <time>{formatDate(mail.date || mail.createdAt, locale)}</time>
           </span>
           <span className="mail-row-from">{sender}</span>
@@ -560,6 +662,7 @@ export default function App() {
   const [shareInfo, setShareInfo] = useState<ShareInfo | null>(null);
   const [loading, setLoading] = useState<LoadingState>("boot");
   const [mails, setMails] = useState<ParsedMail[]>([]);
+  const [mailReadState, setMailReadState] = useState<MailReadState>(() => emptyMailReadState());
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [nextOffset, setNextOffset] = useState(0);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
@@ -584,6 +687,7 @@ export default function App() {
   const runSequenceRef = useRef(0);
   const activeRunRef = useRef<ActiveRun | null>(null);
   const sessionRef = useRef<WebmailSession | null>(null);
+  const mailReadStateRef = useRef<MailReadState>(emptyMailReadState());
   const toastTimerRef = useRef<number | null>(null);
   const refreshFeedbackTimerRef = useRef<number | null>(null);
   const autoRefreshTimerRef = useRef<number | null>(null);
@@ -601,6 +705,10 @@ export default function App() {
     () => mails.find((mail) => mail.id === selectedId) || mails[0] || null,
     [mails, selectedId]
   );
+
+  useEffect(() => {
+    mailReadStateRef.current = mailReadState;
+  }, [mailReadState]);
 
   const setActiveSession = useCallback((nextSession: WebmailSession | null) => {
     sessionRef.current = nextSession;
@@ -692,6 +800,58 @@ export default function App() {
     setHasMoreHistory(false);
   }, []);
 
+  const setSessionMailReadState = useCallback((activeSession: WebmailSession | null, state: MailReadState) => {
+    const normalized = {
+      readIds: compactReadIds(state.readIds, state.readAllBefore),
+      readAllBefore: Math.max(0, state.readAllBefore || 0),
+    };
+    mailReadStateRef.current = normalized;
+    setMailReadState(normalized);
+    if (activeSession) writeLocalMailState(activeSession, normalized);
+  }, []);
+
+  const applyCurrentMailReadState = useCallback((items: ParsedMail[]) => {
+    return applyMailReadState(items, mailReadStateRef.current);
+  }, []);
+
+  const loadLocalMailReadState = useCallback((activeSession: WebmailSession | null) => {
+    const state = activeSession && !isShareSession(activeSession) ? readLocalMailState(activeSession) : emptyMailReadState();
+    setSessionMailReadState(activeSession, state);
+    return state;
+  }, [setSessionMailReadState]);
+
+  useEffect(() => {
+    if (!session || isShareSession(session)) {
+      setSessionMailReadState(session, emptyMailReadState());
+      return undefined;
+    }
+
+    let cancelled = false;
+    const activeSession = session;
+    const localState = loadLocalMailReadState(activeSession);
+    setMails((current) => applyMailReadState(current, localState));
+
+    fetchMailState(activeSession.jwt)
+      .then((remote) => {
+        if (cancelled || sessionRef.current?.cacheKey !== activeSession.cacheKey) return;
+        const remoteState = normalizeRemoteMailReadState(remote);
+        const merged = mergeMailReadState(localState, remoteState);
+        setSessionMailReadState(activeSession, merged);
+        setMails((current) => applyMailReadState(current, merged));
+        if (localReadHasRemoteMiss(localState, remoteState)) {
+          void patchMailState(activeSession.jwt, {
+            readIds: [...merged.readIds],
+            readAllBefore: { [MAIL_STATE_MODE]: merged.readAllBefore, unknown: merged.readAllBefore },
+          }).catch((error) => console.warn("mail read state backfill failed", error));
+        }
+      })
+      .catch((error) => console.warn("mail read state sync failed", error));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadLocalMailReadState, session, setSessionMailReadState]);
+
   useEffect(() => {
     writeLocale(locale);
     applyRuntimeLocale(locale);
@@ -757,7 +917,7 @@ export default function App() {
     assertRunActive(run, activeSession);
     const parsed = await parseMailBatch(page.results);
     assertRunActive(run, activeSession);
-    const next = mergeMails([], parsed);
+    const next = applyCurrentMailReadState(mergeMails([], parsed));
     setMails(next);
     setSelectedId((current) => current ?? next[0]?.id ?? null);
     const more = page.results.length === PAGE_SIZE && next.length < page.count;
@@ -772,7 +932,7 @@ export default function App() {
     setNextOffset(next.length);
     setHasMoreHistory(more);
     return next.length;
-  }, [assertRunActive, fetchSessionMailPage]);
+  }, [applyCurrentMailReadState, assertRunActive, fetchSessionMailPage]);
 
   const syncIncremental = useCallback(
     async (activeSession: WebmailSession, currentMails: ParsedMail[], run: ActiveRun) => {
@@ -811,7 +971,7 @@ export default function App() {
 
       const parsed = await parseMailBatch(rawNew);
       assertRunActive(run, activeSession);
-      const next = mergeMails(currentMails, parsed);
+      const next = applyCurrentMailReadState(mergeMails(currentMails, parsed));
       setMails(next);
       setSelectedId((current) => current ?? next[0]?.id ?? null);
       await writeMailboxCache({
@@ -826,7 +986,7 @@ export default function App() {
       setHasMoreHistory(next.length < totalCount);
       return rawNew.length;
     },
-    [assertRunActive, fetchSessionMailPage, loadFirstPage]
+    [applyCurrentMailReadState, assertRunActive, fetchSessionMailPage, loadFirstPage]
   );
 
   const hydrateAndSync = useCallback(
@@ -839,7 +999,7 @@ export default function App() {
         const cached = await readMailboxCache(activeSession.cacheKey);
         assertRunActive(run, activeSession);
         if (cached?.mails?.length) {
-          let cachedMails = cached.mails;
+          let cachedMails = applyCurrentMailReadState(cached.mails);
           setMails(cachedMails);
           setSelectedId((current) => current ?? cachedMails[0]?.id ?? null);
           setNextOffset(cached.nextOffset || cachedMails.length);
@@ -856,7 +1016,7 @@ export default function App() {
               }))
             );
             assertRunActive(run, activeSession);
-            cachedMails = mergeMails(cachedMails, reparsed);
+            cachedMails = applyCurrentMailReadState(mergeMails(cachedMails, reparsed));
             setMails(cachedMails);
             await writeMailboxCache({
               cacheKey: activeSession.cacheKey,
@@ -888,7 +1048,7 @@ export default function App() {
       syncRef.current = { runId: run.id, promise: task };
       return task;
     },
-    [assertRunActive, isRunActive, loadFirstPage, showToast, syncIncremental]
+    [applyCurrentMailReadState, assertRunActive, isRunActive, loadFirstPage, showToast, syncIncremental]
   );
 
   const activateSession = useCallback(
@@ -902,13 +1062,14 @@ export default function App() {
       attachRunSession(run, activeSession);
       saveSession(activeSession);
       setShareInfo(null);
+      loadLocalMailReadState(activeSession);
       resetMailboxState();
       setActiveSession(activeSession);
       setAutoRefreshEnabled(true);
       setMobilePane("list");
       await hydrateAndSync(activeSession, run);
     },
-    [attachRunSession, beginRun, hydrateAndSync, resetMailboxState, setActiveSession]
+    [attachRunSession, beginRun, hydrateAndSync, loadLocalMailReadState, resetMailboxState, setActiveSession]
   );
 
   const activateShareMailbox = useCallback(
@@ -936,13 +1097,14 @@ export default function App() {
         readonly: true,
       };
       attachRunSession(run, activeSession);
+      loadLocalMailReadState(activeSession);
       setShareInfo(info);
       setActiveSession(activeSession);
       setAutoRefreshEnabled(true);
       setMobilePane("list");
       await hydrateAndSync(activeSession, run);
     },
-    [assertRunActive, attachRunSession, beginRun, hydrateAndSync, resetMailboxState, setActiveSession]
+    [assertRunActive, attachRunSession, beginRun, hydrateAndSync, loadLocalMailReadState, resetMailboxState, setActiveSession]
   );
 
   const loginWithJwt = useCallback(
@@ -1016,6 +1178,7 @@ export default function App() {
         assertRunActive(run);
         if (stored) {
           attachRunSession(run, stored);
+          loadLocalMailReadState(stored);
           setActiveSession(stored);
           setMobilePane("list");
           void fetchSessionSettings(stored, run.controller.signal)
@@ -1050,7 +1213,7 @@ export default function App() {
       if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
       clearImageMemoryCache();
     };
-  }, [activateShareMailbox, assertRunActive, attachRunSession, beginRun, cancelRun, fetchSessionSettings, hydrateAndSync, isRunActive, loginWithJwt, setActiveSession]);
+  }, [activateShareMailbox, assertRunActive, attachRunSession, beginRun, cancelRun, fetchSessionSettings, hydrateAndSync, isRunActive, loadLocalMailReadState, loginWithJwt, setActiveSession]);
 
   useEffect(() => {
     const clear = () => clearImageMemoryCache();
@@ -1126,7 +1289,7 @@ export default function App() {
       assertRunActive(run, activeSession);
       const parsed = await parseMailBatch(page.results);
       assertRunActive(run, activeSession);
-      const next = mergeMails(mails, parsed);
+      const next = applyCurrentMailReadState(mergeMails(mails, parsed));
       setMails(next);
       await persist(activeSession, next, next.length, page.results.length === PAGE_SIZE && next.length < page.count, run);
     } catch (err) {
@@ -1135,7 +1298,7 @@ export default function App() {
     } finally {
       if (isRunActive(run, activeSession)) setLoading("idle");
     }
-  }, [assertRunActive, copy.loadFailedToast, fetchSessionMailPage, getRunForSession, isRunActive, loading, mails, nextOffset, persist, session]);
+  }, [applyCurrentMailReadState, assertRunActive, copy.loadFailedToast, fetchSessionMailPage, getRunForSession, isRunActive, loading, mails, nextOffset, persist, session]);
 
   const removeMail = useCallback(
     async (mail: ParsedMail) => {
@@ -1192,11 +1355,12 @@ export default function App() {
     setRefreshFeedback(null);
     setIsRefreshing(false);
     setLoading("idle");
+    setSessionMailReadState(null, emptyMailReadState());
     resetMailboxState();
     setMobilePane("list");
     setError(null);
     setLoginError(null);
-  }, [cancelRun, resetMailboxState, session, setActiveSession]);
+  }, [cancelRun, resetMailboxState, session, setActiveSession, setSessionMailReadState]);
 
   const switchSharedMailbox = useCallback(
     async (mailboxId: string) => {
@@ -1214,11 +1378,32 @@ export default function App() {
     [activateShareMailbox, copy.switchFailed, session?.shareMailboxId, session?.shareToken, shareInfo, showToast]
   );
 
+  const markMailRead = useCallback((mailId: number) => {
+    const activeSession = sessionRef.current;
+    if (!activeSession || !mailId) return;
+    const current = mailReadStateRef.current;
+    if (isMailRead(current, mailId)) return;
+    const next = mergeMailReadState(current, { readIds: new Set([mailStateId(mailId)]), readAllBefore: 0 });
+    setSessionMailReadState(activeSession, next);
+    setMails((items) => applyMailReadState(items, next));
+    if (!isShareSession(activeSession)) {
+      void patchMailState(activeSession.jwt, { readIdsToAdd: [mailStateId(mailId)] })
+        .catch((error) => console.warn("mail read state persist failed", error));
+    }
+  }, [setSessionMailReadState]);
+
   const selectMail = useCallback((mail: ParsedMail) => {
     setSelectedId(mail.id);
     setMobilePane("reader");
+    markMailRead(mail.id);
     if (!mail.html && mailViewMode === "html") setMailViewMode("text");
-  }, [mailViewMode]);
+  }, [mailViewMode, markMailRead]);
+
+  useEffect(() => {
+    if (!session || !selectedMail) return;
+    if (mobilePane !== "reader" && isMobileListViewport()) return;
+    markMailRead(selectedMail.id);
+  }, [markMailRead, mobilePane, selectedMail?.id, session]);
 
   const copyCurrentAddress = useCallback(async () => {
     if (!session?.address) return;

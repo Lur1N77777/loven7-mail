@@ -1,5 +1,6 @@
 import type {
   MailPage,
+  RemoteMailState,
   SafeSettings,
   SessionResponse,
   ShareInfo,
@@ -33,6 +34,11 @@ function friendlyErrorMessage(code: string, message: string) {
     return isEnglish
       ? "Sharing is not configured. Set SHARE_ENCRYPTION_SECRET in Cloudflare Pages, then redeploy."
       : "共享功能未完成配置。请在 Cloudflare Pages 设置 SHARE_ENCRYPTION_SECRET 后重新部署。";
+  }
+  if (code === "mail_state_kv_not_configured") {
+    return isEnglish
+      ? "Read-state sync is not configured. Bind MAIL_READ_STATE_KV or SHARE_KV in Cloudflare Pages, then redeploy."
+      : "已读状态同步未配置。请在 Cloudflare Pages 绑定 MAIL_READ_STATE_KV 或 SHARE_KV 后重新部署。";
   }
   if (code === "share_not_configured" || /SHARE_KV|SHARE_ENCRYPTION_SECRET/i.test(raw)) {
     return isEnglish
@@ -128,4 +134,23 @@ export async function deleteMail(jwt: string, mailId: number, options: RequestOp
     signal: options.signal,
   });
   await parseResponse<{ ok: boolean }>(response);
+}
+
+export async function fetchMailState(jwt: string, options: RequestOptions = {}): Promise<RemoteMailState> {
+  const response = await fetch("/api/mail-state", {
+    headers: authHeaders(jwt),
+    cache: "no-store",
+    signal: options.signal,
+  });
+  return parseResponse<RemoteMailState>(response);
+}
+
+export async function patchMailState(jwt: string, body: Partial<RemoteMailState> & { readIdsToAdd?: string[] }, options: RequestOptions = {}): Promise<RemoteMailState> {
+  const response = await fetch("/api/mail-state", {
+    method: "PATCH",
+    headers: { ...authHeaders(jwt), "content-type": "application/json" },
+    body: JSON.stringify({ mode: "inbox", ...body }),
+    signal: options.signal,
+  });
+  return parseResponse<RemoteMailState>(response);
 }

@@ -2084,6 +2084,37 @@ input {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-accent) 12%, transparent);
 }
 
+.mail-row.unread {
+  border-color: color-mix(in srgb, var(--lm-accent) 26%, var(--lm-border));
+  background: color-mix(in srgb, var(--lm-surface) 92%, var(--lm-accent-soft) 8%);
+}
+
+.mail-row.read {
+  background: color-mix(in srgb, var(--lm-surface) 97%, #fff 3%);
+}
+
+.mail-row.read .mail-row-top strong,
+.mail-row.read .mail-row-from,
+.mail-row.read .mail-row-preview {
+  color: color-mix(in srgb, var(--lm-muted) 82%, var(--lm-text) 18%);
+  font-weight: 650;
+}
+
+.mail-unread-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 999px;
+  vertical-align: 1px;
+  background: var(--lm-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lm-accent) 12%, transparent);
+}
+
+.mail-row.read .mail-unread-dot {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .toolbar {
     margin-bottom: 13px;

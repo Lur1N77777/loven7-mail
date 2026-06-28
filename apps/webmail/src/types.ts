@@ -77,6 +77,15 @@ export type ParsedMail = {
   createdAt: string;
   attachments?: ParsedAttachmentSummary[];
   verificationCode?: string;
+  isUnread?: boolean;
+};
+
+export type RemoteMailState = {
+  mode?: "inbox";
+  readIds?: string[];
+  starredIds?: string[];
+  readAllBefore?: Record<string, number>;
+  updatedAt?: number;
 };
 
 export type WebmailSession = {

@@ -6,6 +6,10 @@ compatibility_date = "2026-05-11"
 #   binding: SHARE_KV
 #   namespace: 你自己创建的 KV Namespace
 #
+# 邮件已读同步推荐额外绑定同一个管理后台状态 KV：
+#   binding: MAIL_READ_STATE_KV
+#   namespace: 与 apps/admin 的 MAIL_READ_STATE_KV 相同
+#
 # Wrangler Direct Upload 部署时，如果你明确设置了
 # WEBMAIL_USE_LOCAL_WRANGLER_CONFIG=1，需要把下面示例改成你自己的 KV ID
 # 并取消注释。公开仓库不能提交真实 KV Namespace ID。
@@ -14,4 +18,9 @@ compatibility_date = "2026-05-11"
 # binding = "SHARE_KV"
 # id = "replace-with-your-production-kv-namespace-id"
 # preview_id = "replace-with-your-preview-kv-namespace-id"
+#
+# [[kv_namespaces]]
+# binding = "MAIL_READ_STATE_KV"
+# id = "replace-with-your-production-mail-state-kv-namespace-id"
+# preview_id = "replace-with-your-preview-mail-state-kv-namespace-id"
 

@@ -24,6 +24,20 @@ export interface CloudmailEnv {
       cursor?: string;
     }>;
   };
+  MAIL_READ_STATE_KV?: {
+    get(key: string): Promise<string | null>;
+    put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+    delete(key: string): Promise<void>;
+    list(options?: {
+      prefix?: string;
+      cursor?: string;
+      limit?: number;
+    }): Promise<{
+      keys: Array<{ name: string; expiration?: number; metadata?: unknown }>;
+      list_complete: boolean;
+      cursor?: string;
+    }>;
+  };
 }
 
 export interface PagesContext<Params extends Record<string, string> = Record<string, string>> {

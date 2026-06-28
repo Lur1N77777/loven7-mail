@@ -25,6 +25,7 @@
 | `SHARE_ENCRYPTION_SECRET` | 分享功能必填 | 加密分享记录，建议 32 字符以上随机字符串。 |
 | `SHARE_ADMIN_CORS_ORIGINS` | 分站管理分享时必填 | 允许跨源调用分享管理接口的后台来源，逗号分隔，例如 `https://your-admin.pages.dev`。 |
 | `SHARE_PUBLIC_CORS_ORIGINS` | 否 | 公开分享 API 的额外跨源来源；默认空，仅允许同源分享页调用。 |
+| `MAIL_READ_STATE_KV` | 推荐 | 邮件已读状态同步 KV。和管理后台绑定到同一个 Namespace 时，电脑端/手机端/后台/用户站可共享已读状态。 |
 
 > 后台与用户站分开部署时，请把管理后台的完整 origin 写入 `SHARE_ADMIN_CORS_ORIGINS`。不要设置 `*`；公开分享页正常使用同源相对请求，不需要额外 public CORS。
 
@@ -35,7 +36,14 @@
 - Binding name: `SHARE_KV`
 - Namespace: 你自己创建的 KV Namespace
 
-这是本项目唯一需要的数据库能力。KV 不需要建表、迁移或 SQL；它只保存分享链接、撤回状态和访客隐藏邮件记录。
+邮件已读同步推荐额外绑定同一个管理后台状态 KV：
+
+- Binding name: `MAIL_READ_STATE_KV`
+- Namespace: 与管理后台 `MAIL_READ_STATE_KV` 相同的 KV Namespace
+
+如果没有配置 `MAIL_READ_STATE_KV`，用户站会退回使用 `SHARE_KV` 保存已读状态；这种情况下用户站内部可跨设备同步，但不会和管理后台共用同一份状态。
+
+KV 不需要建表、迁移或 SQL；它保存分享链接、撤回状态、访客隐藏邮件记录以及邮件已读状态。
 
 如果只使用单邮箱 JWT 登录、不使用分享功能，可以暂时不绑定 KV；但管理后台里的分享管理会不可用。
 
