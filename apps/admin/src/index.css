@@ -14897,6 +14897,31 @@ body.theme-dark,
   text-transform: none !important;
 }
 
+.dashboard-view-shell .dashboard-brand-lockup {
+  align-items: center !important;
+}
+
+.dashboard-view-shell .dashboard-brand-title {
+  font-size: clamp(2rem, 4.2vw, 3.4rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  line-height: .98 !important;
+}
+
+.dashboard-view-shell .dashboard-brand-lockup .dashboard-hero-mark {
+  display: flex !important;
+  width: clamp(52px, 6vw, 74px) !important;
+  height: clamp(52px, 6vw, 74px) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--admin-text) !important;
+}
+
+.dashboard-view-shell .dashboard-brand-lockup .dashboard-hero-logo {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .dashboard-view-shell .dashboard-stat-card {
   min-height: 126px !important;
   padding: 16px !important;
@@ -16604,6 +16629,11 @@ body .mail-workspace .mail-row-unread .mail-sender {
 
 body .dashboard-view-shell .dashboard-hero-title {
   font-weight: 540 !important;
+  letter-spacing: 0 !important;
+}
+
+body .dashboard-view-shell .dashboard-brand-title {
+  font-weight: 700 !important;
   letter-spacing: 0 !important;
 }
 

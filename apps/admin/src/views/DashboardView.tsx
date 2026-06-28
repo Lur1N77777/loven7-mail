@@ -11,9 +11,9 @@ import {
   ChartLogo,
   DeleteMailLogo,
   GateLogo,
-  HeroOrbitLogo,
   InboxLogo,
   LockLogo,
+  LovenMailMark,
   SentLogo,
   SettingsLogo,
   StorageLogo,
@@ -198,11 +198,11 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
       <div className="space-y-4">
         <section className="dashboard-hero p-4 sm:rounded-[2rem] md:p-6">
           <div className="relative z-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="dashboard-hero-mark hidden shrink-0 sm:flex" aria-hidden="true"><HeroOrbitLogo className="dashboard-hero-logo" /></div>
+            <div className="dashboard-brand-lockup flex min-w-0 items-start gap-4">
+              <div className="dashboard-hero-mark shrink-0" aria-hidden="true"><LovenMailMark className="dashboard-hero-logo" /></div>
               <div className="min-w-0">
-              <p className="dashboard-hero-kicker text-sm">Loven7 Mail</p>
-              <h2 className="dashboard-hero-title mt-2 text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">{t('临时邮箱后台已就绪', 'Temp mail admin is ready')}</h2>
+                <p className="dashboard-hero-kicker text-sm">{t('官方邮箱后台', 'Official mail console')}</p>
+                <h2 className="dashboard-hero-title dashboard-brand-title mt-1 text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">Loven7 Mail</h2>
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
