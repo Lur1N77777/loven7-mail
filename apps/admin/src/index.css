@@ -4011,17 +4011,23 @@ body.theme-dark {
 /* Smooth expand/collapse for "用户 -> 地址" inline panel. */
 .user-inline-motion,
 .user-inline-mobile-motion {
-  display: grid;
-  grid-template-rows: 1fr;
+  --user-inline-y: -4px;
+  height: var(--user-inline-height, 0px);
+  opacity: 0;
   overflow: hidden;
   transform-origin: top center;
-  will-change: grid-template-rows, opacity, transform;
-  contain: paint;
+  transform: translate3d(0, var(--user-inline-y), 0);
+  transition:
+    height var(--user-inline-duration, 190ms) cubic-bezier(.22,.61,.36,1),
+    opacity 140ms ease,
+    transform var(--user-inline-duration, 190ms) cubic-bezier(.22,.61,.36,1);
+  will-change: height, opacity, transform;
+  contain: layout paint;
 }
 
 .user-inline-motion-inner {
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .user-inline-motion > .user-inline-motion-inner {
@@ -4034,39 +4040,15 @@ body.theme-dark {
 
 .user-inline-motion.is-open,
 .user-inline-mobile-motion.is-open {
-  animation: userInlinePanelOpen .24s cubic-bezier(.22,.61,.36,1) both;
+  --user-inline-y: 0px;
+  opacity: 1;
 }
 
 .user-inline-motion.is-closing,
 .user-inline-mobile-motion.is-closing {
+  --user-inline-y: -4px;
+  opacity: 1;
   pointer-events: none;
-  animation: userInlinePanelClose .24s cubic-bezier(.4,0,.2,1) both;
-}
-
-@keyframes userInlinePanelOpen {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes userInlinePanelClose {
-  from {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(-4px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -18730,12 +18712,12 @@ body.theme-dark .mail-list-load-more {
   color: rgba(235, 238, 244, .58) !important;
 }
 
-/* --- FINAL V70 user inline panel performance: quicker collapse, isolated paint. --- */
+/* --- FINAL V70 user inline panel performance: measured-height collapse, isolated paint. --- */
 .user-inline-motion,
 .user-inline-mobile-motion {
   contain: layout paint style !important;
   isolation: isolate !important;
-  transform: translateZ(0) !important;
+  transform: translate3d(0, var(--user-inline-y, -4px), 0) !important;
   backface-visibility: hidden !important;
 }
 
@@ -18747,14 +18729,14 @@ body.theme-dark .mail-list-load-more {
 
 .user-inline-motion.is-open,
 .user-inline-mobile-motion.is-open {
-  animation-duration: 170ms !important;
-  animation-timing-function: cubic-bezier(.16, 1, .3, 1) !important;
+  transition-duration: var(--user-inline-duration, 190ms), 140ms, var(--user-inline-duration, 190ms) !important;
+  transition-timing-function: cubic-bezier(.16, 1, .3, 1), ease, cubic-bezier(.16, 1, .3, 1) !important;
 }
 
 .user-inline-motion.is-closing,
 .user-inline-mobile-motion.is-closing {
-  animation-duration: 150ms !important;
-  animation-timing-function: cubic-bezier(.4, 0, .2, 1) !important;
+  transition-duration: var(--user-inline-duration, 190ms), 130ms, var(--user-inline-duration, 190ms) !important;
+  transition-timing-function: cubic-bezier(.4, 0, .2, 1), ease, cubic-bezier(.4, 0, .2, 1) !important;
 }
 
 .user-inline-motion.is-closing .user-address-inline,

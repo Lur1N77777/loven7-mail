@@ -1,4 +1,5 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode, TransitionEvent } from 'react';
 import { ChevronUp, Filter, Link2, Loader2, Lock, Plus, RefreshCw, Save, Shield, Trash2, UserRoundCog } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { CACHE_TTL, DEFAULT_PAGE_SIZE, STORAGE_KEYS } from '../lib/constants';
@@ -12,7 +13,7 @@ import { EmptyState, LoadingState, Modal, Pagination, type Notify, useConfirm } 
 type CachedUserList = { version: number; count: number; savedAt: number; users: UserRecord[]; roles: RoleRecord[] };
 type InlineAddressCacheEntry = { data: BoundAddressRecord[]; loading: boolean; savedAt: number; requestId?: number };
 const USER_LIST_CACHE_VERSION = 1;
-const USER_INLINE_ANIMATION_MS = 170;
+const USER_INLINE_ANIMATION_MS = 190;
 const DESKTOP_USERS_QUERY = '(min-width: 768px)';
 
 function useMediaQuery(query: string) {
@@ -54,13 +55,13 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   const [roleTarget, setRoleTarget] = useState<UserRecord | null>(null);
   const [resetTarget, setResetTarget] = useState<UserRecord | null>(null);
   const [expandedUser, setExpandedUser] = useState<UserRecord | null>(null);
-  const [closingUserId, setClosingUserId] = useState<number | null>(null);
+  const [closingUserIds, setClosingUserIds] = useState<number[]>([]);
   const [inlineAddressCache, setInlineAddressCache] = useState<Record<number, InlineAddressCacheEntry>>({});
   const [password, setPassword] = useState('');
   const deferredQuery = useDeferredValue(query || globalQuery);
   const isDesktopUsers = useMediaQuery(DESKTOP_USERS_QUERY);
   const requestSeqRef = useRef(0);
-  const closeTimerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<Record<number, number>>({});
   const inlineAddressCacheRef = useRef<Record<number, InlineAddressCacheEntry>>({});
   const inlineAddressRequestSeqRef = useRef(0);
   const inlineAddressAbortRef = useRef<AbortController | null>(null);
@@ -73,6 +74,35 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
       return next;
     });
   }, []);
+
+  const isUserClosing = useCallback((userId: number) => closingUserIds.includes(userId), [closingUserIds]);
+
+  const clearCloseTimer = useCallback((userId?: number) => {
+    if (typeof userId === 'number') {
+      const timer = closeTimerRef.current[userId];
+      if (timer) window.clearTimeout(timer);
+      delete closeTimerRef.current[userId];
+      return;
+    }
+    Object.values(closeTimerRef.current).forEach((timer) => window.clearTimeout(timer as number));
+    closeTimerRef.current = {};
+  }, []);
+
+  const finishClosingUser = useCallback((userId: number) => {
+    clearCloseTimer(userId);
+    setClosingUserIds((current) => current.filter((id) => id !== userId));
+    setExpandedUser((current) => (current?.id === userId ? null : current));
+  }, [clearCloseTimer]);
+
+  const scheduleClosingCleanup = useCallback((userId: number) => {
+    clearCloseTimer(userId);
+    closeTimerRef.current[userId] = window.setTimeout(() => finishClosingUser(userId), USER_INLINE_ANIMATION_MS + 80);
+  }, [clearCloseTimer, finishClosingUser]);
+
+  const beginClosingUser = useCallback((userId: number) => {
+    setClosingUserIds((current) => (current.includes(userId) ? current : [...current, userId]));
+    scheduleClosingCleanup(userId);
+  }, [scheduleClosingCleanup]);
 
   const finishInlineAddressRequest = useCallback((userId: number, requestId: number) => {
     updateInlineAddressCache((current) => {
@@ -240,34 +270,27 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
 
   useEffect(() => {
     const target = expandedUser;
-    if (!target || closingUserId === target.id) return;
+    if (!target || isUserClosing(target.id)) return;
     void loadUserAddresses(target);
-  }, [closingUserId, expandedUser, loadUserAddresses]);
+  }, [expandedUser, isUserClosing, loadUserAddresses]);
 
   useEffect(() => () => {
-    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    clearCloseTimer();
     inlineAddressAbortRef.current?.abort();
-  }, []);
+  }, [clearCloseTimer]);
 
   const closeExpandedUser = useCallback(() => {
     const target = expandedUser;
     if (!target) return;
-    if (closingUserId === target.id) return;
-    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    setClosingUserId(target.id);
-    closeTimerRef.current = window.setTimeout(() => {
-      setExpandedUser((current) => (current?.id === target.id ? null : current));
-      setClosingUserId((current) => (current === target.id ? null : current));
-      closeTimerRef.current = null;
-    }, USER_INLINE_ANIMATION_MS);
-  }, [closingUserId, expandedUser]);
+    if (isUserClosing(target.id)) return;
+    beginClosingUser(target.id);
+  }, [beginClosingUser, expandedUser, isUserClosing]);
 
-  const deleteUser = (user: UserRecord) => ask({ title: t(`删除用户 ${user.user_email}`, `Delete user ${user.user_email}`), body: t('将删除用户和地址绑定关系。', 'This deletes the user and address bindings.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(`/admin/users/${user.id}`, { method: 'DELETE' }); notify('success', t('用户已删除', 'User deleted')); setExpandedUser((current) => (current?.id === user.id ? null : current)); setClosingUserId((current) => (current === user.id ? null : current)); await fetchData(); } });
+  const deleteUser = (user: UserRecord) => ask({ title: t(`删除用户 ${user.user_email}`, `Delete user ${user.user_email}`), body: t('将删除用户和地址绑定关系。', 'This deletes the user and address bindings.'), actionLabel: t('删除', 'Delete'), onConfirm: async () => { await request(`/admin/users/${user.id}`, { method: 'DELETE' }); notify('success', t('用户已删除', 'User deleted')); clearCloseTimer(user.id); setExpandedUser((current) => (current?.id === user.id ? null : current)); setClosingUserIds((current) => current.filter((id) => id !== user.id)); await fetchData(); } });
   const toggleUser = (user: UserRecord) => {
-    if (closingUserId === user.id) {
-      if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-      setClosingUserId(null);
+    if (isUserClosing(user.id)) {
+      clearCloseTimer(user.id);
+      setClosingUserIds((current) => current.filter((id) => id !== user.id));
       setExpandedUser(user);
       return;
     }
@@ -275,26 +298,24 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
       closeExpandedUser();
       return;
     }
-    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = null;
-    setClosingUserId(null);
+    if (expandedUser) beginClosingUser(expandedUser.id);
     setExpandedUser(user);
   };
   const jumpToAddressManagement = (user: UserRecord) => {
-    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = null;
+    clearCloseTimer();
     setExpandedUser(null);
-    setClosingUserId(null);
+    setClosingUserIds([]);
     onFilterUserAddresses?.({ userId: user.id, userEmail: user.user_email, requestId: Date.now() });
   };
 
   const renderMobileUser = (user: UserRecord) => {
     const expanded = expandedUser?.id === user.id;
-    const closing = closingUserId === user.id;
+    const closing = isUserClosing(user.id);
     const renderInline = expanded || closing;
     const addressEntry = inlineAddressCache[user.id] || { data: [], loading: false, savedAt: 0 };
+    const contentKey = `${addressEntry.loading ? 'loading' : 'ready'}:${addressEntry.data.length}:${addressEntry.savedAt}`;
     return <div key={user.id} className="user-inline-wrapper">
-      <article className={cls('user-mobile-card', expanded && !closing && 'expanded')} onClick={() => toggleUser(user)}>
+      <article className={cls('user-mobile-card', (expanded || closing) && 'expanded', closing && 'is-collapsing')} onClick={() => toggleUser(user)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-800">{user.user_email}</p>
@@ -311,16 +332,17 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
           <button type="button" className="btn-danger compact col-span-2" onClick={(event) => { event.stopPropagation(); deleteUser(user); }}><Trash2 size={14} /> {t('删除', 'Delete')}</button>
         </div>
       </article>
-      {renderInline && <div className={cls('user-inline-mobile-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
+      {renderInline && <UserInlineMotion className="user-inline-mobile-motion" open={expanded && !closing} closing={closing} contentKey={contentKey} onClosed={() => finishClosingUser(user.id)}><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></UserInlineMotion>}
     </div>;
   };
 
   const renderDesktopUser = (user: UserRecord) => {
     const expanded = expandedUser?.id === user.id;
-    const closing = closingUserId === user.id;
+    const closing = isUserClosing(user.id);
     const renderInline = expanded || closing;
     const addressEntry = inlineAddressCache[user.id] || { data: [], loading: false, savedAt: 0 };
-    return <div key={user.id} className={cls('user-grid-item', expanded && !closing && 'is-expanded')}>
+    const contentKey = `${addressEntry.loading ? 'loading' : 'ready'}:${addressEntry.data.length}:${addressEntry.savedAt}`;
+    return <div key={user.id} className={cls('user-grid-item', (expanded || closing) && 'is-expanded', closing && 'is-collapsing')}>
       <div className="user-grid-row user-grid-body-row" role="button" tabIndex={0} onClick={() => toggleUser(user)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleUser(user); } }}>
         <div className="font-mono text-xs text-slate-400">#{user.id}</div>
         <div className="min-w-0"><span className="address-strong">{user.user_email}</span></div>
@@ -328,14 +350,14 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
         <div>{user.address_count ?? 0}</div>
         <div>{formatDateTime(user.updated_at || user.created_at)}</div>
         <div className="flex justify-end gap-2">
-          <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); toggleUser(user); }} title={t('查看地址', 'View addresses')}>{expanded && !closing ? <ChevronUp size={15} /> : <Link2 size={15} />}</button>
+          <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); toggleUser(user); }} title={t('查看地址', 'View addresses')}>{expanded || closing ? <ChevronUp size={15} /> : <Link2 size={15} />}</button>
           <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }} title={t('在地址管理筛选', 'Filter in address management')}><Filter size={15} /></button>
           <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }} title={t('角色', 'Role')}><Shield size={15} /></button>
           <button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }} title={t('重置密码', 'Reset password')}><Lock size={15} /></button>
           <button type="button" className="table-action danger" onClick={(event) => { event.stopPropagation(); deleteUser(user); }} title={t('删除', 'Delete')}><Trash2 size={15} /></button>
         </div>
       </div>
-      {renderInline && <div className={cls('user-inline-motion', expanded && !closing && 'is-open', closing && 'is-closing')}><div className="user-inline-motion-inner"><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></div></div>}
+      {renderInline && <UserInlineMotion className="user-inline-motion" open={expanded && !closing} closing={closing} contentKey={contentKey} onClosed={() => finishClosingUser(user.id)}><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></UserInlineMotion>}
     </div>;
   };
 
@@ -347,6 +369,80 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
     {createOpen && <Modal title={t('新建用户', 'New user')} onClose={() => setCreateOpen(false)}><div className="space-y-4"><input className="form-input" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder={t('用户邮箱', 'User email')} /><input className="form-input" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder={t('用户密码', 'User password')} /><button type="button" className="btn-primary w-full" disabled={actionBusy === 'create'} onClick={createUser}>{actionBusy === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />} {actionBusy === 'create' ? t('创建中...', 'Creating...') : t('创建', 'Create')}</button></div></Modal>}
     {roleTarget && <Modal title={t(`修改角色：${roleTarget.user_email}`, `Change role: ${roleTarget.user_email}`)} onClose={() => setRoleTarget(null)}><div className="space-y-3"><button type="button" className="btn-secondary w-full justify-start" disabled={Boolean(actionBusy)} onClick={() => void updateUserRole(roleTarget, '')}>{actionBusy === `role:${roleTarget.id}:default` ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t('默认角色', 'Default role')}</button>{roles.map((role) => <button type="button" key={role.role} className="btn-secondary w-full justify-start" disabled={Boolean(actionBusy)} onClick={() => void updateUserRole(roleTarget, role.role)}>{actionBusy === `role:${roleTarget.id}:${role.role}` ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{role.label || role.role}</button>)}</div></Modal>}
     {resetTarget && <Modal title={t(`重置密码：${resetTarget.user_email}`, `Reset password: ${resetTarget.user_email}`)} onClose={() => setResetTarget(null)}><div className="space-y-4"><input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('新密码', 'New password')} /><button type="button" className="btn-primary w-full" disabled={actionBusy === `reset:${resetTarget.id}`} onClick={() => void resetUserPassword()}>{actionBusy === `reset:${resetTarget.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />} {actionBusy === `reset:${resetTarget.id}` ? t('保存中...', 'Saving...') : t('保存', 'Save')}</button></div></Modal>}
+  </div>;
+}
+
+function UserInlineMotion({ className, open, closing, contentKey, onClosed, children }: { className: string; open: boolean; closing: boolean; contentKey: string; onClosed: () => void; children: ReactNode }) {
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const prevStateRef = useRef({ open: false, closing: false });
+  const closeNotifiedRef = useRef(false);
+  const [height, setHeight] = useState(0);
+
+  const clearFrame = useCallback(() => {
+    if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+  }, []);
+
+  const measureHeight = useCallback(() => innerRef.current?.scrollHeight ?? 0, []);
+
+  useLayoutEffect(() => {
+    const previous = prevStateRef.current;
+    prevStateRef.current = { open, closing };
+    closeNotifiedRef.current = false;
+    clearFrame();
+
+    if (closing) {
+      const visibleHeight = shellRef.current?.getBoundingClientRect().height ?? 0;
+      setHeight(Math.max(visibleHeight, measureHeight()));
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = window.requestAnimationFrame(() => {
+          setHeight(0);
+          rafRef.current = null;
+        });
+      });
+      return clearFrame;
+    }
+
+    if (open) {
+      if (!previous.open || previous.closing) {
+        setHeight(0);
+        rafRef.current = window.requestAnimationFrame(() => {
+          setHeight(measureHeight());
+          rafRef.current = null;
+        });
+      } else {
+        setHeight(measureHeight());
+      }
+      return clearFrame;
+    }
+
+    setHeight(0);
+    return clearFrame;
+  }, [clearFrame, closing, contentKey, measureHeight, open]);
+
+  useEffect(() => {
+    if (!open || closing || typeof ResizeObserver === 'undefined' || !innerRef.current) return undefined;
+    const resizeObserver = new ResizeObserver(() => setHeight(measureHeight()));
+    resizeObserver.observe(innerRef.current);
+    return () => resizeObserver.disconnect();
+  }, [closing, measureHeight, open]);
+
+  const handleTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
+    if (event.currentTarget !== event.target || event.propertyName !== 'height') return;
+    if (!closing || closeNotifiedRef.current) return;
+    closeNotifiedRef.current = true;
+    onClosed();
+  };
+
+  const style = {
+    '--user-inline-height': `${height}px`,
+    '--user-inline-duration': `${USER_INLINE_ANIMATION_MS}ms`,
+  } as CSSProperties;
+
+  return <div ref={shellRef} className={cls(className, open && 'is-open', closing && 'is-closing')} style={style} onTransitionEnd={handleTransitionEnd}>
+    <div ref={innerRef} className="user-inline-motion-inner">{children}</div>
   </div>;
 }
 
