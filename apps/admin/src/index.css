@@ -14901,25 +14901,34 @@ body.theme-dark,
   align-items: center !important;
 }
 
-.dashboard-view-shell .dashboard-brand-title {
-  font-size: clamp(2rem, 4.2vw, 3.4rem) !important;
-  font-weight: 700 !important;
-  letter-spacing: 0 !important;
-  line-height: .98 !important;
-}
-
-.dashboard-view-shell .dashboard-brand-lockup .dashboard-hero-mark {
-  display: flex !important;
-  width: clamp(52px, 6vw, 74px) !important;
-  height: clamp(52px, 6vw, 74px) !important;
-  align-items: center !important;
-  justify-content: center !important;
+.dashboard-view-shell .dashboard-login-brand-clone {
+  gap: 14px !important;
   color: var(--admin-text) !important;
 }
 
-.dashboard-view-shell .dashboard-brand-lockup .dashboard-hero-logo {
-  width: 100% !important;
-  height: 100% !important;
+.dashboard-view-shell .dashboard-login-brand-clone .logo-tile {
+  width: 46px !important;
+  height: 46px !important;
+  color: currentColor !important;
+}
+
+.dashboard-view-shell .dashboard-login-brand-clone .logo-sigil {
+  width: 54px !important;
+  height: 54px !important;
+  stroke-width: 2.45px;
+}
+
+.dashboard-view-shell .dashboard-brand-wordmark {
+  color: var(--admin-text) !important;
+  font-family: var(--font-brand) !important;
+  font-size: clamp(31px, 4vw, 44px) !important;
+  font-weight: 400 !important;
+  line-height: .8 !important;
+  letter-spacing: 0 !important;
+}
+
+.dashboard-view-shell .dashboard-brand-wordmark span {
+  display: block !important;
 }
 
 .dashboard-view-shell .dashboard-stat-card {
@@ -16629,11 +16638,6 @@ body .mail-workspace .mail-row-unread .mail-sender {
 
 body .dashboard-view-shell .dashboard-hero-title {
   font-weight: 540 !important;
-  letter-spacing: 0 !important;
-}
-
-body .dashboard-view-shell .dashboard-brand-title {
-  font-weight: 700 !important;
   letter-spacing: 0 !important;
 }
 

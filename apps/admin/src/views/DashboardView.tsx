@@ -3,7 +3,7 @@ import { PenLine, RefreshCw, Settings } from 'lucide-react';
 import { cls } from '../lib/format';
 import { getRuntimeLocale, localeText } from '../lib/locale';
 import type { OpenSettings, Statistics } from '../types/api';
-import type { MenuKey } from '../components/Shell';
+import { Logo, type MenuKey } from '../components/Shell';
 import {
   ActivityLogo,
   AddressLogo,
@@ -13,7 +13,6 @@ import {
   GateLogo,
   InboxLogo,
   LockLogo,
-  LovenMailMark,
   SentLogo,
   SettingsLogo,
   StorageLogo,
@@ -198,11 +197,13 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
       <div className="space-y-4">
         <section className="dashboard-hero p-4 sm:rounded-[2rem] md:p-6">
           <div className="relative z-10 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div className="dashboard-brand-lockup flex min-w-0 items-start gap-4">
-              <div className="dashboard-hero-mark shrink-0" aria-hidden="true"><LovenMailMark className="dashboard-hero-logo" /></div>
-              <div className="min-w-0">
-                <p className="dashboard-hero-kicker text-sm">{t('官方邮箱后台', 'Official mail console')}</p>
-                <h2 className="dashboard-hero-title dashboard-brand-title mt-1 text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">Loven7 Mail</h2>
+            <div className="dashboard-brand-lockup dashboard-login-brand-clone anything-login-brand min-w-0">
+              <Logo />
+              <div className="anything-login-brand-copy" aria-label="Loven7-Mail">
+                <h2 className="brand-wordmark anything-login-wordmark dashboard-brand-wordmark">
+                  <span>Loven7</span>
+                  <span>Mail</span>
+                </h2>
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
