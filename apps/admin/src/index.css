@@ -16641,6 +16641,16 @@ body .dashboard-view-shell .dashboard-hero-title {
   letter-spacing: 0 !important;
 }
 
+body .dashboard-view-shell .dashboard-brand-wordmark,
+body .dashboard-view-shell .dashboard-brand-wordmark span {
+  font-family: var(--font-brand) !important;
+  font-style: normal !important;
+  font-weight: 400 !important;
+  font-synthesis: none !important;
+  letter-spacing: 0 !important;
+  line-height: .8 !important;
+}
+
 body .dashboard-view-shell .panel-title,
 body .stats-view-shell .panel-title,
 body .address-view-shell .panel-title,

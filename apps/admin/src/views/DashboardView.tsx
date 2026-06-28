@@ -200,10 +200,10 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
             <div className="dashboard-brand-lockup dashboard-login-brand-clone anything-login-brand min-w-0">
               <Logo />
               <div className="anything-login-brand-copy" aria-label="Loven7-Mail">
-                <h2 className="brand-wordmark anything-login-wordmark dashboard-brand-wordmark">
+                <h1 className="brand-wordmark anything-login-wordmark dashboard-brand-wordmark">
                   <span>Loven7</span>
                   <span>Mail</span>
-                </h2>
+                </h1>
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
