@@ -10,6 +10,7 @@ import { buildCacheScope, scopedStorageKey } from '../src/lib/cacheScope.ts';
 import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
 import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, loginAccountUser, registerAccountUser } from '../src/lib/userAuth.ts';
 import { readTrustedMailFrameMessage } from '../src/lib/mailFrameMessages.ts';
+import { adminMailStateEndpoint } from '../src/lib/mailStateEndpoint.ts';
 import { preserveRowsBelowAuthoritativeHead } from '../src/lib/mailSync.ts';
 import { createOutboundIdempotencyTracker } from '../src/lib/outboundIdempotency.ts';
 import { selectExpiredShareTokens, shareLifecycleStatus } from '../src/lib/shareLifecycle.ts';
@@ -143,6 +144,43 @@ test('admin API boundaries report runtime 401/403 but preserve sessions for netw
     unsubscribe();
     globalThis.fetch = originalFetch;
   }
+});
+
+test('optional mail-state sync stays on the Admin origin and cannot invalidate the primary session', async () => {
+  assert.equal(
+    adminMailStateEndpoint('?mode=inbox', 'https://mail.example.test'),
+    'https://mail.example.test/api/mail-state?mode=inbox',
+  );
+
+  const originalFetch = globalThis.fetch;
+  const observedStatuses: number[] = [];
+  const unsubscribe = subscribeAuthenticationFailures((error) => {
+    observedStatuses.push(Number((error as { status?: unknown }).status));
+  });
+  globalThis.fetch = (async () => new Response('invalid address credential', { status: 401 })) as typeof fetch;
+  try {
+    const client = createApiClient(
+      () => 'https://apimail.example.test',
+      () => ({ accountUserToken: 'account-token', userAccessToken: 'role-token' }),
+    );
+    await assert.rejects(
+      client.request(adminMailStateEndpoint('?mode=inbox', 'https://mail.example.test'), {
+        skipCache: true,
+        reportAuthFailure: false,
+      }),
+      (error: any) => error?.status === 401,
+    );
+    assert.deepEqual(observedStatuses, []);
+  } finally {
+    unsubscribe();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('every Admin mail-state request uses the same-origin non-authoritative channel', () => {
+  const source = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.equal([...source.matchAll(/adminMailStateEndpoint\(/g)].length, 3);
+  assert.equal([...source.matchAll(/reportAuthFailure:\s*false/g)].length, 3);
 });
 
 test('account mailbox data source supports inbox and sent without exposing global unknown mail', () => {

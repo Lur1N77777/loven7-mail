@@ -9,6 +9,7 @@ import { readJsonStorage, readStorage, writeJsonStorage, writeLocalStorage } fro
 import { scopedStorageKey } from '../lib/cacheScope';
 import { preserveRowsBelowAuthoritativeHead } from '../lib/mailSync';
 import { readTrustedMailFrameMessage } from '../lib/mailFrameMessages';
+import { adminMailStateEndpoint } from '../lib/mailStateEndpoint';
 import { buildMailHtmlDocument, getDownloadEmlUrl, looksLikeMimeSource, parseRawMail, parseRawMailListItem, parseSendbox, sanitizeMailHtml, sanitizeVerificationCode } from '../lib/mailParser';
 import type { ComposePayload, ListResponse, ParsedMail, ParsedSendbox, RawMailRecord, SendboxRecord } from '../types/api';
 import { EmptyState, LoadingState, type Notify, useConfirm } from '../components/Common';
@@ -539,10 +540,11 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     setStarredIds(next.starredIds);
     setRemoteStateReady(false);
     let cancelled = false;
-    request<RemoteMailState>(`/api/mail-state${buildQuery({ mode })}`, {
+    request<RemoteMailState>(adminMailStateEndpoint(buildQuery({ mode })), {
       forceRefresh: true,
       skipCache: true,
       timeoutMs: 6500,
+      reportAuthFailure: false,
     })
       .then((remote) => {
         if (cancelled) return;
@@ -564,7 +566,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         const localHasExtraStar = [...next.starredIds].some((id) => !remoteState.starredIds.has(id));
         const localHasNewerBulk = readAllBeforeValue(next.readAllBefore, mode) > remoteState.readAllBefore;
         if (localHasExtraRead || localHasExtraStar || localHasNewerBulk) {
-          void request<RemoteMailState>('/api/mail-state', {
+          void request<RemoteMailState>(adminMailStateEndpoint(), {
             method: 'PATCH',
             body: {
               mode,
@@ -573,6 +575,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
               readAllBefore: mergedReadAllBefore,
             },
             timeoutMs: 6500,
+            reportAuthFailure: false,
             invalidates: ['/api/mail-state'],
           }).catch((error) => console.warn('mail state backfill failed', error));
         }
@@ -623,10 +626,11 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     });
   }, [mode]);
   const patchRemoteMailState = useCallback((body: Record<string, unknown>) => {
-    void request<RemoteMailState>('/api/mail-state', {
+    void request<RemoteMailState>(adminMailStateEndpoint(), {
       method: 'PATCH',
       body: { mode, ...body },
       timeoutMs: 6500,
+      reportAuthFailure: false,
       invalidates: ['/api/mail-state'],
     }).catch((error) => console.warn('mail state persist failed', error));
   }, [mode, request]);

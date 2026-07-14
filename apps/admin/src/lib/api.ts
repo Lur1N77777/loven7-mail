@@ -22,6 +22,7 @@ export interface ApiRequestOptions extends ApiCredentials {
   forceRefresh?: boolean;
   skipCache?: boolean;
   invalidates?: string[];
+  reportAuthFailure?: boolean;
 }
 
 export type Requester = <T>(path: string, options?: ApiRequestOptions) => Promise<T>;
@@ -206,7 +207,7 @@ export function createApiClient(getBaseUrl: () => string, getCredentials: () => 
         if (!response.ok) {
           const body = normalizeErrorBody(raw);
           const error = new ApiError(response.status, body, body ? `[${response.status}] ${body}` : `[${response.status}] ${response.statusText}`, { url, method });
-          reportAuthenticationFailure(error);
+          if (options.reportAuthFailure !== false) reportAuthenticationFailure(error);
           throw error;
         }
         if (!raw) return undefined as T;
