@@ -10,7 +10,7 @@ npm --prefix apps/webmail ci
 npm run check:release
 ```
 
-`check:release` 会运行 Cloudflare 预检、管理后台 TypeScript 检查、Webmail Functions 检查和两个前端构建。
+`check:release` 会运行 Cloudflare 预检、管理后台 TypeScript 检查、Webmail Functions 检查、两个前端构建，以及 Admin/Webmail 浏览器冒烟测试。
 
 ## 提交前检查
 

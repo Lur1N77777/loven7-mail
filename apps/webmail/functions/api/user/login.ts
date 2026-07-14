@@ -21,7 +21,9 @@ export const onRequestPost: PagesHandler = async ({ request, env }) =>
     if (!email || !password) return errorJson(400, "请输入邮箱和密码", "missing_login_fields");
 
     const hashedPassword = await sha256Hex(password);
-    const attempts = Array.from(new Set([hashedPassword, password]));
+    // A Turnstile response is single-use, so compatibility retries are only
+    // safe when no challenge token was supplied.
+    const attempts = cfToken ? [hashedPassword] : Array.from(new Set([hashedPassword, password]));
     let lastError: unknown = null;
 
     for (const attempt of attempts) {

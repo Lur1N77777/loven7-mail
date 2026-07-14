@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { createSession, deleteMail, fetchMailPage, fetchMailState, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail, patchMailState } from "./api";
-import { clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
+import { changeAddressPassword, createSession, deleteMail, fetchMailPage, fetchMailState, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail, patchMailState } from "./api";
+import { subscribeAuthenticationFailures } from "./authFailure";
+import { buildSessionCacheKey, clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
 import { clearMailboxCache, readMailboxCache, writeMailboxCache } from "./cache";
 import { clearImageMemoryCache, resolveMailImageAssets } from "./imageMemoryCache";
-import { getMailBodyText, mergeMails, parseMailBatch, sanitizeMailHtml } from "./mailParser";
+import { buildMailFrameSrcDoc, getMailBodyText, mergeMails, parseMailBatch } from "./mailParser";
+import { reconcileServerMailRange } from "./mailSync";
 import { BrandAvatar } from "./brandIdentity";
 import { applyRuntimeLocale, readInitialLocale, writeLocale, type AppLocale } from "./locale";
 import type { MailPage, ParsedMail, RemoteMailState, SafeSettings, ShareInfo, SharedMailbox, WebmailSession } from "./types";
@@ -16,6 +18,7 @@ const OFFICIAL_GITHUB_URL = "https://github.com/Lur1N77777/loven7-mail-cloudflar
 const MAIL_READ_HISTORY_MAX = 5000;
 const MAIL_STATE_MODE = "inbox";
 const MAIL_DELETE_EXIT_MS = 260;
+const MAIL_SYNC_CHANNEL = "loven7.webmail.mail-sync.v2";
 
 type LoadingState = "boot" | "login" | "sync" | "idle";
 type MobilePane = "list" | "reader";
@@ -89,7 +92,7 @@ function compactReadIds(ids: Iterable<string>, readAllBefore = 0) {
 }
 
 function localMailStateScope(session: WebmailSession) {
-  return encodeURIComponent((session.address || session.cacheKey || "default").trim().toLowerCase());
+  return encodeURIComponent((session.cacheKey || session.address || "default").trim().toLowerCase());
 }
 
 function localMailStateKey(session: WebmailSession, name: "readIds" | "readAllBefore") {
@@ -117,6 +120,16 @@ function writeLocalMailState(session: WebmailSession | null, state: MailReadStat
     localStorage.setItem(localMailStateKey(session, "readAllBefore"), String(Math.max(0, state.readAllBefore || 0)));
   } catch {
     // Local persistence is best-effort; remote state remains the source of truth.
+  }
+}
+
+function clearLocalMailState(session: WebmailSession | null) {
+  if (!session || typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(localMailStateKey(session, "readIds"));
+    localStorage.removeItem(localMailStateKey(session, "readAllBefore"));
+  } catch {
+    // Storage cleanup is best-effort in restricted browser modes.
   }
 }
 
@@ -164,7 +177,12 @@ function isMobileListViewport() {
 
 function readShareTokenFromPath() {
   const match = window.location.pathname.match(/^\/s\/([^/?#]+)/i);
-  return match ? decodeURIComponent(match[1]) : "";
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return "";
+  }
 }
 
 function isShareSession(session: WebmailSession | null): session is WebmailSession & { shareToken: string; shareMailboxId: string } {
@@ -414,6 +432,16 @@ const UI_COPY = {
     textFormat: "显示文本格式",
     sourceFormat: "显示源码格式",
     optimizingImages: "加载中…",
+    loadRemoteImages: "显示远程图片",
+    remoteImagesBlocked: "远程图片已阻止，以保护隐私",
+    changePassword: "修改密码",
+    changePasswordTitle: "修改邮箱密码",
+    newPasswordPlaceholder: "输入至少 6 位新密码",
+    passwordTooShort: "新密码至少需要 6 位",
+    passwordChanged: "密码已更新，邮箱凭据已安全轮换",
+    savePassword: "保存并轮换凭据",
+    savingPassword: "保存中…",
+    cancel: "取消",
     noSource: "(无源码)",
     emptyTitle: "暂无邮件",
     emptyBody: "等待刷新新邮件",
@@ -433,7 +461,7 @@ const UI_COPY = {
     newMails: (count: number) => `新增 ${count} 封邮件`,
     newShort: (count: number) => `新增 ${count}`,
     hideNotAllowed: "该共享链接不允许删除邮件",
-    hideConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？删除后管理站和共享页面都将不再显示。`,
+    hideConfirm: (subject: string) => `移除「${subject || "这封邮件"}」？只会从当前分享链接隐藏，不会删除后台真实邮件。`,
     hidden: "邮件已删除",
     deleteConfirm: (subject: string) => `删除「${subject || "这封邮件"}」？`,
     deleted: "邮件已删除",
@@ -507,6 +535,16 @@ const UI_COPY = {
     textFormat: "Text",
     sourceFormat: "Source",
     optimizingImages: "Loading…",
+    loadRemoteImages: "Show remote images",
+    remoteImagesBlocked: "Remote images are blocked to protect your privacy",
+    changePassword: "Change password",
+    changePasswordTitle: "Change mailbox password",
+    newPasswordPlaceholder: "Enter a new password (6+ characters)",
+    passwordTooShort: "Use at least 6 characters",
+    passwordChanged: "Password updated and mailbox credential rotated",
+    savePassword: "Save and rotate credential",
+    savingPassword: "Saving…",
+    cancel: "Cancel",
     noSource: "(No source)",
     emptyTitle: "No mail",
     emptyBody: "Waiting for new mail",
@@ -526,7 +564,7 @@ const UI_COPY = {
     newMails: (count: number) => `${count} new message${count === 1 ? "" : "s"}`,
     newShort: (count: number) => `+${count} new`,
     hideNotAllowed: "This shared link does not allow deleting mail",
-    hideConfirm: (subject: string) => `Delete “${subject || "this message"}”? It will disappear from both admin and shared views.`,
+    hideConfirm: (subject: string) => `Remove “${subject || "this message"}”? It will only be hidden from this shared link; the original message stays in admin.`,
     hidden: "Mail deleted",
     deleteConfirm: (subject: string) => `Delete “${subject || "this message"}”?`,
     deleted: "Mail deleted",
@@ -535,58 +573,20 @@ const UI_COPY = {
   },
 } as const;
 
-function MailHtmlView({ html }: { html: string }) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    const root = host.shadowRoot || host.attachShadow({ mode: "open" });
-    const safeHtml = sanitizeMailHtml(html, { allowExternalImages: true });
-    root.innerHTML = `
-      <style>
-        :host {
-          display: block;
-          width: 100%;
-          min-height: 100%;
-          background: #fff;
-          color: #172033;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-          font-size: 15px;
-          line-height: 1.58;
-        }
-        * { box-sizing: border-box; }
-        .mail-shadow-content {
-          display: flow-root;
-          width: 100%;
-          max-width: 100%;
-          min-height: 0;
-          padding: 18px;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-        a { color: #2563eb; text-decoration-thickness: .08em; text-underline-offset: 2px; }
-        img, svg, video, canvas { max-width: 100% !important; height: auto !important; }
-        table { max-width: 100%; border-collapse: collapse; table-layout: auto; }
-        td, th { max-width: 100%; overflow-wrap: anywhere; }
-        pre, code { white-space: pre-wrap !important; word-break: break-word; overflow-wrap: anywhere; }
-        blockquote { margin-left: 0; padding-left: 14px; border-left: 3px solid #dbe7ff; color: #42526b; }
-        form[data-disabled-form='true'] { opacity: .75; pointer-events: none; }
-        @media (max-width: 560px) {
-          :host { font-size: 14px; line-height: 1.54; }
-          .mail-shadow-content { padding: 10px; }
-          p { margin-block: .72em; }
-          table[width], td[width], th[width] { max-width: 100% !important; }
-        }
-      </style>
-      <div class="mail-shadow-content">${safeHtml}</div>
-    `;
-    return () => {
-      root.innerHTML = "";
-    };
-  }, [html]);
-
-  return <div className="mail-html-view" ref={hostRef} />;
+function MailHtmlView({ html, allowExternalImages }: { html: string; allowExternalImages: boolean }) {
+  const srcDoc = useMemo(
+    () => buildMailFrameSrcDoc(html, { allowExternalImages }),
+    [allowExternalImages, html],
+  );
+  return (
+    <iframe
+      className="mail-frame mail-html-view"
+      title="Email HTML content"
+      sandbox="allow-popups allow-popups-to-escape-sandbox"
+      referrerPolicy="no-referrer"
+      srcDoc={srcDoc}
+    />
+  );
 }
 
 type MailListRowProps = {
@@ -699,10 +699,15 @@ export default function App() {
   const [exitingMailIds, setExitingMailIds] = useState<Set<string>>(new Set());
   const [mailViewMode, setMailViewMode] = useState<MailViewMode>("html");
   const [resolvedHtml, setResolvedHtml] = useState<{ cacheKey: string; mailId: number; html: string } | null>(null);
+  const [remoteImagesAllowedFor, setRemoteImagesAllowedFor] = useState("");
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [newMailboxPassword, setNewMailboxPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const syncRef = useRef<SyncTask | null>(null);
   const runSequenceRef = useRef(0);
   const activeRunRef = useRef<ActiveRun | null>(null);
   const sessionRef = useRef<WebmailSession | null>(null);
+  const authInvalidatingRef = useRef(false);
   const mailReadStateRef = useRef<MailReadState>(emptyMailReadState());
   const toastTimerRef = useRef<number | null>(null);
   const refreshFeedbackTimerRef = useRef<number | null>(null);
@@ -710,6 +715,7 @@ export default function App() {
   const isRefreshingRef = useRef(false);
   const deletedMailIdsRef = useRef<Set<string>>(new Set());
   const deleteExitTimersRef = useRef<Record<string, number>>({});
+  const mailSyncChannelRef = useRef<BroadcastChannel | null>(null);
   const mailsRef = useRef<ParsedMail[]>([]);
   const addressCopyTimerRef = useRef<number | null>(null);
   const codeCopyTimerRef = useRef<number | null>(null);
@@ -734,6 +740,7 @@ export default function App() {
   }, [mails]);
 
   const setActiveSession = useCallback((nextSession: WebmailSession | null) => {
+    if (nextSession) authInvalidatingRef.current = false;
     sessionRef.current = nextSession;
     setSession(nextSession);
   }, []);
@@ -819,6 +826,7 @@ export default function App() {
     Object.values(deleteExitTimersRef.current).forEach((timer) => window.clearTimeout(timer));
     deleteExitTimersRef.current = {};
     setResolvedHtml(null);
+    setRemoteImagesAllowedFor("");
     setMails([]);
     mailsRef.current = [];
     setSelectedId(null);
@@ -836,6 +844,39 @@ export default function App() {
     setMailReadState(normalized);
     if (activeSession) writeLocalMailState(activeSession, normalized);
   }, []);
+
+  const resetAuthenticationState = useCallback((reason: "expired" | "manual") => {
+    const activeSession = sessionRef.current;
+    if (!activeSession || authInvalidatingRef.current) return;
+    authInvalidatingRef.current = true;
+    cancelRun();
+    clearStoredSession();
+    clearLocalMailState(activeSession);
+    void clearMailboxCache(activeSession.cacheKey).catch(() => undefined);
+    setActiveSession(null);
+    setShareInfo(null);
+    setAutoRefreshEnabled(true);
+    setRefreshFeedback(null);
+    setIsRefreshing(false);
+    setLoading("idle");
+    setSessionMailReadState(null, emptyMailReadState());
+    resetMailboxState();
+    deletedMailIdsRef.current.clear();
+    setMobilePane("list");
+    setPasswordDialogOpen(false);
+    setNewMailboxPassword("");
+    setPasswordSaving(false);
+    setError(null);
+    setLoginError(reason === "expired"
+      ? (localeRef.current === "en-US"
+        ? "Your session expired. Local mailbox data was cleared; please sign in again."
+        : "登录凭据已失效，已清理本机邮箱数据，请重新登录。")
+      : null);
+  }, [cancelRun, resetMailboxState, setActiveSession, setSessionMailReadState]);
+
+  useEffect(() => subscribeAuthenticationFailures(() => {
+    resetAuthenticationState("expired");
+  }), [resetAuthenticationState]);
 
   const applyCurrentMailReadState = useCallback((items: ParsedMail[]) => {
     return applyMailReadState(items, mailReadStateRef.current);
@@ -874,6 +915,30 @@ export default function App() {
       return next;
     });
   }, [deletedMailKey]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return undefined;
+    const channel = new BroadcastChannel(MAIL_SYNC_CHANNEL);
+    mailSyncChannelRef.current = channel;
+    channel.onmessage = (event: MessageEvent<{ type?: string; cacheKey?: string; mailId?: number }>) => {
+      const message = event.data;
+      const activeSession = sessionRef.current;
+      const mailId = Number(message?.mailId || 0);
+      if (!activeSession || message?.type !== "mail-deleted" || message.cacheKey !== activeSession.cacheKey || !Number.isInteger(mailId) || mailId <= 0) return;
+      rememberDeletedMail(activeSession, mailId);
+      setMails((current) => {
+        const next = current.filter((mail) => mail.id !== mailId);
+        mailsRef.current = next;
+        setNextOffset(next.length);
+        setSelectedId((selected) => (selected === mailId ? next[0]?.id ?? null : selected));
+        return next;
+      });
+    };
+    return () => {
+      if (mailSyncChannelRef.current === channel) mailSyncChannelRef.current = null;
+      channel.close();
+    };
+  }, [rememberDeletedMail]);
 
   const loadLocalMailReadState = useCallback((activeSession: WebmailSession | null) => {
     const state = activeSession && !isShareSession(activeSession) ? readLocalMailState(activeSession) : emptyMailReadState();
@@ -1002,13 +1067,15 @@ export default function App() {
       const sinceId = maxMailId(visibleCurrentMails);
       if (!sinceId) return await loadFirstPage(activeSession, run);
 
-      const rawNew = [];
+      const rawNew: MailPage["results"] = [];
+      const authoritativeIds = new Set<number>();
+      const oldestLoadedId = visibleCurrentMails.reduce((min, mail) => Math.min(min, mail.id), Number.POSITIVE_INFINITY);
       let offset = 0;
-      let reachedAnchor = false;
       let reachedEnd = false;
       let totalCount = visibleCurrentMails.length;
+      let lowestScannedId = Number.POSITIVE_INFINITY;
 
-      while (!reachedAnchor && !reachedEnd && offset < PAGE_SIZE * 100) {
+      while (!reachedEnd && offset < PAGE_SIZE * 100) {
         assertRunActive(run, activeSession);
         const page = await fetchSessionMailPage(activeSession, PAGE_SIZE, offset, run.controller.signal);
         assertRunActive(run, activeSession);
@@ -1018,24 +1085,27 @@ export default function App() {
           break;
         }
         for (const item of page.results) {
-          if (item.id <= sinceId) reachedAnchor = true;
+          authoritativeIds.add(item.id);
+          lowestScannedId = Math.min(lowestScannedId, item.id);
           if (item.id > sinceId) rawNew.push(item);
         }
         offset += page.results.length;
-        reachedEnd = page.results.length < PAGE_SIZE;
+        reachedEnd = page.results.length < PAGE_SIZE || offset >= page.count;
+        if (lowestScannedId <= oldestLoadedId) break;
       }
 
-      if (!rawNew.length) {
-        assertRunActive(run, activeSession);
-        setHasMoreHistory(visibleCurrentMails.length < totalCount);
-        return 0;
-      }
-
-      const parsed = await parseMailBatch(rawNew);
+      const reconciled = reconcileServerMailRange(
+        visibleCurrentMails,
+        authoritativeIds,
+        Number.isFinite(lowestScannedId) ? lowestScannedId : Number.POSITIVE_INFINITY,
+        reachedEnd,
+      );
+      const parsed = rawNew.length ? await parseMailBatch(rawNew) : [];
       assertRunActive(run, activeSession);
-      const next = filterDeletedMails(activeSession, applyCurrentMailReadState(mergeMails(visibleCurrentMails, parsed)));
+      const next = filterDeletedMails(activeSession, applyCurrentMailReadState(mergeMails(reconciled, parsed)));
+      mailsRef.current = next;
       setMails(next);
-      setSelectedId((current) => current ?? next[0]?.id ?? null);
+      setSelectedId((current) => (current && next.some((mail) => mail.id === current) ? current : next[0]?.id ?? null));
       await writeMailboxCache({
         cacheKey: activeSession.cacheKey,
         address: activeSession.address,
@@ -1119,7 +1189,7 @@ export default function App() {
         jwt,
         address: address || copyRef.current.currentAddress,
         settings,
-        cacheKey: await hashToken(`${address || "current"}:${jwt}`),
+        cacheKey: await buildSessionCacheKey(window.location.origin, address || "current", jwt),
       };
       attachRunSession(run, activeSession);
       saveSession(activeSession);
@@ -1152,7 +1222,7 @@ export default function App() {
         jwt: `share:${token}:${mailbox.id}`,
         address: settings?.address || mailbox.address || getMailboxLabel(mailbox, localeRef.current),
         settings,
-        cacheKey: await hashToken(`share:${token}:${mailbox.id}`),
+        cacheKey: await buildSessionCacheKey(window.location.origin, `share:${mailbox.id}`, token),
         shareToken: token,
         shareMailboxId: mailbox.id,
         shareMailboxes: info.addresses,
@@ -1215,6 +1285,33 @@ export default function App() {
     },
     [activateSession, assertRunActive, beginRun, copy.credentialsRequired, copy.wrongPassword, email, isRunActive, password]
   );
+
+  const saveMailboxPassword = useCallback(async () => {
+    const activeSession = sessionRef.current;
+    const value = newMailboxPassword.trim();
+    if (!activeSession || isShareSession(activeSession) || passwordSaving) return;
+    if (value.length < 6) {
+      showToast(copy.passwordTooShort);
+      return;
+    }
+    setPasswordSaving(true);
+    const previousCacheKey = activeSession.cacheKey;
+    try {
+      const passwordHash = await hashToken(value);
+      const nextJwt = await changeAddressPassword(activeSession.jwt, passwordHash);
+      await activateSession(nextJwt, activeSession.address, activeSession.settings);
+      void clearMailboxCache(previousCacheKey).catch(() => undefined);
+      setNewMailboxPassword("");
+      setPasswordDialogOpen(false);
+      showToast(copy.passwordChanged);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : copy.refreshFailed;
+      setError(message);
+      showToast(message);
+    } finally {
+      setPasswordSaving(false);
+    }
+  }, [activateSession, copy.passwordChanged, copy.passwordTooShort, copy.refreshFailed, newMailboxPassword, passwordSaving, showToast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1371,6 +1468,7 @@ export default function App() {
       delete deleteExitTimersRef.current[key];
     }
     rememberDeletedMail(activeSession, mail.id);
+    mailSyncChannelRef.current?.postMessage({ type: "mail-deleted", cacheKey: activeSession.cacheKey, mailId: mail.id });
     removeExitingMail(activeSession, mail.id);
     if (sessionRef.current?.cacheKey !== activeSession.cacheKey) return;
 
@@ -1436,22 +1534,8 @@ export default function App() {
   );
 
   const logout = useCallback(() => {
-    const activeSession = session;
-    cancelRun();
-    if (activeSession && !isShareSession(activeSession)) void clearMailboxCache(activeSession.cacheKey).catch(() => undefined);
-    if (!isShareSession(activeSession)) clearStoredSession();
-    setActiveSession(null);
-    setShareInfo(null);
-    setAutoRefreshEnabled(true);
-    setRefreshFeedback(null);
-    setIsRefreshing(false);
-    setLoading("idle");
-    setSessionMailReadState(null, emptyMailReadState());
-    resetMailboxState();
-    setMobilePane("list");
-    setError(null);
-    setLoginError(null);
-  }, [cancelRun, resetMailboxState, session, setActiveSession, setSessionMailReadState]);
+    resetAuthenticationState("manual");
+  }, [resetAuthenticationState]);
 
   const switchSharedMailbox = useCallback(
     async (mailboxId: string) => {
@@ -1533,14 +1617,18 @@ export default function App() {
     }
   }, [bodyText, copy.bodyCopied, copy.copyFailed, showToast]);
   const activeViewMode: MailViewMode = selectedMail?.html ? mailViewMode : mailViewMode === "source" ? "source" : "text";
+  const selectedImagePermissionKey = session && selectedMail ? `${session.cacheKey}:${selectedMail.id}` : "";
+  const allowRemoteImages = Boolean(selectedImagePermissionKey && remoteImagesAllowedFor === selectedImagePermissionKey);
   const selectedResolvedHtml = selectedMail?.html
-    ? (resolvedHtml?.cacheKey === session?.cacheKey && resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : selectedMail.html)
+    ? (allowRemoteImages
+      ? (resolvedHtml?.cacheKey === session?.cacheKey && resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : "")
+      : selectedMail.html)
     : "";
 
   useEffect(() => {
     let cancelled = false;
     const cacheKey = session?.cacheKey || "";
-    if (!selectedMail?.html || activeViewMode !== "html") {
+    if (!selectedMail?.html || activeViewMode !== "html" || !allowRemoteImages) {
       setResolvedHtml(null);
       return;
     }
@@ -1559,7 +1647,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeViewMode, selectedMail?.html, selectedMail?.id, session?.cacheKey]);
+  }, [activeViewMode, allowRemoteImages, selectedMail?.html, selectedMail?.id, session?.cacheKey]);
 
   if (!session && (loading === "boot" || loading === "login")) {
     return (
@@ -1649,6 +1737,18 @@ export default function App() {
   return (
     <div className={`app-shell pane-${mobilePane} ${isShareSession(session) ? "share-mode" : ""}`}>
       {toast ? <div className="toast">{toast}</div> : null}
+      {passwordDialogOpen && !isShareSession(session) ? (
+        <div className="webmail-modal-backdrop" role="presentation" onMouseDown={() => { if (!passwordSaving) setPasswordDialogOpen(false); }}>
+          <section className="webmail-modal-card" role="dialog" aria-modal="true" aria-labelledby="change-mailbox-password-title" onMouseDown={(event) => event.stopPropagation()}>
+            <h2 id="change-mailbox-password-title">{copy.changePasswordTitle}</h2>
+            <input type="password" autoComplete="new-password" value={newMailboxPassword} onChange={(event) => setNewMailboxPassword(event.target.value)} placeholder={copy.newPasswordPlaceholder} autoFocus />
+            <div>
+              <button type="button" className="ghost-button" disabled={passwordSaving} onClick={() => setPasswordDialogOpen(false)}>{copy.cancel}</button>
+              <button type="button" className="primary-button" disabled={passwordSaving} onClick={() => void saveMailboxPassword()}>{passwordSaving ? copy.savingPassword : copy.savePassword}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       <aside className="sidebar" aria-label={copy.sidebarLabel}>
         <div className="brand-row">
           <BrandLogo variant="compact" />
@@ -1749,6 +1849,7 @@ export default function App() {
             <span>{copy.auto}</span>
           </button>
           <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
+          {!isShareSession(session) ? <button type="button" className="ghost-button" onClick={() => setPasswordDialogOpen(true)}>{copy.changePassword}</button> : null}
           <button type="button" className="ghost-button" onClick={logout}>{copy.logout}</button>
         </div>
 
@@ -1814,6 +1915,16 @@ export default function App() {
                     {copy.copyCode}
                   </button>
                 ) : null}
+                {selectedMail.html && !allowRemoteImages ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    title={copy.remoteImagesBlocked}
+                    onClick={() => setRemoteImagesAllowedFor(selectedImagePermissionKey)}
+                  >
+                    {copy.loadRemoteImages}
+                  </button>
+                ) : null}
                 <button type="button" className="ghost-button" onClick={() => void copyBodyText()}>{copy.copyBody}</button>
                 {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button type="button" className="danger-button" disabled={deletingMailId === selectedMail.id || (session ? isMailExiting(session, selectedMail.id) : false)} onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
               </div>
@@ -1852,7 +1963,7 @@ export default function App() {
             <div className={`mail-body-shell mode-${activeViewMode}`}>
               {activeViewMode === "html" && selectedMail.html ? (
                 selectedResolvedHtml ? (
-                  <MailHtmlView html={selectedResolvedHtml} />
+                  <MailHtmlView html={selectedResolvedHtml} allowExternalImages={allowRemoteImages} />
                 ) : (
                   <div className="mail-image-loading" aria-label={copy.optimizingImages}>
                     <div className="spinner compact-spinner" />

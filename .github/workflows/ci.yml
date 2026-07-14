@@ -55,14 +55,21 @@ jobs:
         run: npm ci
 
       - name: Check webmail Pages Functions
-        working-directory: apps/webmail
-        run: |
-          npm run check:functions:headers
-          npm run check:functions:cors
-          npm run check:functions:image
+        run: npm run check:webmail
+
+      - name: Run frontend regression tests
+        run: npm run test:frontend
 
       - name: Build webmail
         working-directory: apps/webmail
         env:
           VITE_API_BASE: ""
         run: npm run build
+
+      - name: Smoke test admin
+        working-directory: apps/admin
+        run: npm run smoke:local
+
+      - name: Smoke test webmail
+        working-directory: apps/webmail
+        run: npm run smoke:local

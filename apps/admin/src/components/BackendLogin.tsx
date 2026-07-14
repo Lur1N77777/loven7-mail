@@ -212,16 +212,14 @@ function LoginNoticeToast({ notice }: { notice: Notice }) {
   );
 }
 
-export function BackendLogin({ apiBase, locale, theme, onAccountLogin, onDirectLogin, localPreviewHref }: {
+export function BackendLogin({ apiBase, locale, theme, onAccountLogin, localPreviewHref }: {
   apiBase: string;
   locale: AppLocale;
   theme: 'light' | 'dark';
   onAccountLogin: (profile: AccountUserProfile) => void | Promise<void>;
-  onDirectLogin: (session: { jwt: string; address: string }) => void;
   localPreviewHref?: string;
 }) {
   void theme;
-  void onDirectLogin;
   const [mode, setMode] = useState<LoginMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -429,7 +427,19 @@ export function BackendLogin({ apiBase, locale, theme, onAccountLogin, onDirectL
         </div>
       </main>
       <aside className="anything-login-media">
-        <img src="/loven7-anything-login-bg.png" alt="" />
+        <picture>
+          <source
+            type="image/webp"
+            srcSet="/loven7-anything-login-bg-768.webp 768w, /loven7-anything-login-bg.webp 1536w"
+            sizes="50vw"
+          />
+          <img
+            src="/loven7-anything-login-bg.png"
+            alt=""
+            decoding="async"
+            fetchPriority="high"
+          />
+        </picture>
       </aside>
     </div>
   );

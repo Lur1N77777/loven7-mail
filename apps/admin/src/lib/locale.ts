@@ -1,5 +1,5 @@
-import { STORAGE_KEYS } from './constants';
-import { readStorage, writeLocalStorage } from './storage';
+import { STORAGE_KEYS } from './constants.ts';
+import { readStorage, writeLocalStorage } from './storage.ts';
 
 export type AppLocale = 'zh-CN' | 'en-US';
 

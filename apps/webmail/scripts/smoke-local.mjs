@@ -55,9 +55,14 @@ function spawnChrome() {
 }
 
 function killProcessTree(child) {
-  if (!child || child.killed) return;
-  try { child.kill('SIGTERM'); } catch {}
-  if (isWindows) spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', timeout: 1500 });
+  if (!child) return;
+  if (isWindows) {
+    spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', timeout: 1500 });
+    spawnSync('powershell.exe', ['-NoProfile', '-Command', `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`], { stdio: 'ignore', timeout: 2500 });
+  }
+  else {
+    try { child.kill('SIGTERM'); } catch {}
+  }
 }
 
 async function waitForHttp(url, timeoutMs = 15_000) {

@@ -11,7 +11,7 @@ const PNG_BYTES = Uint8Array.from([
   0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
   0x89,
 ]);
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 async function transpileToTemp() {
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'loven7-image-proxy-check-'));
@@ -62,8 +62,8 @@ async function bodyJson(response) {
   return JSON.parse(await response.text());
 }
 
-async function expectStatus(handler, targetUrl, status, label) {
-  const response = await handler({ request: requestFor(targetUrl), env: {}, params: {}, next: async () => new Response(null) });
+async function expectStatus(handler, targetUrl, status, label, env = {}) {
+  const response = await handler({ request: requestFor(targetUrl), env, params: {}, next: async () => new Response(null) });
   assert.equal(response.status, status, `${label}: status`);
   return response;
 }
@@ -84,11 +84,21 @@ function makeChunkedBody(totalBytes, chunkSize = 64 * 1024) {
 }
 
 const originalFetch = globalThis.fetch;
+const originalCaches = globalThis.caches;
 const calls = [];
+const fetchRecords = [];
 
-globalThis.fetch = async (input) => {
+globalThis.fetch = async (input, init = {}) => {
   const url = new URL(typeof input === 'string' ? input : input.url);
   calls.push(url.toString());
+  fetchRecords.push({ url: url.toString(), signal: init.signal });
+
+  if (url.hostname === 'cloudflare-dns.com') {
+    const name = url.searchParams.get('name');
+    if (name === 'rebinding.example') return Response.json({ Answer: [{ type: 1, data: '10.0.0.1' }] });
+    if (name === 'unresolved.example') return Response.json({ Answer: [] });
+    return Response.json({ Answer: [{ type: 1, data: '93.184.216.34' }] });
+  }
 
   if (url.hostname === 'cdn.example.com' && url.pathname === '/ok.png') {
     return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } });
@@ -114,6 +124,17 @@ globalThis.fetch = async (input) => {
   if (url.hostname === 'cdn.example.com' && url.pathname === '/redirect-ok') {
     return new Response(null, { status: 302, headers: { location: '/ok.png' } });
   }
+  if (url.hostname === 'cdn.example.com' && url.pathname === '/slow.png') {
+    return new Promise((resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+    });
+  }
+  if (url.hostname === 'rebinding.example' && url.pathname === '/private.png') {
+    return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } });
+  }
+  if (url.hostname === 'unresolved.example' && url.pathname === '/must-not-fetch.png') {
+    return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } });
+  }
 
   throw new Error(`unexpected fetch ${url.toString()}`);
 };
@@ -123,6 +144,12 @@ try {
   const compiled = await transpileToTemp();
   tempRoot = compiled.tempRoot;
   const { onRequestGet } = await import(`file://${compiled.imageModulePath.replace(/\\/g, '/')}`);
+
+  const callsBeforeRateLimit = calls.length;
+  await expectStatus(onRequestGet, 'https://cdn.example.com/ok.png', 429, 'optional rate limiter', {
+    ASSET_PROXY_RATE_LIMITER: { limit: async () => ({ success: false }) },
+  });
+  assert.equal(calls.length, callsBeforeRateLimit, 'rate-limited image proxy performs no outbound fetch');
 
   const ok = await expectStatus(onRequestGet, 'https://cdn.example.com/ok.png', 200, 'valid png');
   assert.equal(ok.headers.get('content-type'), 'image/png', 'valid png content type');
@@ -150,13 +177,77 @@ try {
   const redirectPrivate = await expectStatus(onRequestGet, 'https://cdn.example.com/redirect-private', 400, 'redirect to private blocked');
   assert.equal((await bodyJson(redirectPrivate)).error.code, 'bad_image_url', 'redirect private error code');
 
+  const redirectRecordStart = fetchRecords.length;
   const redirectOk = await expectStatus(onRequestGet, 'https://cdn.example.com/redirect-ok', 200, 'relative redirect to public ok');
   assert.equal(redirectOk.headers.get('content-type'), 'image/png', 'relative redirect content type');
+  const redirectRecords = fetchRecords.slice(redirectRecordStart);
+  assert(redirectRecords.length >= 4, 'redirect request includes DNS checks and both fetch hops');
+  assert(redirectRecords.every((item) => item.signal instanceof AbortSignal), 'total deadline signal covers DNS and every redirect hop');
+  assert.equal(new Set(redirectRecords.map((item) => item.signal)).size, 1, 'one total deadline is shared across the complete redirect chain');
 
   await expectStatus(onRequestGet, 'https://cdn.example.com/too-large-length', 413, 'content-length limit');
   await expectStatus(onRequestGet, 'https://cdn.example.com/too-large-stream', 413, 'stream limit');
   await expectStatus(onRequestGet, 'https://cdn.example.com/html', 415, 'html rejected');
   await expectStatus(onRequestGet, 'https://cdn.example.com/svg', 415, 'svg rejected');
+  await expectStatus(onRequestGet, 'https://rebinding.example/private.png', 400, 'private DNS answer rejected');
+  const unresolvedFetchesBefore = calls.filter((url) => new URL(url).hostname === 'unresolved.example').length;
+  const unresolved = await expectStatus(onRequestGet, 'https://unresolved.example/must-not-fetch.png', 502, 'unresolved DNS target rejected');
+  assert.equal((await bodyJson(unresolved)).error.code, 'image_dns_failed', 'unresolved target error code');
+  assert.equal(
+    calls.filter((url) => new URL(url).hostname === 'unresolved.example').length,
+    unresolvedFetchesBefore,
+    'unresolved target is never fetched',
+  );
+
+  const slowStartedAt = Date.now();
+  const slow = await expectStatus(onRequestGet, 'https://cdn.example.com/slow.png', 504, 'one total deadline bounds a slow target', {
+    ASSET_PROXY_DEADLINE_MS: 50,
+  });
+  assert.equal((await bodyJson(slow)).error.code, 'image_fetch_timeout', 'slow target timeout error code');
+  assert(Date.now() - slowStartedAt < 1000, 'test deadline aborts the whole image request promptly');
+
+  const cacheValues = new Map();
+  globalThis.caches = { default: {
+    match: async (request) => cacheValues.get(request.url)?.clone(),
+    put: async (request, response) => cacheValues.set(request.url, response.clone()),
+  } };
+  const upstreamBeforeCache = calls.filter((url) => url.includes('/ok.png')).length;
+  const firstCached = await onRequestGet({
+    request: new Request(`https://mail.example.test/api/image?noise=one&url=${encodeURIComponent('https://cdn.example.com/ok.png')}`),
+    env: {}, params: {}, next: async () => new Response(null),
+  });
+  const secondCached = await onRequestGet({
+    request: new Request(`https://mail.example.test/api/image?url=${encodeURIComponent('https://cdn.example.com/ok.png')}&noise=two`),
+    env: {}, params: {}, next: async () => new Response(null),
+  });
+  assert.equal(firstCached.status, 200, 'canonical image cache first response');
+  assert.equal(secondCached.status, 200, 'canonical image cache second response');
+  assert.equal(calls.filter((url) => url.includes('/ok.png')).length - upstreamBeforeCache, 1, 'outer query noise cannot bypass image cache');
+
+  const htmlBeforeNegativeCache = calls.filter((url) => new URL(url).pathname === '/html').length;
+  const firstNegative = await onRequestGet({
+    request: new Request(`https://mail.example.test/api/image?url=${encodeURIComponent('https://cdn.example.com/html')}&noise=one`),
+    env: {}, params: {}, next: async () => new Response(null),
+  });
+  const secondNegative = await onRequestGet({
+    request: new Request(`https://mail.example.test/api/image?noise=two&url=${encodeURIComponent('https://cdn.example.com/html')}`),
+    env: {}, params: {}, next: async () => new Response(null),
+  });
+  assert.equal(firstNegative.status, 415, 'negative image cache first response');
+  assert.equal(secondNegative.status, 415, 'negative image cache second response');
+  assert.equal(calls.filter((url) => new URL(url).pathname === '/html').length - htmlBeforeNegativeCache, 1, 'deterministic proxy rejection is negatively cached');
+
+  let localLimitedStatus = 0;
+  for (let index = 0; index < 61; index += 1) {
+    const response = await onRequestGet({
+      request: new Request(`https://mail.example.test/api/image?url=${encodeURIComponent('file:///blocked')}`, {
+        headers: { 'cf-connecting-ip': '198.51.100.44' },
+      }),
+      env: {}, params: {}, next: async () => new Response(null),
+    });
+    localLimitedStatus = response.status;
+  }
+  assert.equal(localLimitedStatus, 429, 'per-isolate fallback bucket limits requests when no distributed binding exists');
 
   console.log(JSON.stringify({
     ok: true,
@@ -167,10 +258,16 @@ try {
       'safe redirect handling',
       'content-length and streaming size limits',
       'mime allowlist',
+      'private DNS answer rejection',
+      'empty DNS answer rejection',
+      'optional rate limiter and canonical cache',
+      'negative cache and local fallback rate limit',
+      'single total deadline across DNS and redirect hops',
     ],
     fetchCalls: calls.length,
   }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;
+  globalThis.caches = originalCaches;
   if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
 }

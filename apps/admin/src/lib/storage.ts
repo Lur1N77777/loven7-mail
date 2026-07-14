@@ -1,4 +1,4 @@
-import { API_BASE, AUTH_IDLE_TIMEOUT_MS, COOKIE_MIRROR_MAX_AGE_DAYS, STORAGE_KEYS } from './constants';
+import { API_BASE, AUTH_IDLE_TIMEOUT_MS, COOKIE_MIRROR_MAX_AGE_DAYS, STORAGE_KEYS } from './constants.ts';
 
 export type AuthCookieMirror = {
   apiBase?: string;
@@ -155,6 +155,7 @@ const AUTH_PRIVATE_STORAGE_PREFIXES = [
   STORAGE_KEYS.addressListCachePrefix,
   STORAGE_KEYS.senderAccessListCachePrefix,
   STORAGE_KEYS.userListCachePrefix,
+  STORAGE_KEYS.accountProfileCachePrefix,
 ];
 
 function shouldTouchAuthCookieMirror(key: string): boolean {

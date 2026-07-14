@@ -1,5 +1,5 @@
 import { buildUserWorkerHeaders, corsHeaders, decodeJwtAddress, errorJson, extractUserToken, fetchWorkerJson, fetchWorkerJsonWithHeaders, json, mapUpstreamError, UpstreamError, withCors } from "../../_lib/http";
-import { assertShareAdmin, fetchShareAdminWorkerJson, getLatestMailCutoff, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
+import { assertShareAdmin, fetchShareAdminWorkerJson, getLatestMailCutoff, isValidShareTtl, newShareToken, normalizeSharePermissions, parseShareTtl, saveShare, shareError, shareUrlFromRequest, type ShareMailVisibility, type SharePayload } from "../../_lib/share";
 import type { PagesHandler } from "../../_lib/types";
 
 type AddressHint = {
@@ -143,8 +143,6 @@ async function loginAddressPassword(env: Parameters<PagesHandler>[0]["env"], add
 }
 
 async function resolveVerifiedJwtAddress(env: Parameters<PagesHandler>[0]["env"], jwt: string, fallbackAddress = "") {
-  const decodedAddress = normalizeAddress(decodeJwtAddress(jwt));
-  if (decodedAddress) return { address: decodedAddress, verifiedBy: "jwt-payload" as const };
   try {
     const settingsRaw = await fetchWorkerJson<unknown>(env, "/api/settings", { jwt });
     const settings = settingsRaw && typeof settingsRaw === "object" ? settingsRaw as Record<string, unknown> : {};
@@ -168,12 +166,16 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
     const workerEnv = requestSitePassword && !env.SITE_PASSWORD ? { ...env, SITE_PASSWORD: requestSitePassword } : env;
 
     const body = (await request.json().catch(() => null)) as CreateShareBody | null;
+    if (body && Object.prototype.hasOwnProperty.call(body, "expiresIn") && !isValidShareTtl(body.expiresIn)) {
+      return withCors(errorJson(400, "共享链接有效期选项无效", "invalid_share_expiry"), request, env, "admin");
+    }
     const ttl = parseShareTtl(body?.expiresIn);
     const mailVisibility: ShareMailVisibility = body?.mailVisibility === "all" ? "all" : "new";
     const permissions = normalizeSharePermissions(body?.permissions);
     const addressIds = parseAddressIds(body?.addressIds);
     const suppliedCredentials = parseAddressCredentials(body?.addressCredentials || body?.credentials);
     const addresses = [];
+    let creatorUserId = "";
     const useAdminAddressFlow = Boolean(adminPassword || (addressIds.length && !suppliedCredentials.length) || (adminAccessToken && !suppliedCredentials.length));
 
     if (useAdminAddressFlow) {
@@ -223,11 +225,17 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       const userToken = extractUserToken(request);
       if (!userToken) return withCors(errorJson(401, "请先登录账号", "missing_user_token"), request, env, "admin");
       if (!suppliedCredentials.length) return withCors(errorJson(400, "请选择至少一个邮箱地址", "missing_addresses"), request, env, "admin");
-      const boundRaw = await fetchWorkerJsonWithHeaders<{ results?: UserBoundAddress[] } | UserBoundAddress[]>(
-        workerEnv,
-        "/user_api/bind_address",
-        buildUserWorkerHeaders(workerEnv, userToken)
-      );
+      const userHeaders = buildUserWorkerHeaders(workerEnv, userToken);
+      const [boundRaw, profileRaw] = await Promise.all([
+        fetchWorkerJsonWithHeaders<{ results?: UserBoundAddress[] } | UserBoundAddress[]>(
+          workerEnv,
+          "/user_api/bind_address",
+          userHeaders
+        ),
+        fetchWorkerJsonWithHeaders<Record<string, unknown>>(workerEnv, "/user_api/settings", userHeaders),
+      ]);
+      creatorUserId = String(profileRaw?.user_id || profileRaw?.userId || "").trim();
+      if (!creatorUserId) return withCors(errorJson(502, "账号服务未返回稳定用户 ID", "user_identity_missing"), request, env, "admin");
       const boundRows = Array.isArray(boundRaw) ? boundRaw : Array.isArray(boundRaw?.results) ? boundRaw.results : [];
       const allowed = new Map<string, string>();
       for (const row of boundRows) {
@@ -257,6 +265,7 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
     const payload: SharePayload = {
       version: 2,
       token,
+      ...(creatorUserId ? { creatorUserId } : {}),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       expiresAt: ttl.expiresAt,

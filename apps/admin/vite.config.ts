@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         manifest: {
           name: 'Loven7-Mail Admin',
           short_name: 'Loven7-Mail',
@@ -32,14 +32,15 @@ export default defineConfig(({ mode }) => {
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/\?.*\bJWT=/i, /\/api\//, /\/admin\//, /\/open_api\//],
           cleanupOutdatedCaches: true,
-          clientsClaim: true,
-          skipWaiting: true,
-          globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
+          clientsClaim: false,
+          skipWaiting: false,
+          globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,webmanifest,woff2}'],
           globIgnores: [
             '**/loven7-cover-*.png',
             '**/loven7-landscape-*.png',
             '**/loven7-designer-cover-*.png',
             '**/loven7-login-generated-bg.png',
+            '**/loven7-admin-login-hero.png',
           ],
           runtimeCaching: [
             {

@@ -1,4 +1,4 @@
-import { corsHeaders, errorJson, fetchWorkerText, json, mapUpstreamError, UpstreamError, withCors } from "../../../../_lib/http";
+import { corsHeaders, errorJson, fetchWorkerJson, json, mapUpstreamError, UpstreamError, withCors } from "../../../../_lib/http";
 import { resolveSharedMailbox, shareError, updateShareRecord } from "../../../../_lib/share";
 import type { PagesHandler } from "../../../../_lib/types";
 
@@ -16,23 +16,20 @@ export const onRequestDelete: PagesHandler<{ token: string; id: string }> = asyn
     if (!resolved) return withCors(errorJson(404, "共享邮箱不存在或链接已失效", "share_mailbox_not_found"), request, env, "public");
     if (!resolved.share.permissions.hideMail) return withCors(errorJson(403, "此共享链接不允许删除邮件", "share_permission_denied"), request, env, "public");
 
-    let deletedUpstream = false;
-    try {
-      await fetchWorkerText(env, `/api/mail/${mailId}`, { method: "DELETE", jwt: resolved.mailbox.jwt });
-      deletedUpstream = true;
-    } catch (error) {
-      const firstStatus = error instanceof UpstreamError ? error.status : 0;
-      if (![400, 404, 405, 501].includes(firstStatus)) throw error;
-      try {
-        await fetchWorkerText(env, `/api/mails/${mailId}`, { method: "DELETE", jwt: resolved.mailbox.jwt });
-        deletedUpstream = true;
-      } catch (fallbackError) {
-        const fallbackStatus = fallbackError instanceof UpstreamError ? fallbackError.status : 0;
-        if (firstStatus === 404 && fallbackStatus === 404) deletedUpstream = true;
-        else throw fallbackError;
-      }
+    if ((resolved.mailbox.hiddenMailIds || []).includes(mailId)) {
+      return withCors(json({ ok: true, unchanged: true }), request, env, "public");
     }
-    if (!deletedUpstream) return withCors(errorJson(502, "邮件服务未确认删除", "mail_delete_not_confirmed"), request, env, "public");
+
+    // Hiding is share-local (the upstream message is never deleted), but the
+    // id still has to belong to this mailbox. The Worker scopes this lookup by
+    // the mailbox JWT, preventing arbitrary ids from polluting the share.
+    const upstreamMail = await fetchWorkerJson<unknown>(env, `/api/mail/${mailId}`, { jwt: resolved.mailbox.jwt });
+    const upstreamRecord = upstreamMail && typeof upstreamMail === "object" && !Array.isArray(upstreamMail)
+      ? upstreamMail as Record<string, unknown>
+      : null;
+    if (!upstreamRecord || Number(upstreamRecord.id) !== mailId) {
+      return withCors(errorJson(404, "共享邮箱中不存在这封邮件", "share_mail_not_found"), request, env, "public");
+    }
 
     const share = await updateShareRecord(env, params.token, (payload) => {
       return {
@@ -41,8 +38,11 @@ export const onRequestDelete: PagesHandler<{ token: string; id: string }> = asyn
           const matched = mailbox.id === resolved.mailbox.id || (!mailboxId && index === 0);
           if (!matched) return mailbox;
           const hidden = new Set(mailbox.hiddenMailIds || []);
+          const alreadyHidden = hidden.has(mailId);
           hidden.add(mailId);
-          const mailCount = Number.isFinite(Number(mailbox.mailCount)) ? Math.max(0, Math.floor(Number(mailbox.mailCount)) - 1) : undefined;
+          const mailCount = Number.isFinite(Number(mailbox.mailCount))
+            ? Math.max(0, Math.floor(Number(mailbox.mailCount)) - (alreadyHidden ? 0 : 1))
+            : undefined;
           return { ...mailbox, ...(mailCount !== undefined ? { mailCount } : {}), hiddenMailIds: Array.from(hidden).slice(-1000) };
         }),
         updatedAt: new Date().toISOString(),

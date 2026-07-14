@@ -1,4 +1,5 @@
-import { getRuntimeLocale, localeText } from './locale';
+import { getRuntimeLocale, localeText } from './locale.ts';
+import { reportAuthenticationFailure } from './authFailure.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -204,7 +205,9 @@ export function createApiClient(getBaseUrl: () => string, getCredentials: () => 
         const raw = await response.text();
         if (!response.ok) {
           const body = normalizeErrorBody(raw);
-          throw new ApiError(response.status, body, body ? `[${response.status}] ${body}` : `[${response.status}] ${response.statusText}`, { url, method });
+          const error = new ApiError(response.status, body, body ? `[${response.status}] ${body}` : `[${response.status}] ${response.statusText}`, { url, method });
+          reportAuthenticationFailure(error);
+          throw error;
         }
         if (!raw) return undefined as T;
         if (contentType.includes('application/json')) {

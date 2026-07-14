@@ -7,6 +7,7 @@ import { cls, formatDateTime } from '../lib/format';
 import { sha256Hex } from '../lib/crypto';
 import { getRuntimeLocale, localeText } from '../lib/locale';
 import { readJsonStorage, writeJsonStorage } from '../lib/storage';
+import { scopedStorageKey } from '../lib/cacheScope';
 import type { AddressUserFilter, BoundAddressRecord, ListResponse, RoleRecord, UserRecord } from '../types/api';
 import { EmptyState, LoadingState, Modal, Pagination, type Notify, useConfirm } from '../components/Common';
 
@@ -39,7 +40,7 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddresses }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; onFilterUserAddresses?: (filter: AddressUserFilter) => void }) {
+export function UsersView({ request, notify, ask, globalQuery, cacheScope, onFilterUserAddresses }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; cacheScope: string; onFilterUserAddresses?: (filter: AddressUserFilter) => void }) {
   const locale = getRuntimeLocale();
   const t = useCallback((zh: string, en: string) => localeText(zh, en, locale), [locale]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -65,7 +66,7 @@ export function UsersView({ request, notify, ask, globalQuery, onFilterUserAddre
   const inlineAddressCacheRef = useRef<Record<number, InlineAddressCacheEntry>>({});
   const inlineAddressRequestSeqRef = useRef(0);
   const inlineAddressAbortRef = useRef<AbortController | null>(null);
-  const listCacheKey = useMemo(() => `${STORAGE_KEYS.userListCachePrefix}${page}:${pageSize}:${encodeURIComponent(deferredQuery)}`, [deferredQuery, page, pageSize]);
+  const listCacheKey = useMemo(() => scopedStorageKey(STORAGE_KEYS.userListCachePrefix, cacheScope, page, pageSize, deferredQuery), [cacheScope, deferredQuery, page, pageSize]);
 
   const updateInlineAddressCache = useCallback((updater: (current: Record<number, InlineAddressCacheEntry>) => Record<number, InlineAddressCacheEntry>) => {
     setInlineAddressCache((current) => {

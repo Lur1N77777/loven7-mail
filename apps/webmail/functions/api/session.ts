@@ -16,6 +16,7 @@ type SessionRequestBody = {
   credential?: unknown;
   email?: unknown;
   password?: unknown;
+  cf_token?: unknown;
 };
 
 type AddressLoginResponse = {
@@ -35,11 +36,11 @@ function sameAddress(a?: string, b?: string) {
   return Boolean(a && b && a.trim().toLowerCase() === b.trim().toLowerCase());
 }
 
-async function validateCredential(env: Parameters<PagesHandler>[0]["env"], jwt: string) {
+async function validateCredential(env: Parameters<PagesHandler>[0]["env"], jwt: string, cfToken: string) {
   try {
     await fetchWorkerText(env, "/open_api/credential_login", {
       method: "POST",
-      body: { credential: jwt },
+      body: { credential: jwt, cf_token: cfToken },
     });
   } catch (error) {
     const status = error instanceof UpstreamError ? error.status : 0;
@@ -52,11 +53,11 @@ async function validateCredential(env: Parameters<PagesHandler>[0]["env"], jwt: 
   return json({ ok: true, jwt, address: settings.address || fallbackAddress, settings });
 }
 
-async function loginAddressPassword(env: Parameters<PagesHandler>[0]["env"], email: string, password: string) {
+async function loginAddressPassword(env: Parameters<PagesHandler>[0]["env"], email: string, password: string, cfToken: string) {
   const hashedPassword = await sha256Hex(password);
   const loginBody = await fetchWorkerJson<AddressLoginResponse>(env, "/api/address_login", {
     method: "POST",
-    body: { email, password: hashedPassword },
+    body: { email, password: hashedPassword, cf_token: cfToken },
   });
 
   const jwt = String(loginBody?.jwt || "").trim();
@@ -79,11 +80,12 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
   const jwt = String(body?.JWT || body?.jwt || body?.credential || "").trim();
   const email = String(body?.email || "").trim();
   const password = typeof body?.password === "string" ? body.password : "";
+  const cfToken = typeof body?.cf_token === "string" ? body.cf_token.trim() : "";
 
   try {
-    if (jwt) return await validateCredential(env, jwt);
+    if (jwt) return await validateCredential(env, jwt, cfToken);
     if (!email || !password) return errorJson(400, "请输入邮箱和密码", "missing_login_fields");
-    return await loginAddressPassword(env, email, password);
+    return await loginAddressPassword(env, email, password, cfToken);
   } catch (error) {
     if (email && error instanceof UpstreamError && [400, 401, 404].includes(error.status)) {
       return errorJson(401, "邮箱或密码错误", "invalid_login");

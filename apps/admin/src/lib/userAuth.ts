@@ -1,5 +1,6 @@
-import { sha256Hex } from './crypto';
-import { normalizeFrontendBaseUrl } from './frontendBase';
+import { sha256Hex } from './crypto.ts';
+import { normalizeFrontendBaseUrl } from './frontendBase.ts';
+import { isAuthenticationFailureStatus, reportAuthenticationFailure } from './authFailure.ts';
 
 export type OAuthClientInfo = {
   clientID: string;
@@ -27,6 +28,48 @@ export type AccountUserProfile = {
   linuxDoEmail?: string;
   linuxDoId?: string;
 };
+
+const ACCOUNT_PROFILE_CACHE_PREFIX = 'loven7.admin.accountProfile.v1.';
+
+function profileCacheKey(apiBase: string, userToken: string) {
+  const source = `${String(apiBase || 'same-origin').trim().replace(/\/+$/, '').toLowerCase()}\0${userToken}`;
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${ACCOUNT_PROFILE_CACHE_PREFIX}${(hash >>> 0).toString(36)}`;
+}
+
+export function readCachedUserProfile(apiBase: string, userToken: string): AccountUserProfile | null {
+  if (typeof window === 'undefined' || !userToken) return null;
+  try {
+    const raw = window.sessionStorage.getItem(profileCacheKey(apiBase, userToken));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AccountUserProfile;
+    return parsed?.userToken === userToken ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedUserProfile(apiBase: string, profile: AccountUserProfile | null): void {
+  if (typeof window === 'undefined' || !profile?.userToken) return;
+  try {
+    window.sessionStorage.setItem(profileCacheKey(apiBase, profile.userToken), JSON.stringify(profile));
+  } catch {
+    // Session cache is best effort; the token remains the source of truth.
+  }
+}
+
+export function clearCachedUserProfile(apiBase: string, userToken: string): void {
+  if (typeof window === 'undefined' || !userToken) return;
+  try {
+    window.sessionStorage.removeItem(profileCacheKey(apiBase, userToken));
+  } catch {
+    // Ignore restricted storage failures.
+  }
+}
 
 export type UserAddress = {
   id: number;
@@ -71,6 +114,20 @@ type RequestInitLite = {
   search?: URLSearchParams;
 };
 
+export class UserApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message || `Request failed (${status})`);
+    this.name = 'UserApiError';
+    this.status = status;
+  }
+}
+
+export function isAuthenticationFailure(error: unknown): boolean {
+  return isAuthenticationFailureStatus(error);
+}
+
 function baseUrl(apiBase: string) {
   return String(apiBase || '').replace(/\/+$/, '');
 }
@@ -113,7 +170,9 @@ async function apiRequest<T>(apiBase: string, path: string, init: RequestInitLit
   if (!response.ok) {
     const record = data && typeof data === 'object' ? data as Record<string, any> : {};
     const message = record?.error?.message || record?.message || (typeof data === 'string' ? data : '') || response.statusText || 'Request failed';
-    throw new Error(String(message));
+    const error = new UserApiError(response.status, String(message));
+    reportAuthenticationFailure(error);
+    throw error;
   }
   return data as T;
 }
@@ -276,10 +335,25 @@ export async function loginAccountUser(apiBase: string, email: string, password:
 
 export async function registerAccountUser(apiBase: string, email: string, password: string, code = '') {
   const hashed = await sha256Hex(password);
-  await apiRequest(apiBase, '/user_api/register', {
+  const registered = await apiRequest<Record<string, unknown> & { jwt?: string }>(apiBase, '/user_api/register', {
     method: 'POST',
     body: { email, password: hashed, code },
   });
+  const issuedToken = String(registered?.jwt || '').trim();
+  if (issuedToken) {
+    const fallbackProfile = normalizeProfile(issuedToken, {
+      ...registered,
+      user_email: email.trim().toLowerCase(),
+    });
+    try {
+      const profile = await fetchUserProfile(apiBase, issuedToken);
+      return profile.userEmail ? profile : { ...profile, userEmail: fallbackProfile.userEmail };
+    } catch (error) {
+      if (isAuthenticationFailure(error)) throw error;
+      return fallbackProfile;
+    }
+  }
+  // Compatibility for older Workers that do not return the newly-created session.
   return loginWithPasswordAttempt(apiBase, email, hashed);
 }
 
@@ -339,13 +413,53 @@ export async function fetchAddressSettings(apiBase: string, addressJwt: string) 
   });
 }
 
-export async function fetchAddressMails(apiBase: string, addressJwt: string, limit = 50, offset = 0) {
+export async function changeAddressPassword(apiBase: string, addressJwt: string, newPassword: string): Promise<string> {
+  const hashed = await sha256Hex(newPassword);
+  const result = await apiRequest<{ success?: boolean; jwt?: string }>(apiBase, '/api/address_change_password', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${addressJwt}` },
+    body: { new_password: hashed },
+  });
+  const nextJwt = String(result?.jwt || '').trim();
+  if (!nextJwt) throw new Error('密码已更新，但后端未返回新的邮箱凭据');
+  return nextJwt;
+}
+
+export type AddressMailMode = 'inbox' | 'sent' | 'unknown';
+
+export function addressMailEndpoint(mode: AddressMailMode): string | null {
+  if (mode === 'inbox') return '/api/mails';
+  if (mode === 'sent') return '/api/sendbox';
+  return null;
+}
+
+function normalizeAddressMail(item: AddressMail, mode: AddressMailMode): AddressMail {
+  if (mode !== 'sent') return item;
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = item.raw ? JSON.parse(item.raw) as Record<string, unknown> : {};
+  } catch {
+    payload = {};
+  }
+  return {
+    ...item,
+    subject: String(payload.subject || item.subject || ''),
+    source: String(payload.to_mail || payload.to || item.source || ''),
+    raw: String(payload.content || payload.text || payload.html || item.raw || ''),
+    metadata: String(payload.to_name || item.metadata || ''),
+  };
+}
+
+export async function fetchAddressMails(apiBase: string, addressJwt: string, limit = 50, offset = 0, mode: AddressMailMode = 'inbox') {
+  const path = addressMailEndpoint(mode);
+  if (!path) return { results: [] as AddressMail[], count: 0 };
   const search = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-  const raw = await apiRequest<{ results?: AddressMail[]; count?: number } | AddressMail[]>(apiBase, '/api/mails', {
+  const raw = await apiRequest<{ results?: AddressMail[]; count?: number } | AddressMail[]>(apiBase, path, {
     search,
     headers: { Authorization: `Bearer ${addressJwt}` },
   });
-  return Array.isArray(raw) ? { results: raw, count: raw.length } : { results: raw?.results || [], count: Number(raw?.count || 0) };
+  const results = (Array.isArray(raw) ? raw : raw?.results || []).map((item) => normalizeAddressMail(item, mode));
+  return { results, count: Array.isArray(raw) ? raw.length : Number(raw?.count || 0) };
 }
 
 export async function createUserShare(
@@ -362,11 +476,20 @@ export async function createUserShare(
   const base = normalizeFrontendBaseUrl(frontendBase);
   if (!base) throw new Error('请先配置用户站前端地址');
   if (!rows.length) throw new Error('请选择至少一个邮箱地址');
-  const credentials = await Promise.all(rows.map(async (row) => ({
-    id: String(row.id),
-    address: row.name,
-    jwt: await fetchAddressJwt(apiBase, userToken, row.id),
-  })));
+  const credentials: Array<{ id: string; address: string; jwt: string }> = new Array(rows.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(4, rows.length) }, async () => {
+    while (nextIndex < rows.length) {
+      const index = nextIndex++;
+      const row = rows[index];
+      credentials[index] = {
+        id: String(row.id),
+        address: row.name,
+        jwt: await fetchAddressJwt(apiBase, userToken, row.id),
+      };
+    }
+  });
+  await Promise.all(workers);
   let response: Response;
   try {
     response = await fetch(`${base}/api/share`, {

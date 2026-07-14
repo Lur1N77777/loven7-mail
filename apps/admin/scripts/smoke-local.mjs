@@ -290,12 +290,12 @@ function spawnChrome() {
 }
 
 function killProcessTree(child) {
-  if (!child || child.killed) return;
-  try { child.kill('SIGTERM'); } catch {}
+  if (!child) return;
   if (isWindows) {
     spawnSync('taskkill', ['/pid', String(child.pid), '/t', '/f'], { stdio: 'ignore', timeout: 1500 });
+    spawnSync('powershell.exe', ['-NoProfile', '-Command', `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`], { stdio: 'ignore', timeout: 2500 });
   } else {
-    child.kill('SIGTERM');
+    try { child.kill('SIGTERM'); } catch {}
   }
 }
 
@@ -655,6 +655,7 @@ async function collect(ws, name) {
     mobileDetailDisplay: document.querySelector('.mobile-mail-detail') ? getComputedStyle(document.querySelector('.mobile-mail-detail')).display : '',
     verifyCodes: [...document.querySelectorAll('.verify-pill')].map((el) => el.textContent.trim()).filter(Boolean),
     mailItems: document.querySelectorAll('.mail-list-item').length,
+    mailStacks: document.querySelectorAll('.mail-stack-item').length,
     userOptions: [...document.querySelectorAll('.user-filter-option')].map((el) => el.textContent.trim()).filter(Boolean),
     bodySample: document.body.innerText.slice(0, 1400),
     modal: !!document.querySelector('.modal-card'),
@@ -696,6 +697,7 @@ async function main() {
   await waitForHttp(`http://127.0.0.1:${cdpPort}/json/version`);
   const extraResults = [];
 
+  if (process.env.SMOKE_LEGACY_AUTH === '1') {
   const authSecurity = await openApp({
     width: 390,
     height: 844,
@@ -901,6 +903,14 @@ async function main() {
   assert(expiredAuthSnapshot.adminPasswordInputs.every((value) => !value) && !expiredAuthSnapshot.accessTokenValue, `expired auth credential inputs should be empty: ${JSON.stringify(expiredAuthSnapshot)}`);
   assert(!/已连接|Connected/.test(expiredAuthSnapshot.bodySample), `expired auth UI should not show connected state: ${expiredAuthSnapshot.bodySample}`);
   expiredAuthSecurity.close();
+  }
+
+  const adminConnection = await openApp({ width: 390, height: 844, seedAuth: false });
+  const signedOutSnapshot = await readAuthStorageSnapshot(adminConnection);
+  extraResults.push({ name: 'admin-auth-secure-signed-out', ...signedOutSnapshot });
+  assert(!/使用管理员密码连接|Connect with admin password/.test(signedOutSnapshot.bodySample), `admin password fallback should stay hidden from the sign-in page: ${signedOutSnapshot.bodySample}`);
+  assert(!signedOutSnapshot.rawCookie || (!signedOutSnapshot.decodedCookie.includes('adminPassword') && !signedOutSnapshot.decodedCookie.includes('sitePassword')), `auth cookie must not contain credentials: ${signedOutSnapshot.decodedCookie}`);
+  adminConnection.close();
 
   const mobile = await openApp({ width: 390, height: 844 });
   const mobileDashboard = await collect(mobile, 'mobile-dashboard');
@@ -932,6 +942,7 @@ async function main() {
   assert(!mobileInbox.xOverflow, 'mobile inbox has horizontal overflow');
   if (mockServer) {
     assert(mobileInbox.mailItems >= 2, `mock inbox should render seeded mails: ${mobileInbox.mailItems}`);
+    assert(mobileInbox.mailStacks === 0, `mail folding/stacking should stay disabled: ${JSON.stringify(mobileInbox)}`);
     assert(mobileInbox.verifyCodes.some((item) => item.includes('123456')), `Japanese verification code should be extracted: ${mobileInbox.verifyCodes.join(',')}`);
     assert(mobileInbox.verifyCodes.includes('AB7281'), `alphanumeric verification code should be extracted exactly: ${mobileInbox.verifyCodes.join(',')}`);
     assert(!/Content-Transfer-Encoding|--smoke-boundary/i.test(mobileInbox.bodySample), `mail list preview should not show raw MIME source: ${mobileInbox.bodySample}`);
@@ -1042,12 +1053,17 @@ async function main() {
     await sleep(300);
     await clickText(mobile, '新建地址');
     await evaluate(mobile, `document.querySelector('.modal-card .popover-select-trigger')?.click()`);
-    await sleep(250);
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const optionCount = Number(await evaluate(mobile, `document.querySelectorAll('.popover-select-menu-portal .popover-select-option').length`).catch(() => 0));
+      if (optionCount > 0) break;
+      await sleep(250);
+      await evaluate(mobile, `document.querySelector('.modal-card .popover-select-trigger')?.click()`);
+    }
     const createAddressInfo = JSON.parse(await evaluate(mobile, `JSON.stringify({
       modal: !!document.querySelector('.modal-card'),
       domainOptions: [
         ...document.querySelectorAll('.modal-card select option'),
-        ...document.querySelectorAll('.modal-card .popover-select-option')
+        ...document.querySelectorAll('.popover-select-menu-portal .popover-select-option')
       ].map((option) => option.textContent.trim()),
       namePlaceholder: [...document.querySelectorAll('.modal-card input')].map((input) => input.getAttribute('placeholder') || '').join('|')
     })`));
@@ -1191,7 +1207,7 @@ async function main() {
   await sleep(500);
   await clickText(desktop, '维护');
   const maintenanceLayout = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
-    const select = document.querySelector('.maintenance-cleanup-grid .form-select');
+    const select = document.querySelector('.maintenance-cleanup-grid .popover-select-trigger');
     const input = document.querySelector('.maintenance-cleanup-grid .form-input');
     const button = document.querySelector('.maintenance-cleanup-button');
     const rect = (el) => {

@@ -20,11 +20,19 @@ function sameAddress(left: unknown, right: unknown) {
 }
 
 export async function getAllowedShareAddresses(env: CloudmailEnv, userToken: string) {
-  const raw = await fetchWorkerJsonWithHeaders<{ results?: UserBoundAddress[] } | UserBoundAddress[]>(
-    env,
-    "/user_api/bind_address",
-    buildUserWorkerHeaders(env, userToken)
-  );
+  return (await getShareUserContext(env, userToken)).allowed;
+}
+
+export async function getShareUserContext(env: CloudmailEnv, userToken: string) {
+  const headers = buildUserWorkerHeaders(env, userToken);
+  const [raw, profileRaw] = await Promise.all([
+    fetchWorkerJsonWithHeaders<{ results?: UserBoundAddress[] } | UserBoundAddress[]>(
+      env,
+      "/user_api/bind_address",
+      headers
+    ),
+    fetchWorkerJsonWithHeaders<Record<string, unknown>>(env, "/user_api/settings", headers),
+  ]);
   const rows = Array.isArray(raw) ? raw : Array.isArray(raw?.results) ? raw.results : [];
   const allowed = new Map<string, string>();
   for (const row of rows) {
@@ -32,10 +40,16 @@ export async function getAllowedShareAddresses(env: CloudmailEnv, userToken: str
     const address = normalizeAddress(row.name || row.address);
     if (id && address) allowed.set(id, address);
   }
-  return allowed;
+  const userId = String(profileRaw?.user_id || profileRaw?.userId || "").trim();
+  return { allowed, userId };
 }
 
-export function shareBelongsToUser(share: Pick<SharePayload | ShareAdminSummary, "addresses">, allowed: Map<string, string>) {
+export function shareBelongsToUser(
+  share: Pick<SharePayload | ShareAdminSummary, "addresses" | "creatorUserId">,
+  allowed: Map<string, string>,
+  requesterUserId = "",
+) {
+  if (share.creatorUserId) return Boolean(requesterUserId && share.creatorUserId === requesterUserId);
   if (!share.addresses.length) return false;
   return share.addresses.every((mailbox) => {
     const allowedAddress = allowed.get(String(mailbox.id));

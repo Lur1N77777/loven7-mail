@@ -1,5 +1,7 @@
 MAIL_WORKER_BASE_URL="https://your-worker.example.workers.dev"
 SITE_PASSWORD=""
 SHARE_ENCRYPTION_SECRET="replace-with-a-long-random-secret-at-least-32-chars"
+# 新部署优先设置 V2；轮换期间保留上面的 legacy secret 解密旧分享。
+SHARE_ENCRYPTION_SECRET_V2="replace-with-a-different-random-v2-secret-at-least-32-chars"
 SHARE_ADMIN_CORS_ORIGINS="http://localhost:5173"
 SHARE_PUBLIC_CORS_ORIGINS=""

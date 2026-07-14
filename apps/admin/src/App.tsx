@@ -1,5 +1,6 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { clearApiCache, createApiClient } from './lib/api';
+import { subscribeAuthenticationFailures } from './lib/authFailure';
 import { API_BASE, STORAGE_KEYS, SWIPE } from './lib/constants';
 import { readJwtFromQuery } from './lib/clipboard';
 import { decodeJwtPayload, isLikelyJwt } from './lib/crypto';
@@ -12,11 +13,11 @@ import { AuthPanel } from './components/AuthPanel';
 import { BackendLogin } from './components/BackendLogin';
 import { NoticeToast, useConfirm, useNotice } from './components/Common';
 import { Header, Logo, MobileNav, Sidebar, mobileSwipeMenus, type MenuKey } from './components/Shell';
-import { AccountConsole, DirectMailboxConsole } from './views/AccountConsole';
+import { AccountConsole } from './views/AccountConsole';
 import { AddressView } from './views/AddressView';
 import { DashboardView, StatsView } from './views/DashboardView';
 import { MailWorkspace } from './views/MailWorkspace';
-import { fetchUserProfile, isAdminRoleValue, type AccountUserProfile } from './lib/userAuth';
+import { fetchUserProfile, isAdminRoleValue, isAuthenticationFailure, readCachedUserProfile, writeCachedUserProfile, type AccountUserProfile } from './lib/userAuth';
 
 const MemoDashboardView = memo(DashboardView);
 const MemoStatsView = memo(StatsView);
@@ -40,7 +41,6 @@ type PageSwipeLock = 'none' | 'page' | 'scroll';
 type PageSwipeDirection = 1 | -1 | 0;
 type PageSwipeState = { active: boolean; lock: PageSwipeLock; direction: PageSwipeDirection; targetMenu: MenuKey | null; startX: number; startY: number; lastX: number; lastY: number; pendingX: number; rafId: number };
 type AdminAccessProfile = { userEmail: string; userId: number; username: string; roleLabel: string; isAdmin: boolean };
-type DirectAddressSession = { jwt: string; address: string };
 
 function preloadAdminViewChunks() {
   void import('./views/ComposeView');
@@ -344,21 +344,20 @@ const USER_OAUTH_CALLBACK_REDIRECTING = redirectUserOAuthCallbackToAdminRoot();
 const INITIAL_AUTH_EXPIRY_CHECK = purgeExpiredAuthStorage();
 
 function readInitialConnection() {
-  const apiBase = normalizeAuthApiBase(API_BASE);
+  const apiBase = normalizeAuthApiBase(readStorage(STORAGE_KEYS.apiBase, API_BASE));
   consumeAdminConnectionFromUrl();
   const storedAuth = readBoundAuth(apiBase);
   consumeAddressJwtFromUrl();
   consumeUserAccessTokenFromUrl();
   return {
     ...storedAuth,
-    adminPassword: '',
-    sitePassword: '',
     addressJwt: '',
     apiBase,
   };
 }
 
 const INITIAL_CONNECTION = readInitialConnection();
+const INITIAL_ACCOUNT_USER_TOKEN = readAccountUserToken();
 
 export default function App() {
   if (USER_OAUTH_CALLBACK_REDIRECTING) {
@@ -381,11 +380,9 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState(() => INITIAL_CONNECTION.adminPassword);
   const [sitePassword, setSitePassword] = useState(() => INITIAL_CONNECTION.sitePassword);
   const [userAccessToken, setUserAccessToken] = useState(() => INITIAL_CONNECTION.userAccessToken);
-  const [addressJwt, setAddressJwt] = useState(() => INITIAL_CONNECTION.addressJwt);
-  const [directAddress, setDirectAddress] = useState('');
-  const [accountUserToken, setAccountUserToken] = useState(() => readAccountUserToken());
-  const [accountProfile, setAccountProfile] = useState<AccountUserProfile | null>(null);
-  const [accountBooting, setAccountBooting] = useState(() => Boolean(readAccountUserToken()));
+  const [accountUserToken, setAccountUserToken] = useState(() => INITIAL_ACCOUNT_USER_TOKEN);
+  const [accountProfile, setAccountProfile] = useState<AccountUserProfile | null>(() => readCachedUserProfile(INITIAL_CONNECTION.apiBase, INITIAL_ACCOUNT_USER_TOKEN));
+  const [accountBooting, setAccountBooting] = useState(() => Boolean(INITIAL_ACCOUNT_USER_TOKEN));
   const [theme, setThemeState] = useState<'light' | 'dark'>(() => readThemePreference());
   const [locale, setLocale] = useState<AppLocale>(() => readInitialLocale());
   const [stats, setStats] = useState<Statistics>(emptyStats);
@@ -412,6 +409,7 @@ export default function App() {
   const mobileTransitionMenuRef = useRef<MenuKey | null>(null);
   const credentialFingerprintRef = useRef<string | null>(null);
   const authResetSeqRef = useRef(0);
+  const authResettingRef = useRef(false);
   const { notice, push } = useNotice();
   const { ask, modal: confirmModal } = useConfirm();
   const getSwipeViewportWidth = useCallback(() => {
@@ -512,19 +510,47 @@ export default function App() {
       });
     });
   }, [cancelPendingPageAnimation, commitPageDragX]);
-  const clearRecoveredAccountAuth = useCallback(() => {
+  const resetAuthenticationState = useCallback((reason: 'expired' | 'manual') => {
+    if (authResettingRef.current) return;
+    authResettingRef.current = true;
+    const preservedApiBase = apiBase.trim();
+    authResetSeqRef.current += 1;
+    forgetAuthBrowserStorage();
     writeAccountUserToken('');
-    writeBoundAuth(apiBase, { adminPassword: '', sitePassword: '', userAccessToken: '', addressJwt: '' });
+    if (preservedApiBase) writeLocalStorage(STORAGE_KEYS.apiBase, preservedApiBase);
     clearApiCache();
-    setAccountProfile(null);
-    setAccountUserToken('');
     setAdminPassword('');
     setSitePassword('');
     setUserAccessToken('');
-    setAddressJwt('');
-    setDirectAddress('');
-  }, [apiBase]);
+    setAccountUserToken('');
+    setAccountProfile(null);
+    setAccountBooting(false);
+    setAddressUserFilter(null);
+    setMailboxAddressRequest(null);
+    setComposeSeed({});
+    setGlobalQuery('');
+    setStats(emptyStats);
+    setStatsLoading(false);
+    setVisitedMenus(new Set(['dashboard']));
+    if (pageTransitionTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(pageTransitionTimerRef.current);
+      pageTransitionTimerRef.current = null;
+    }
+    setActiveMenu('dashboard');
+    setPageMotion('');
+    pageTransitionSeqRef.current += 1;
+    cancelPendingPageAnimation();
+    settleMobilePageAt('dashboard');
+    credentialFingerprintRef.current = null;
+    push(
+      reason === 'expired' ? 'info' : 'success',
+      reason === 'expired'
+        ? localeText('登录凭据已失效，已清理本机敏感数据，请重新登录。', 'Your session expired. Local sensitive data was cleared; please sign in again.', locale)
+        : localeText('已退出，并清除本机保存的敏感凭据和管理缓存。', 'Signed out and cleared saved sensitive credentials plus admin caches on this browser.', locale),
+    );
+  }, [apiBase, cancelPendingPageAnimation, locale, push, settleMobilePageAt]);
   const applyAccountLogin = useCallback(async (profile: AccountUserProfile) => {
+    authResettingRef.current = false;
     const activeProfile = profile.newUserToken
       ? { ...profile, userToken: profile.newUserToken, newUserToken: undefined }
       : profile;
@@ -532,10 +558,9 @@ export default function App() {
     activeProfile.isAdmin = confirmedAdmin;
     if (!confirmedAdmin) activeProfile.accessToken = '';
     setAccountProfile(activeProfile);
+    writeCachedUserProfile(apiBase, activeProfile);
     setAccountUserToken(activeProfile.userToken);
     writeAccountUserToken(activeProfile.userToken);
-    setAddressJwt('');
-    setDirectAddress('');
     setStats(emptyStats);
     setActiveMenu('dashboard');
     const adminToken = confirmedAdmin ? (activeProfile.accessToken || activeProfile.userToken) : '';
@@ -558,17 +583,11 @@ export default function App() {
     writeBoundAuth(apiBase, { adminPassword: '', sitePassword: '', userAccessToken: '', addressJwt: '' });
     push('success', localeText('已进入个人邮箱后台。', 'Personal mailbox console opened.', locale));
   }, [apiBase, locale, push]);
-  const applyDirectLogin = useCallback((session: DirectAddressSession) => {
-    setAddressJwt(session.jwt);
-    setDirectAddress(session.address);
-    setAccountProfile(null);
-    setAccountUserToken('');
-    writeAccountUserToken('');
-    setAdminPassword('');
-    setUserAccessToken('');
-    writeBoundAuth(apiBase, { adminPassword: '', sitePassword: '', userAccessToken: '', addressJwt: '' });
-    push('success', localeText('已进入邮箱。', 'Mailbox opened.', locale));
-  }, [apiBase, locale, push]);
+  useEffect(() => subscribeAuthenticationFailures(() => {
+    if (adminPreviewMode || authResettingRef.current) return;
+    if (!accountBooting && !accountProfile && !accountUserToken && !adminPassword && !userAccessToken) return;
+    resetAuthenticationState('expired');
+  }), [accountBooting, accountProfile, accountUserToken, adminPassword, adminPreviewMode, resetAuthenticationState, userAccessToken]);
   useEffect(() => {
     if (!accountUserToken) {
       setAccountBooting(false);
@@ -580,9 +599,15 @@ export default function App() {
       .then((profile) => {
         if (!cancelled) applyAccountLogin(profile);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
-          clearRecoveredAccountAuth();
+          if (isAuthenticationFailure(error)) {
+            resetAuthenticationState('expired');
+          } else {
+            const cachedProfile = readCachedUserProfile(apiBase, accountUserToken);
+            if (cachedProfile) setAccountProfile(cachedProfile);
+            push('info', localeText('网络暂时不可用，已保留登录状态，可稍后重试。', 'The network is temporarily unavailable. Your session is preserved; retry shortly.', locale));
+          }
         }
       })
       .finally(() => {
@@ -591,7 +616,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [accountUserToken, apiBase, applyAccountLogin, clearRecoveredAccountAuth]);
+  }, [accountUserToken, apiBase, applyAccountLogin, locale, push, resetAuthenticationState]);
   const decodedAdminAccessProfile = useMemo(() => decodeAdminAccessProfile(userAccessToken), [userAccessToken]);
   const adminAccessProfile = decodedAdminAccessProfile || (accountProfile?.isAdmin && userAccessToken ? {
     userEmail: accountProfile.userEmail,
@@ -605,18 +630,18 @@ export default function App() {
   const effectiveAccountUserToken = accountUserToken || accountProfile?.userToken || '';
   const client = useMemo(() => createApiClient(() => apiBase, () => ({
     adminPassword: effectiveAdminPassword,
-    sitePassword: '',
+    sitePassword,
     userAccessToken: effectiveUserAccessToken,
     accountUserToken: effectiveAccountUserToken,
     addressJwt: '',
     lang: getBackendLang(locale),
-  })), [apiBase, effectiveAccountUserToken, effectiveAdminPassword, effectiveUserAccessToken, locale]);
+  })), [apiBase, effectiveAccountUserToken, effectiveAdminPassword, effectiveUserAccessToken, locale, sitePassword]);
   const previewRequest = useMemo(() => createAdminPreviewRequest(), []);
   const request = useCallback(<T,>(path: string, options?: Parameters<typeof client.request>[1]) => (
     adminPreviewMode ? previewRequest<T>(path, options) : client.request<T>(path, options)
   ), [adminPreviewMode, client, previewRequest]);
   const connected = adminPreviewMode || Boolean(effectiveAdminPassword || effectiveUserAccessToken);
-  const authenticatedView = connected || Boolean(accountProfile) || Boolean(addressJwt && directAddress);
+  const authenticatedView = connected || Boolean(accountProfile);
   const themeShellEligible = authenticatedView || accountBooting || Boolean(accountUserToken);
   const stableMailAccountIdentity = useMemo(() => {
     const profile = accountProfile || adminAccessProfile;
@@ -757,46 +782,9 @@ export default function App() {
         currentLocale,
       ),
       actionLabel: localeText('退出并清理', 'Sign out and clear', currentLocale),
-      onConfirm: () => {
-        const preservedApiBase = apiBase.trim();
-        authResetSeqRef.current += 1;
-        forgetAuthBrowserStorage();
-        writeAccountUserToken('');
-        if (preservedApiBase) writeLocalStorage(STORAGE_KEYS.apiBase, preservedApiBase);
-        clearApiCache();
-        setAdminPassword('');
-        setSitePassword('');
-        setUserAccessToken('');
-        setAddressJwt('');
-        setDirectAddress('');
-        setAccountUserToken('');
-        setAccountProfile(null);
-        setAccountBooting(false);
-        setAddressUserFilter(null);
-        setMailboxAddressRequest(null);
-        setComposeSeed({});
-        setGlobalQuery('');
-        setStats(emptyStats);
-        setStatsLoading(false);
-        setVisitedMenus(new Set(['dashboard']));
-        if (pageTransitionTimerRef.current !== null) {
-          window.clearTimeout(pageTransitionTimerRef.current);
-          pageTransitionTimerRef.current = null;
-        }
-        setActiveMenu('dashboard');
-        setPageMotion('');
-        pageTransitionSeqRef.current += 1;
-        cancelPendingPageAnimation();
-        settleMobilePageAt('dashboard');
-        credentialFingerprintRef.current = null;
-        window.setTimeout(() => {
-          const hasFreshAuth = Boolean(readStorage(STORAGE_KEYS.adminPassword, '') || readStorage(STORAGE_KEYS.sitePassword, '') || readStorage(STORAGE_KEYS.userAccessToken, '') || readStorage(STORAGE_KEYS.addressJwt, ''));
-          if (!hasFreshAuth) forgetAuthBrowserStorage();
-        }, 900);
-        push('success', localeText('已退出，并清除本机保存的敏感凭据和管理缓存。', 'Signed out and cleared saved sensitive credentials plus admin caches on this browser.', currentLocale));
-      },
+      onConfirm: () => resetAuthenticationState('manual'),
     });
-  }, [apiBase, ask, cancelPendingPageAnimation, push, settleMobilePageAt]);
+  }, [ask, resetAuthenticationState]);
   const refreshCurrent = () => {
     clearApiCache();
     loadOpenSettings(true);
@@ -890,8 +878,8 @@ export default function App() {
   const renderContent = (menu: MenuKey) => {
     if (menu === 'dashboard') return <MemoDashboardView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} setActiveMenu={navigateMenu} />;
     if (menu === 'stats') return <MemoStatsView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} />;
-    if (menu === 'address') return <MemoAddressView request={request} notify={push} ask={ask} globalQuery={globalQuery} openSettings={openSettings} userFilter={addressUserFilter} userTotal={stats.userCount} onClearUserFilter={clearAddressUserFilter} onOpenInbox={openAddressInbox} adminAccessToken={effectiveUserAccessToken} />;
-    if (menu === 'users') return <UsersView request={request} notify={push} ask={ask} globalQuery={globalQuery} onFilterUserAddresses={filterUserAddresses} />;
+    if (menu === 'address') return <MemoAddressView key={`address:${mailStateScope}`} request={request} notify={push} ask={ask} globalQuery={globalQuery} cacheScope={mailStateScope} openSettings={openSettings} userFilter={addressUserFilter} userTotal={stats.userCount} onClearUserFilter={clearAddressUserFilter} onOpenInbox={openAddressInbox} adminAccessToken={effectiveUserAccessToken} />;
+    if (menu === 'users') return <UsersView key={`users:${mailStateScope}`} request={request} notify={push} ask={ask} globalQuery={globalQuery} cacheScope={mailStateScope} onFilterUserAddresses={filterUserAddresses} />;
     if (menu === 'inbox' || menu === 'sent' || menu === 'unknown') {
       const visualMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : activeMenu;
       return (
@@ -1074,20 +1062,18 @@ export default function App() {
     setApiBase,
     adminPassword: effectiveAdminPassword,
     setAdminPassword,
-    sitePassword: '',
+    sitePassword,
     setSitePassword,
     userAccessToken: effectiveUserAccessToken,
     setUserAccessToken,
     adminRoleConfirmed: Boolean(adminAccessProfile || accountProfile?.isAdmin),
-    addressJwt: '',
-    setAddressJwt,
     turnstileSiteKey: typeof openSettings?.cfTurnstileSiteKey === 'string' ? openSettings.cfTurnstileSiteKey : '',
     turnstileRequired: Boolean(openSettings?.enableGlobalTurnstileCheck),
     request,
     notify: push,
     canForgetBrowser: connected && !adminPreviewMode,
     onForgetBrowser: forgetCurrentBrowser,
-  }), [accountProfile?.isAdmin, adminAccessProfile, adminPreviewMode, apiBase, connected, effectiveAdminPassword, effectiveUserAccessToken, forgetCurrentBrowser, openSettings?.cfTurnstileSiteKey, openSettings?.enableGlobalTurnstileCheck, push, request]);
+  }), [accountProfile?.isAdmin, adminAccessProfile, adminPreviewMode, apiBase, connected, effectiveAdminPassword, effectiveUserAccessToken, forgetCurrentBrowser, openSettings?.cfTurnstileSiteKey, openSettings?.enableGlobalTurnstileCheck, push, request, sitePassword]);
   const activeSwipeIndex = mobileSwipeMenus.indexOf(activeMenu);
   const useMobileSwipeDeck = mobilePagesEnabled && connected && activeSwipeIndex >= 0;
   const renderLegacyMenus = !useMobileSwipeDeck;
@@ -1120,16 +1106,6 @@ export default function App() {
     return <div className="flex h-[100dvh] w-full items-center justify-center bg-[var(--color-bg)] text-sm text-slate-500">正在恢复登录...</div>;
   }
 
-  if (addressJwt && directAddress) {
-    return (
-      <>
-        <DirectMailboxConsole apiBase={apiBase} jwt={addressJwt} address={directAddress} locale={locale} theme={theme} setTheme={setTheme} setLocale={updateLocale} onSignOut={forgetCurrentBrowser} />
-        <NoticeToast notice={notice} />
-        {confirmModal}
-      </>
-    );
-  }
-
   if (accountProfile && !accountProfile.isAdmin) {
     return (
       <>
@@ -1143,7 +1119,7 @@ export default function App() {
   if (!connected) {
     return (
       <>
-        <BackendLogin apiBase={apiBase} locale={locale} theme={theme} onAccountLogin={applyAccountLogin} onDirectLogin={applyDirectLogin} localPreviewHref={adminPreviewAvailable ? '/?preview=admin' : undefined} />
+        <BackendLogin apiBase={apiBase} locale={locale} theme={theme} onAccountLogin={applyAccountLogin} localPreviewHref={adminPreviewAvailable ? '/?preview=admin' : undefined} />
         <NoticeToast notice={notice} />
         {confirmModal}
       </>

@@ -40,13 +40,14 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-export function sanitizeMailHtml(html: string): string {
+export function sanitizeMailHtml(html: string, options: { allowExternalImages?: boolean } = {}): string {
   if (!html) return '';
   if (typeof window === 'undefined' || !window.DOMParser) {
     return html.replace(/<script[\s\S]*?<\/script>/gi, '');
   }
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
+  const allowExternalImages = options.allowExternalImages === true;
   doc.querySelectorAll(Array.from(STRIP_TAGS).join(',')).forEach((node) => node.remove());
   doc.querySelectorAll('*').forEach((node) => {
     [...node.attributes].forEach((attr) => {
@@ -61,6 +62,11 @@ export function sanitizeMailHtml(html: string): string {
         return;
       }
       if (name === 'srcset' && node instanceof HTMLImageElement) {
+        if (!allowExternalImages) {
+          node.setAttribute('data-blocked-srcset', value);
+          node.removeAttribute(attr.name);
+          return;
+        }
         const safeSrcset = value
           .split(',')
           .map((part) => part.trim())
@@ -79,6 +85,11 @@ export function sanitizeMailHtml(html: string): string {
           node.removeAttribute(attr.name);
           return;
         }
+        if (!allowExternalImages && isEmbeddedImageAttribute && /^\s*(?:https?:)?\/\//i.test(value)) {
+          node.setAttribute('data-blocked-src', value);
+          node.removeAttribute(attr.name);
+          return;
+        }
       }
       if (name === 'style' && /(expression|javascript:|behaviou?r:|@import)/i.test(value)) {
         node.removeAttribute(attr.name);
@@ -92,8 +103,10 @@ export function sanitizeMailHtml(html: string): string {
   return doc.body.innerHTML;
 }
 
-export function buildMailHtmlDocument(html: string, _theme: 'light' | 'dark' = 'light'): string {
-  const safe = sanitizeMailHtml(html);
+export function buildMailHtmlDocument(html: string, _theme: 'light' | 'dark' = 'light', options: { allowExternalImages?: boolean } = {}): string {
+  const allowExternalImages = options.allowExternalImages === true;
+  const safe = sanitizeMailHtml(html, { allowExternalImages });
+  const imagePolicy = allowExternalImages ? 'img-src data: blob: https: http: cid:;' : 'img-src data: blob:;';
   const swipeBridge = `<script>
     (() => {
       let startX = 0, startY = 0, lastX = 0, lastY = 0, active = false;
@@ -138,7 +151,7 @@ export function buildMailHtmlDocument(html: string, _theme: 'light' | 'dark' = '
       }, { passive: true });
     })();
   <\/script>`;
-  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="referrer" content="no-referrer"/><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: https: http: cid:; media-src data: blob: https: http:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data: https: http:; form-action 'none'; base-uri 'none'"/><base target="_blank"/><style>
+  return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="referrer" content="no-referrer"/><meta http-equiv="Content-Security-Policy" content="default-src 'none'; ${imagePolicy} media-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; object-src 'none'; form-action 'none'; base-uri 'none'"/><base target="_blank"/><style>
     :root { color-scheme: light; --mail-frame-surface: #fff; --mail-frame-text: #111317; --mail-frame-muted: #475569; --mail-frame-link: #2563eb; --mail-frame-quote-border: #e5e7eb; }
     html, body { margin: 0; padding: 0; width: 100%; min-width: 0; background: var(--mail-frame-surface) !important; color-scheme: light; overscroll-behavior-x: contain; touch-action: pan-y; scrollbar-width: none; -ms-overflow-style: none; }
     * { scrollbar-width: none; -ms-overflow-style: none; letter-spacing: 0; }

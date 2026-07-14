@@ -82,8 +82,6 @@ export function AuthPanel({ apiBase, adminPassword, userAccessToken, adminRoleCo
   userAccessToken: string;
   setUserAccessToken: (value: string) => void;
   adminRoleConfirmed?: boolean;
-  addressJwt: string;
-  setAddressJwt: (value: string) => void;
   turnstileSiteKey?: string;
   turnstileRequired?: boolean;
   request: Requester;

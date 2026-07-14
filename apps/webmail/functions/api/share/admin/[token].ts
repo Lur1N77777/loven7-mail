@@ -1,5 +1,5 @@
 import { corsHeaders, errorJson, json, withCors } from "../../../_lib/http";
-import { adminShare, assertShareAdmin, getLatestMailCutoff, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareMailVisibility } from "../../../_lib/share";
+import { adminShare, assertShareAdmin, getLatestMailCutoff, isValidShareTtl, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareMailVisibility } from "../../../_lib/share";
 import type { PagesHandler } from "../../../_lib/types";
 
 type UpdateShareBody = {
@@ -38,11 +38,26 @@ export const onRequestPatch: PagesHandler<{ token: string }> = async ({ request,
   try {
     const { workerEnv } = await assertShareAdmin(request, env);
     const body = (await request.json().catch(() => null)) as UpdateShareBody | null;
-    const explicitExpiresAt = normalizeExplicitExpiresAt(body?.expiresAt);
-    const ttl = explicitExpiresAt === undefined ? parseShareTtl(body?.expiresIn) : { expiresAt: explicitExpiresAt };
+    const hasExpiresAt = Boolean(body && Object.prototype.hasOwnProperty.call(body, "expiresAt"));
+    const hasExpiresIn = Boolean(body && Object.prototype.hasOwnProperty.call(body, "expiresIn"));
+    const explicitExpiresAt = hasExpiresAt ? normalizeExplicitExpiresAt(body?.expiresAt) : undefined;
+    if (hasExpiresAt && explicitExpiresAt === undefined) {
+      return withCors(errorJson(400, "共享链接到期时间无效", "invalid_share_expiry"), request, env, "admin");
+    }
+    if (hasExpiresIn && !isValidShareTtl(body?.expiresIn)) {
+      return withCors(errorJson(400, "共享链接有效期选项无效", "invalid_share_expiry"), request, env, "admin");
+    }
+    const requestedExpiresAt = hasExpiresAt
+      ? explicitExpiresAt
+      : hasExpiresIn
+        ? parseShareTtl(body?.expiresIn).expiresAt
+        : undefined;
     const restore = Boolean(body?.restore);
     const requestedVisibility: ShareMailVisibility | undefined = body?.mailVisibility === "new" || body?.mailVisibility === "all" ? body.mailVisibility : undefined;
     const current = await readShareRecord(env, params.token);
+    if (restore && current?.revokedAt) {
+      return withCors(errorJson(409, "已撤销的共享链接不可恢复，请创建新链接", "share_revocation_irreversible"), request, env, "admin");
+    }
     const shouldResetSince = Boolean(body?.resetSince) || requestedVisibility === "new";
     const cutoffById = new Map<string, { sinceMailId: number; sinceCreatedAt: string | null }>();
     if (current && shouldResetSince) {
@@ -52,7 +67,7 @@ export const onRequestPatch: PagesHandler<{ token: string }> = async ({ request,
     }
     const share = await updateShareRecord(env, params.token, (payload) => ({
       ...payload,
-      expiresAt: ttl.expiresAt,
+      expiresAt: requestedExpiresAt === undefined ? payload.expiresAt : requestedExpiresAt,
       revokedAt: restore ? null : payload.revokedAt || null,
       mailVisibility: requestedVisibility || payload.mailVisibility,
       permissions: body?.permissions ? normalizeSharePermissions(body.permissions, payload.permissions) : payload.permissions,

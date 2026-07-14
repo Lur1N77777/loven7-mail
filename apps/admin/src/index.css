@@ -5,7 +5,7 @@
   src: url("/fonts/loven7-brand-script-latin-v2.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
-  font-display: block;
+  font-display: swap;
 }
 
 :root {
@@ -8341,6 +8341,7 @@ main h2,
   gap: .38rem;
 }
 .maintenance-cleanup-grid .form-select,
+.maintenance-cleanup-grid .popover-select-trigger,
 .maintenance-cleanup-grid .form-input,
 .maintenance-cleanup-grid .maintenance-cleanup-button {
   width: 100%;
@@ -8661,6 +8662,7 @@ main h2,
   visibility: hidden;
 }
 .maintenance-cleanup-grid .form-select,
+.maintenance-cleanup-grid .popover-select-trigger,
 .maintenance-cleanup-grid .form-input,
 .maintenance-cleanup-grid .maintenance-cleanup-button {
   height: 2.56rem !important;
@@ -18518,6 +18520,11 @@ body .mobile-mail-shell .mail-list-recipient-text {
   font-size: 13px !important;
   font-weight: 440 !important;
   line-height: 20px !important;
+}
+
+.maintenance-cleanup-grid .maintenance-cleanup-select .popover-select-trigger {
+  min-height: 2.56rem !important;
+  height: 2.56rem !important;
 }
 
 .settings-popover-select .popover-select-trigger:hover,

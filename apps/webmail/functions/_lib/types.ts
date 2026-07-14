@@ -5,6 +5,11 @@ export interface CloudmailEnv {
   MAIL_WORKER_ADMIN_PASSWORD?: string;
   SHARE_ADMIN_PROXY_BASE_URL?: string;
   SHARE_ENCRYPTION_SECRET?: string;
+  SHARE_ENCRYPTION_SECRET_V2?: string;
+  ASSET_PROXY_DEADLINE_MS?: string | number;
+  ASSET_PROXY_RATE_LIMITER?: {
+    limit(input: { key: string }): Promise<{ success: boolean }>;
+  };
   SHARE_ADMIN_CORS_ORIGINS?: string;
   SHARE_PUBLIC_CORS_ORIGINS?: string;
   SHARE_ADMIN_ALLOWED_ORIGINS?: string;

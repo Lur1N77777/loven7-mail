@@ -9,25 +9,26 @@ import { getRuntimeLocale, localeText } from '../lib/locale';
 import { buildAddressLoginUrl, copyText } from '../lib/clipboard';
 import { isLocalAdminOrigin, normalizeFrontendBaseUrl } from '../lib/frontendBase';
 import { readJsonStorage, readStorage, writeJsonStorage, writeLocalStorage } from '../lib/storage';
+import { scopedStorageKey } from '../lib/cacheScope';
+import { ADDRESS_INDEX_MAX_ROWS, ADDRESS_INDEX_PAGE_SIZE, loadBoundedAddressIndex } from '../lib/addressIndex';
+import { selectExpiredShareTokens, shareLifecycleStatus } from '../lib/shareLifecycle';
 import { parseRawMailListItem } from '../lib/mailParser';
 import type { AddressRecord, AddressUserFilter, BoundAddressRecord, ListResponse, OpenSettings, RawMailRecord, SenderAccessRecord, UserRecord } from '../types/api';
 import { EmptyState, LoadingState, Modal, Pagination, PopoverSelect, type Notify, useConfirm } from '../components/Common';
 
-type CachedList<T> = { version: number; count: number; savedAt: number; results: T[]; complete?: boolean };
-type CachedUserOptions = { version: number; savedAt: number; count?: number; users: UserRecord[] };
+type CachedList<T> = { version: number; count: number; savedAt: number; results: T[]; complete?: boolean; truncated?: boolean };
+type CachedUserOptions = { version: number; savedAt: number; count?: number; users: UserRecord[]; truncated?: boolean };
 type CachedNewAddressDraft = { version: number; savedAt: number; customPrefix?: string; domain?: string; enablePrefix?: boolean; enableRandomSubdomain?: boolean };
 type DesktopAddressActionMenu = { row: AddressRecord; top: number; left: number; placement: 'up' | 'down' };
 const LIST_CACHE_VERSION = 1;
 const USER_OPTIONS_CACHE_VERSION = 1;
 const NEW_ADDRESS_DRAFT_VERSION = 1;
-const USER_OPTIONS_CACHE_KEY = `${STORAGE_KEYS.userListCachePrefix}address-filter-options`;
 const RANDOM_DOMAIN_VALUE = '__random_domain__';
 const SEPARATOR_SAFE_ADDRESS_REGEX = '[^a-z0-9._-]';
 const USER_OPTIONS_PAGE_SIZE = 100;
-const ADDRESS_INDEX_PAGE_SIZE = 500;
+const USER_OPTIONS_MAX_ROWS = 1_000;
 const BATCH_MAIL_SCAN_PAGE_SIZE = 50;
 const BATCH_MAIL_SCAN_CONCURRENCY = 5;
-const SHARE_LIST_CACHE_KEY = STORAGE_KEYS.shareAdminListCache;
 
 type DomainOption = { label: string; value: string };
 type NewAddressForm = {
@@ -73,6 +74,7 @@ type AddressViewProps = {
   notify: Notify;
   ask: ReturnType<typeof useConfirm>['ask'];
   globalQuery: string;
+  cacheScope: string;
   openSettings?: OpenSettings | null;
   userFilter?: AddressUserFilter | null;
   userTotal?: number;
@@ -125,10 +127,7 @@ function shareLinkSuffix(row: ShareAdminRecord): string {
 }
 
 function effectiveShareStatus(row: ShareAdminRecord, now = Date.now()): ShareStatus {
-  if (row.revokedAt || row.status === 'revoked') return 'revoked';
-  const expiresAt = row.expiresAt ? Date.parse(row.expiresAt) : 0;
-  if (row.status === 'expired' || (expiresAt > 0 && expiresAt <= now)) return 'expired';
-  return 'active';
+  return shareLifecycleStatus(row, now);
 }
 
 function shareSearchText(row: ShareAdminRecord): string {
@@ -186,20 +185,20 @@ function findUserArray(raw: any, depth = 0): any[] {
   return [];
 }
 
-function findUserCount(raw: any, fallback: number): number {
-  if (!raw || typeof raw !== 'object') return fallback;
+function findUserCount(raw: any): number | null {
+  if (!raw || typeof raw !== 'object') return null;
   const direct = Number(raw.count ?? raw.total ?? raw.total_count ?? raw.totalCount ?? raw.user_count ?? raw.userCount);
-  if (Number.isFinite(direct) && direct >= 0) return Math.max(direct, fallback);
+  if (Number.isFinite(direct) && direct >= 0) return direct;
   for (const value of Object.values(raw)) {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const nested = findUserCount(value, fallback);
-      if (nested > fallback) return nested;
+      const nested = findUserCount(value);
+      if (nested !== null) return nested;
     }
   }
-  return fallback;
+  return null;
 }
 
-function parseUserOptionsResponse(res: unknown): { users: UserRecord[]; count: number } {
+function parseUserOptionsResponse(res: unknown): { users: UserRecord[]; count: number; countKnown: boolean } {
   const raw = res as any;
   const source = findUserArray(raw);
   const users: UserRecord[] = source
@@ -210,36 +209,55 @@ function parseUserOptionsResponse(res: unknown): { users: UserRecord[]; count: n
       address_count: Number(user.address_count ?? user.addressCount ?? user.addresses_count ?? 0),
     }))
     .filter((user: UserRecord) => user.id > 0 && Boolean(user.user_email));
-  const count = findUserCount(raw, users.length);
-  return { users, count: Math.max(count || 0, users.length) };
+  const reportedCount = findUserCount(raw);
+  return {
+    users,
+    count: Math.max(reportedCount ?? 0, users.length),
+    countKnown: reportedCount !== null,
+  };
 }
 
-async function loadAllUserOptions(request: Requester): Promise<{ users: UserRecord[]; count: number }> {
+async function loadAllUserOptions(request: Requester, signal?: AbortSignal): Promise<{ users: UserRecord[]; count: number; truncated: boolean }> {
   const merged = new Map<number, UserRecord>();
   let expectedCount = 0;
-  for (let offset = 0; offset < 1000; offset += USER_OPTIONS_PAGE_SIZE) {
-    const res = await request<ListResponse<UserRecord> | UserRecord[]>(`/admin/users${buildQuery({ limit: USER_OPTIONS_PAGE_SIZE, offset })}`, {
+  let countKnown = false;
+  let complete = false;
+  for (let offset = 0; offset < USER_OPTIONS_MAX_ROWS; offset += USER_OPTIONS_PAGE_SIZE) {
+    const limit = Math.min(USER_OPTIONS_PAGE_SIZE, USER_OPTIONS_MAX_ROWS - offset);
+    const res = await request<ListResponse<UserRecord> | UserRecord[]>(`/admin/users${buildQuery({ limit, offset })}`, {
       forceRefresh: offset === 0,
       cacheTtlMs: CACHE_TTL.userOptions,
+      signal,
     });
     const parsed = parseUserOptionsResponse(res);
-    expectedCount = Math.max(expectedCount, parsed.count);
+    if (parsed.countKnown) {
+      countKnown = true;
+      expectedCount = Math.max(expectedCount, parsed.count);
+    }
     parsed.users.forEach((user) => merged.set(user.id, user));
-    if (parsed.users.length < USER_OPTIONS_PAGE_SIZE || merged.size >= expectedCount) break;
+    if (parsed.users.length < limit || (countKnown && merged.size >= expectedCount)) {
+      complete = true;
+      break;
+    }
   }
   if (merged.size === 0 && expectedCount > 0) {
     const fallback = await request<ListResponse<UserRecord> | UserRecord[]>('/admin/users', {
       forceRefresh: true,
       cacheTtlMs: CACHE_TTL.userOptions,
+      signal,
     }).catch(() => null);
     if (fallback) {
       const parsed = parseUserOptionsResponse(fallback);
-      expectedCount = Math.max(expectedCount, parsed.count);
+      if (parsed.countKnown) {
+        countKnown = true;
+        expectedCount = Math.max(expectedCount, parsed.count);
+      }
       parsed.users.forEach((user) => merged.set(user.id, user));
     }
   }
   const users = Array.from(merged.values());
-  return { users, count: Math.max(expectedCount, users.length) };
+  const count = Math.max(expectedCount, users.length);
+  return { users, count, truncated: !complete && (!countKnown || count > users.length || users.length >= USER_OPTIONS_MAX_ROWS) };
 }
 
 function cleanLocalPart(value: string): string {
@@ -496,6 +514,7 @@ export function AddressView({
   notify,
   ask,
   globalQuery,
+  cacheScope,
   openSettings,
   userFilter,
   userTotal = 0,
@@ -519,12 +538,15 @@ export function AddressView({
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [usersTotal, setUsersTotal] = useState(userTotal);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [usersTruncated, setUsersTruncated] = useState(false);
   const [sortBy, setSortBy] = useState('id');
   const [sortOrder, setSortOrder] = useState<'ascend' | 'descend'>('descend');
   const [loading, setLoading] = useState(false);
   const [allAddressRows, setAllAddressRows] = useState<AddressRecord[]>([]);
   const [allAddressIndexReady, setAllAddressIndexReady] = useState(false);
   const [allAddressIndexComplete, setAllAddressIndexComplete] = useState(false);
+  const [allAddressIndexLoading, setAllAddressIndexLoading] = useState(false);
+  const [allAddressIndexExpectedCount, setAllAddressIndexExpectedCount] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [newAddress, setNewAddress] = useState<NewAddressForm>(() => readStoredNewAddressDraft());
@@ -572,6 +594,7 @@ export function AddressView({
   const mobileMenuCloseTimerRef = useRef<number | null>(null);
   const requestSeqRef = useRef(0);
   const batchScanAbortRef = useRef<AbortController | null>(null);
+  const allAddressIndexAbortRef = useRef<AbortController | null>(null);
   const allAddressRowsRef = useRef<AddressRecord[]>([]);
   const allAddressIndexLoadingRef = useRef(false);
   const allAddressIndexReadyRef = useRef(false);
@@ -639,12 +662,12 @@ export function AddressView({
     { value: 'new', label: t('仅新增', 'New only'), description: t('从现在开始', 'From now on') },
     { value: 'all', label: t('包含历史', 'Include history'), description: t('显示已有邮件', 'Show existing mail') },
   ], [t]);
-  const renderShareVisibilitySwitch = (name: string, value: ShareMailVisibility, onChange: (next: ShareMailVisibility) => void, note?: string) => (
+  const renderShareVisibilitySwitch = (name: string, value: ShareMailVisibility, onChange: (next: ShareMailVisibility) => void, note?: string, disabled = false) => (
     <>
       <div className="share-visibility-switch" role="radiogroup" aria-label={t('共享邮件范围', 'Shared mail range')}>
         {shareVisibilityOptions.map((option) => (
           <label key={option.value} className={cls('share-visibility-option', value === option.value && 'active')}>
-            <input type="radio" name={name} checked={value === option.value} onChange={() => onChange(option.value)} />
+            <input type="radio" name={name} checked={value === option.value} disabled={disabled} onChange={() => onChange(option.value)} />
             <span className="share-choice-body">
               <strong>{option.label}</strong>
               <small>{option.description}</small>
@@ -683,8 +706,10 @@ export function AddressView({
   const addressScopeKey = isAccountScoped
     ? `account:${encodeURIComponent(accountUserEmail || accountUserToken.slice(0, 12))}`
     : `admin:user:${effectiveUserId}:${encodeURIComponent(effectiveUserEmail)}`;
-  const listCacheKey = useMemo(() => `${STORAGE_KEYS.addressListCachePrefix}${addressScopeKey}:${page}:${pageSize}:${encodeURIComponent(manualQuery)}:${sortBy}:${sortOrder}`, [addressScopeKey, manualQuery, page, pageSize, sortBy, sortOrder]);
-  const addressIndexCacheKey = useMemo(() => `${STORAGE_KEYS.addressListCachePrefix}index:${sortBy}:${sortOrder}`, [sortBy, sortOrder]);
+  const userOptionsCacheKey = useMemo(() => scopedStorageKey(STORAGE_KEYS.userListCachePrefix, cacheScope, 'address-filter-options'), [cacheScope]);
+  const shareListCacheKey = useMemo(() => scopedStorageKey(STORAGE_KEYS.shareAdminListCache, cacheScope, isAccountScoped ? 'account' : 'admin'), [cacheScope, isAccountScoped]);
+  const listCacheKey = useMemo(() => scopedStorageKey(STORAGE_KEYS.addressListCachePrefix, cacheScope, addressScopeKey, page, pageSize, manualQuery, sortBy, sortOrder), [addressScopeKey, cacheScope, manualQuery, page, pageSize, sortBy, sortOrder]);
+  const addressIndexCacheKey = useMemo(() => scopedStorageKey(STORAGE_KEYS.addressListCachePrefix, cacheScope, addressScopeKey, 'index', sortBy, sortOrder), [addressScopeKey, cacheScope, sortBy, sortOrder]);
 
   const applyAddressIndexSearch = useCallback((rows: AddressRecord[], searchText: string, targetPage = page) => {
     const search = normalizeSearch(searchText);
@@ -699,40 +724,53 @@ export function AddressView({
 
   const loadAllAddressIndex = useCallback(async (forceRefresh = false) => {
     if (isAccountScoped) return;
-    if (allAddressIndexLoadingRef.current) return;
-    if (!forceRefresh && allAddressIndexCompleteRef.current && allAddressRowsRef.current.length > 0) return;
+    if (allAddressIndexLoadingRef.current && !forceRefresh) return;
+    if (!forceRefresh && allAddressIndexReadyRef.current && allAddressRowsRef.current.length > 0) return;
+    allAddressIndexAbortRef.current?.abort();
+    const controller = new AbortController();
+    allAddressIndexAbortRef.current = controller;
     allAddressIndexLoadingRef.current = true;
+    setAllAddressIndexLoading(true);
     try {
-      const merged: AddressRecord[] = [];
-      let expectedCount = 0;
-      let complete = false;
-      for (let offset = 0; ; offset += ADDRESS_INDEX_PAGE_SIZE) {
-        const res = await request<ListResponse<AddressRecord>>(`/admin/address${buildQuery({ limit: ADDRESS_INDEX_PAGE_SIZE, offset, sort_by: sortBy, sort_order: sortOrder })}`, {
+      const index = await loadBoundedAddressIndex<AddressRecord>({
+        pageSize: ADDRESS_INDEX_PAGE_SIZE,
+        maxRows: ADDRESS_INDEX_MAX_ROWS,
+        signal: controller.signal,
+        fetchPage: (offset, limit, signal) => request<ListResponse<AddressRecord>>(`/admin/address${buildQuery({ limit, offset, sort_by: sortBy, sort_order: sortOrder })}`, {
           forceRefresh: forceRefresh && offset === 0,
           cacheTtlMs: CACHE_TTL.list,
-        });
-        const results = res.results || [];
-        merged.push(...results);
-        expectedCount = typeof res.count === 'number' ? res.count : merged.length;
-        if (results.length === 0 || results.length < ADDRESS_INDEX_PAGE_SIZE || (expectedCount > 0 && merged.length >= expectedCount)) {
-          complete = true;
-          break;
-        }
-      }
-      allAddressRowsRef.current = merged;
+          signal,
+        }),
+      });
+      if (controller.signal.aborted || allAddressIndexAbortRef.current !== controller) return;
+      allAddressRowsRef.current = index.results;
       allAddressIndexReadyRef.current = true;
-      allAddressIndexCompleteRef.current = complete;
-      setAllAddressRows(merged);
+      allAddressIndexCompleteRef.current = index.complete;
+      setAllAddressRows(index.results);
       setAllAddressIndexReady(true);
-      setAllAddressIndexComplete(complete);
-      writeJsonStorage(addressIndexCacheKey, { version: LIST_CACHE_VERSION, count: expectedCount || merged.length, savedAt: Date.now(), results: merged, complete });
+      setAllAddressIndexComplete(index.complete);
+      setAllAddressIndexExpectedCount(index.reportedCount);
+      writeJsonStorage(addressIndexCacheKey, {
+        version: LIST_CACHE_VERSION,
+        count: index.reportedCount,
+        savedAt: Date.now(),
+        results: index.results,
+        complete: index.complete,
+        truncated: index.truncated,
+      });
     } catch {
+      if (controller.signal.aborted || allAddressIndexAbortRef.current !== controller) return;
       allAddressIndexReadyRef.current = false;
       allAddressIndexCompleteRef.current = false;
       setAllAddressIndexReady(false);
       setAllAddressIndexComplete(false);
+      setAllAddressIndexExpectedCount(0);
     } finally {
-      allAddressIndexLoadingRef.current = false;
+      if (allAddressIndexAbortRef.current === controller) {
+        allAddressIndexAbortRef.current = null;
+        allAddressIndexLoadingRef.current = false;
+        setAllAddressIndexLoading(false);
+      }
     }
   }, [addressIndexCacheKey, isAccountScoped, request, sortBy, sortOrder]);
 
@@ -805,23 +843,38 @@ export function AddressView({
     setCount(cached.count || cached.results.length);
   }, [listCacheKey]);
   useEffect(() => {
+    const cancelActiveIndexLoad = () => {
+      const active = allAddressIndexAbortRef.current;
+      active?.abort();
+      if (allAddressIndexAbortRef.current === active) {
+        allAddressIndexAbortRef.current = null;
+        allAddressIndexLoadingRef.current = false;
+        setAllAddressIndexLoading(false);
+      }
+    };
     if (isAccountScoped) {
+      cancelActiveIndexLoad();
       allAddressRowsRef.current = [];
       allAddressIndexReadyRef.current = false;
       allAddressIndexCompleteRef.current = false;
       setAllAddressRows([]);
       setAllAddressIndexReady(false);
       setAllAddressIndexComplete(false);
+      setAllAddressIndexExpectedCount(0);
       return;
     }
     const cached = readJsonStorage<CachedList<AddressRecord> | null>(addressIndexCacheKey, null);
     if (cached?.version === LIST_CACHE_VERSION && Array.isArray(cached.results) && cached.results.length > 0) {
-      allAddressRowsRef.current = cached.results;
+      const cachedRows = cached.results.slice(0, ADDRESS_INDEX_MAX_ROWS);
+      const reportedCount = Math.max(Number(cached.count || 0), cachedRows.length);
+      const cachedComplete = Boolean(cached.complete) && !cached.truncated && reportedCount <= cachedRows.length;
+      allAddressRowsRef.current = cachedRows;
       allAddressIndexReadyRef.current = true;
-      allAddressIndexCompleteRef.current = Boolean(cached.complete);
-      setAllAddressRows(cached.results);
+      allAddressIndexCompleteRef.current = cachedComplete;
+      setAllAddressRows(cachedRows);
       setAllAddressIndexReady(true);
-      setAllAddressIndexComplete(Boolean(cached.complete));
+      setAllAddressIndexComplete(cachedComplete);
+      setAllAddressIndexExpectedCount(reportedCount);
     } else {
       allAddressRowsRef.current = [];
       allAddressIndexReadyRef.current = false;
@@ -829,8 +882,10 @@ export function AddressView({
       setAllAddressRows([]);
       setAllAddressIndexReady(false);
       setAllAddressIndexComplete(false);
+      setAllAddressIndexExpectedCount(0);
     }
     void loadAllAddressIndex(false);
+    return cancelActiveIndexLoad;
   }, [addressIndexCacheKey, isAccountScoped, loadAllAddressIndex]);
   useEffect(() => {
     if (isAccountScoped || effectiveUserFilter || !manualQuery || allAddressRows.length === 0) return;
@@ -958,33 +1013,37 @@ export function AddressView({
       setUsers([]);
       setUsersTotal(1);
       setUsersLoading(false);
+      setUsersTruncated(false);
       return;
     }
-    const cached = readJsonStorage<CachedUserOptions | null>(USER_OPTIONS_CACHE_KEY, null);
+    const cached = readJsonStorage<CachedUserOptions | null>(userOptionsCacheKey, null);
     if (cached?.version === USER_OPTIONS_CACHE_VERSION && Array.isArray(cached.users)) {
       const cachedCount = Math.max(Number(cached.count || 0), cached.users.length);
       if (cached.users.length > 0 || cachedCount === 0) {
         setUsers(cached.users);
         setUsersTotal(cachedCount);
+        setUsersTruncated(Boolean(cached.truncated) || cachedCount > cached.users.length);
       } else {
         setUsersTotal((current) => Math.max(current, cachedCount));
       }
     }
     let cancelled = false;
+    const controller = new AbortController();
     setUsersLoading(true);
-    loadAllUserOptions(request)
-      .then(({ users: nextUsers, count: nextCount }) => {
+    loadAllUserOptions(request, controller.signal)
+      .then(({ users: nextUsers, count: nextCount, truncated }) => {
         if (cancelled) return;
         setUsers(nextUsers);
         setUsersTotal(Math.max(nextCount || 0, nextUsers.length));
-        writeJsonStorage(USER_OPTIONS_CACHE_KEY, { version: USER_OPTIONS_CACHE_VERSION, savedAt: Date.now(), count: Math.max(nextCount || 0, nextUsers.length), users: nextUsers });
+        setUsersTruncated(truncated);
+        writeJsonStorage(userOptionsCacheKey, { version: USER_OPTIONS_CACHE_VERSION, savedAt: Date.now(), count: Math.max(nextCount || 0, nextUsers.length), users: nextUsers, truncated });
       })
       .catch((error) => {
-        if (!cancelled) notify('error', error instanceof Error ? (locale === 'en-US' ? `Failed to load user filter list: ${error.message}` : `用户筛选列表加载失败：${error.message}`) : t('用户筛选列表加载失败', 'Failed to load user filter list'));
+        if (!cancelled && !controller.signal.aborted) notify('error', error instanceof Error ? (locale === 'en-US' ? `Failed to load user filter list: ${error.message}` : `用户筛选列表加载失败：${error.message}`) : t('用户筛选列表加载失败', 'Failed to load user filter list'));
       })
       .finally(() => { if (!cancelled) setUsersLoading(false); });
-    return () => { cancelled = true; };
-  }, [isAccountScoped, locale, notify, request]);
+    return () => { cancelled = true; controller.abort(); };
+  }, [isAccountScoped, locale, notify, request, userOptionsCacheKey]);
   useEffect(() => {
     if (openSettings || fallbackOpenSettings || settingsLoading || settingsAttempted) return;
     setSettingsAttempted(true);
@@ -1040,6 +1099,8 @@ export function AddressView({
   const selectedIds = useMemo(() => new Set(selectedRows.map((row) => row.id)), [selectedRows]);
   const selectedShares = useMemo<ShareAdminRecord[]>(() => Object.values(selectedShareMap as Record<string, ShareAdminRecord>).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), [selectedShareMap]);
   const selectedShareTokens = useMemo(() => new Set(selectedShares.map((row) => row.token)), [selectedShares]);
+  const expiredSelectedShareTokens = useMemo(() => selectExpiredShareTokens(selectedShares, shareStatusNow), [selectedShares, shareStatusNow]);
+  const revokedSelectedShareCount = useMemo(() => selectedShares.filter((row) => effectiveShareStatus(row, shareStatusNow) === 'revoked').length, [selectedShares, shareStatusNow]);
   const visibleShareList = useMemo(() => {
     const localQuery = normalizeSearch(shareListQuery);
     return shareList.filter((row) => {
@@ -1184,7 +1245,7 @@ export function AddressView({
         for (const row of nextList) if (current[row.token]) next[row.token] = row;
         return next;
       });
-      writeJsonStorage(SHARE_LIST_CACHE_KEY, { version: LIST_CACHE_VERSION, savedAt: Date.now(), results: nextList, cursor: res.cursor || null, hasMore: Boolean(res.hasMore && res.cursor) });
+      writeJsonStorage(shareListCacheKey, { version: LIST_CACHE_VERSION, savedAt: Date.now(), results: nextList, cursor: res.cursor || null, hasMore: Boolean(res.hasMore && res.cursor) });
       shareListCursorRef.current = res.cursor || null;
       setShareListHasMore(Boolean(res.hasMore && res.cursor));
       setShareStatusNow(Date.now());
@@ -1193,9 +1254,9 @@ export function AddressView({
     } finally {
       setShareListLoading(false);
     }
-  }, [notify, shareAdminRequest]);
+  }, [notify, shareAdminRequest, shareListCacheKey]);
   const hydrateShareListCache = () => {
-    const cached = readJsonStorage<{ version: number; results?: ShareAdminRecord[]; cursor?: string | null; hasMore?: boolean } | null>(SHARE_LIST_CACHE_KEY, null);
+    const cached = readJsonStorage<{ version: number; results?: ShareAdminRecord[]; cursor?: string | null; hasMore?: boolean } | null>(shareListCacheKey, null);
     if (cached?.version === LIST_CACHE_VERSION && Array.isArray(cached.results)) {
       setShareList(cached.results);
       shareListCursorRef.current = cached.cursor || null;
@@ -1235,7 +1296,7 @@ export function AddressView({
     if (deleted.size === 0) return;
     setShareList((current) => {
       const next = current.filter((row) => !deleted.has(row.token));
-      writeJsonStorage(SHARE_LIST_CACHE_KEY, { version: LIST_CACHE_VERSION, savedAt: Date.now(), results: next, cursor: shareListCursorRef.current || null, hasMore: shareListHasMore });
+      writeJsonStorage(shareListCacheKey, { version: LIST_CACHE_VERSION, savedAt: Date.now(), results: next, cursor: shareListCursorRef.current || null, hasMore: shareListHasMore });
       return next;
     });
     setSelectedShareMap((current) => {
@@ -1280,11 +1341,18 @@ export function AddressView({
   };
   const runShareBatch = async (action: 'revoke' | 'restore' | 'update' | 'refresh-index', body: Record<string, unknown> = {}) => {
     if (selectedShares.length === 0) return;
+    const tokens = action === 'restore'
+      ? selectExpiredShareTokens(selectedShares, Date.now())
+      : selectedShares.map((row) => row.token);
+    if (tokens.length === 0) {
+      notify('info', t('已撤销的链接不可恢复；请选择已过期链接进行续期，或重新创建共享链接。', 'Revoked links cannot be restored. Select expired links to extend them, or create a new share link.'));
+      return;
+    }
     setShareActionBusy(`batch:${action}`);
     try {
       const res = await shareAdminRequest<{ results?: ShareAdminRecord[]; failures?: Array<{ token: string; message: string }> }>('/batch', {
         method: 'POST',
-        body: { action, tokens: selectedShares.map((row) => row.token), ...body },
+        body: { action, tokens, ...body },
       });
       const rows = Array.isArray(res.results) ? res.results : [];
       if (rows.length) {
@@ -1310,11 +1378,15 @@ export function AddressView({
   };
   const updateShareExpiry = async () => {
     if (!shareEditTarget) return;
+    if (effectiveShareStatus(shareEditTarget, Date.now()) === 'revoked') {
+      notify('info', t('已撤销的共享链接不可恢复或修改，请重新创建共享链接。', 'Revoked share links cannot be restored or edited. Create a new share link instead.'));
+      return;
+    }
     setShareActionBusy(`update:${shareEditTarget.token}`);
     try {
       const res = await shareAdminRequest<{ share?: ShareAdminRecord }>(`/${encodeURIComponent(shareEditTarget.token)}`, {
         method: 'PATCH',
-        body: { expiresIn: shareEditExpiry, restore: shareEditTarget.status === 'revoked', mailVisibility: shareEditVisibility, resetSince: shareEditVisibility === 'new' },
+        body: { expiresIn: shareEditExpiry, mailVisibility: shareEditVisibility, resetSince: shareEditVisibility === 'new' },
       });
       if (res.share) {
         setShareList((current) => current.map((row) => (row.token === res.share?.token ? res.share : row)));
@@ -1779,6 +1851,13 @@ export function AddressView({
                     <span className="user-filter-option-count">{locale === 'en-US' ? `${Number(user.address_count ?? 0)} addresses` : `${Number(user.address_count ?? 0)} 个地址`}</span>
                   </button>
                 ))}
+                {usersTruncated && (
+                  <div className="user-filter-empty" role="status">
+                    {locale === 'en-US'
+                      ? `Showing the first ${users.length} of ${usersTotal > users.length ? usersTotal : `${users.length}+`} users. Search in User management to open addresses for users outside this list.`
+                      : `仅显示前 ${users.length} / ${usersTotal > users.length ? usersTotal : `${users.length}+`} 个用户；更多用户请在“用户管理”中搜索后查看其地址。`}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1803,6 +1882,15 @@ export function AddressView({
           <button type="button" className="btn-secondary compact toolbar-action sort-order-action" title={sortOrder === 'ascend' ? t('当前升序，点击切换', 'Currently ascending. Click to toggle.') : t('当前降序，点击切换', 'Currently descending. Click to toggle.')} onClick={() => setSortOrder(sortOrder === 'ascend' ? 'descend' : 'ascend')}><ListFilter size={15} /> <span>{sortOrder === 'ascend' ? t('升序', 'Asc') : t('降序', 'Desc')}</span></button>
           <button type="button" className="btn-secondary compact toolbar-action address-toolbar-refresh" title={t("刷新地址列表", "Refresh address list")} aria-label={t("刷新地址列表", "Refresh address list")} onClick={() => fetchData(true)}><RefreshCw size={15} className={cls((loading || usersLoading) && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button>
         </div>
+        {!isAccountScoped && !effectiveUserFilter && (allAddressIndexLoading || (allAddressIndexReady && !allAddressIndexComplete)) && (
+          <div className="border-t border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800" role="status" aria-live="polite">
+            {allAddressIndexLoading
+              ? t(`正在建立本地快速索引（最多 ${ADDRESS_INDEX_MAX_ROWS} 条）；搜索结果仍以服务器返回为准。`, `Building the local quick index (up to ${ADDRESS_INDEX_MAX_ROWS} rows); server results remain authoritative.`)
+              : locale === 'en-US'
+                ? `The local quick index is capped at ${allAddressRows.length}${allAddressIndexExpectedCount > allAddressRows.length ? ` of ${allAddressIndexExpectedCount}` : ''} rows for performance. Server-side search still covers the complete address set.`
+                : `为保证流畅度，本地快速索引最多保留 ${allAddressRows.length}${allAddressIndexExpectedCount > allAddressRows.length ? ` / ${allAddressIndexExpectedCount}` : ''} 条；服务器搜索仍会覆盖完整地址数据。`}
+          </div>
+        )}
         {selectedRows.length > 0 && (
           <div className={cls('address-bulk-bar', mobileBulkMenuOpen && 'mobile-expanded')}>
             <button
@@ -1898,7 +1986,7 @@ export function AddressView({
           </span>
           <ChevronDown size={16} className={cls('shrink-0 text-slate-400 transition', senderPanelOpen && 'rotate-180')} />
         </button>
-        {senderPanelOpen && <SenderAccessPanel request={request} notify={notify} ask={ask} embedded />}
+        {senderPanelOpen && <SenderAccessPanel request={request} notify={notify} ask={ask} cacheScope={cacheScope} embedded />}
       </div>}
 
       {desktopActionMenu && typeof document !== 'undefined' && createPortal(
@@ -2020,7 +2108,7 @@ export function AddressView({
               <strong>{locale === 'en-US' ? `${selectedShares.length} share links selected` : `已选择 ${selectedShares.length} 条共享链接`}</strong>
               <button type="button" className="btn-secondary compact" onClick={copySelectedShareUrls}><Copy size={14} /> {t('复制链接', 'Copy links')}</button>
               <button type="button" className="btn-secondary compact" disabled={shareActionBusy === 'batch:update'} onClick={() => runShareBatch('update', { expiresIn: '30d', mailVisibility: 'new' })}>{t('切到仅新增', 'Set new-only')}</button>
-              <button type="button" className="btn-secondary compact" disabled={shareActionBusy === 'batch:restore'} onClick={() => runShareBatch('restore', { expiresIn: '30d' })}>{t('恢复/续期', 'Restore/extend')}</button>
+              <button type="button" className="btn-secondary compact" disabled={expiredSelectedShareTokens.length === 0 || shareActionBusy === 'batch:restore'} title={revokedSelectedShareCount > 0 ? t('已撤销链接不可恢复，不会参与续期', 'Revoked links cannot be restored and are excluded') : undefined} onClick={() => runShareBatch('restore', { expiresIn: '30d' })}>{t(`续期已过期 (${expiredSelectedShareTokens.length})`, `Extend expired (${expiredSelectedShareTokens.length})`)}</button>
               <button type="button" className="btn-danger compact" disabled={shareActionBusy === 'batch:revoke'} onClick={() => runShareBatch('revoke')}><Trash2 size={14} /> {t('批量撤销', 'Revoke selected')}</button>
               <button type="button" className="btn-secondary compact" disabled={selectedInactiveShares.length === 0 || shareActionBusy === 'cleanup:selected'} onClick={() => cleanupInactiveShares(selectedShares, 'selected')}><Trash2 size={14} /> {t('清理已选失效', 'Clean selected inactive')}</button>
               <button type="button" className="text-xs font-semibold text-slate-400 hover:text-slate-700" onClick={() => setSelectedShareMap({})}>{t('清空选择', 'Clear selection')}</button>
@@ -2113,7 +2201,7 @@ export function AddressView({
           )}
         </div>
       </Modal>}
-      {shareEditTarget && <Modal title={t('修改共享链接有效期', 'Edit share link expiry')} onClose={() => setShareEditTarget(null)}>
+      {shareEditTarget && <Modal title={effectiveShareStatus(shareEditTarget, shareStatusNow) === 'revoked' ? t('已撤销共享链接', 'Revoked share link') : t('修改共享链接有效期', 'Edit share link expiry')} onClose={() => setShareEditTarget(null)}>
         <div className="space-y-4">
           <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-500">
             <p className="font-medium text-slate-700">{locale === 'en-US' ? `${shareEditTarget.addressCount} mailboxes` : `${shareEditTarget.addressCount} 个邮箱`}</p>
@@ -2122,15 +2210,15 @@ export function AddressView({
           </div>
           <div>
             <label className="form-label">{t('新的有效期', 'New expiry')}</label>
-            <PopoverSelect ariaLabel={t('新的共享链接有效期', 'New share link expiry')} value={shareEditExpiry} options={shareExpiryOptions.map((item) => ({ ...item, label: item.value === 'forever' ? t('永久有效', 'Never expires') : (locale === 'en-US' ? `From now: ${item.label}` : `从现在起 ${item.label}`) }))} onChange={(value) => setShareEditExpiry(value as ShareExpiryOption)} />
+            <PopoverSelect disabled={effectiveShareStatus(shareEditTarget, shareStatusNow) === 'revoked'} ariaLabel={t('新的共享链接有效期', 'New share link expiry')} value={shareEditExpiry} options={shareExpiryOptions.map((item) => ({ ...item, label: item.value === 'forever' ? t('永久有效', 'Never expires') : (locale === 'en-US' ? `From now: ${item.label}` : `从现在起 ${item.label}`) }))} onChange={(value) => setShareEditExpiry(value as ShareExpiryOption)} />
           </div>
           <div>
             <label className="form-label">{t('邮件范围', 'Mail range')}</label>
-            {renderShareVisibilitySwitch('shareEditVisibility', shareEditVisibility, setShareEditVisibility, t('切换为仅新增会以当前时刻重新记录 cutoff。', 'Switching to new-only records a fresh cutoff from now.'))}
+            {renderShareVisibilitySwitch('shareEditVisibility', shareEditVisibility, setShareEditVisibility, t('切换为仅新增会以当前时刻重新记录 cutoff。', 'Switching to new-only records a fresh cutoff from now.'), effectiveShareStatus(shareEditTarget, shareStatusNow) === 'revoked')}
           </div>
-          {shareEditTarget.status === 'revoked' && <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{t('保存后会同时恢复这个已撤销的共享链接。', 'Saving will also restore this revoked share link.')}</p>}
-          <button type="button" className="btn-primary w-full" disabled={shareActionBusy === `update:${shareEditTarget.token}`} onClick={updateShareExpiry}>
-            <Save size={16} /> {shareActionBusy === `update:${shareEditTarget.token}` ? t('保存中...', 'Saving...') : t('保存有效期', 'Save expiry')}
+          {effectiveShareStatus(shareEditTarget, shareStatusNow) === 'revoked' && <p className="rounded-2xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{t('撤销是不可逆操作。此链接不能恢复或修改；如需再次分享，请返回地址列表重新选择邮箱并创建新链接。', 'Revocation is irreversible. This link cannot be restored or edited; select the mailboxes again and create a new share link.')}</p>}
+          <button type="button" className="btn-primary w-full" disabled={effectiveShareStatus(shareEditTarget, shareStatusNow) === 'revoked' || shareActionBusy === `update:${shareEditTarget.token}`} onClick={updateShareExpiry}>
+            <Save size={16} /> {shareActionBusy === `update:${shareEditTarget.token}` ? t('保存中...', 'Saving...') : effectiveShareStatus(shareEditTarget, shareStatusNow) === 'revoked' ? t('已撤销，不可恢复', 'Revoked permanently') : t('保存有效期', 'Save expiry')}
           </button>
         </div>
       </Modal>}
@@ -2166,7 +2254,7 @@ export function AddressView({
   );
 }
 
-function SenderAccessPanel({ request, notify, ask, embedded = false }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; embedded?: boolean }) {
+function SenderAccessPanel({ request, notify, ask, cacheScope, embedded = false }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; cacheScope: string; embedded?: boolean }) {
   const { locale, t } = useLocaleCopy();
   const [data, setData] = useState<SenderAccessRecord[]>([]);
   const [count, setCount] = useState(0);
@@ -2177,7 +2265,7 @@ function SenderAccessPanel({ request, notify, ask, embedded = false }: { request
   const [editTarget, setEditTarget] = useState<SenderAccessRecord | null>(null);
   const [balance, setBalance] = useState(0);
   const [enabled, setEnabled] = useState(false);
-  const listCacheKey = useMemo(() => `${STORAGE_KEYS.senderAccessListCachePrefix}${page}:${pageSize}:${encodeURIComponent(address.trim())}`, [address, page, pageSize]);
+  const listCacheKey = useMemo(() => scopedStorageKey(STORAGE_KEYS.senderAccessListCachePrefix, cacheScope, page, pageSize, address.trim()), [address, cacheScope, page, pageSize]);
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     setLoading(true);

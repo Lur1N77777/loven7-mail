@@ -1,6 +1,6 @@
 import { corsHeaders, errorJson, json, withCors } from "../../../_lib/http";
-import { adminShare, deleteInactiveShareRecord, getLatestMailCutoff, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareMailVisibility } from "../../../_lib/share";
-import { getAllowedShareAddresses, shareBelongsToUser } from "../../../_lib/shareUser";
+import { adminShare, deleteInactiveShareRecord, getLatestMailCutoff, isValidShareTtl, mapWithConcurrency, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareAdminSummary, type ShareMailVisibility } from "../../../_lib/share";
+import { getShareUserContext, shareBelongsToUser } from "../../../_lib/shareUser";
 import type { PagesHandler } from "../../../_lib/types";
 import { getUserToken, missingUserToken } from "../../../_lib/user";
 
@@ -14,7 +14,7 @@ type BatchBody = {
 
 function parseTokens(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.map((item) => String(item || "").trim()).filter((item) => /^[A-Za-z0-9_-]{12,96}$/.test(item)))].slice(0, 100);
+  return [...new Set(value.map((item) => String(item || "").trim()).filter((item) => /^[A-Za-z0-9_-]{12,96}$/.test(item)))].slice(0, 25);
 }
 
 export const onRequestOptions: PagesHandler = ({ request, env }) => {
@@ -25,31 +25,35 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
   try {
     const userToken = getUserToken(request);
     if (!userToken) return withCors(missingUserToken(), request, env, "admin");
-    const allowed = await getAllowedShareAddresses(env, userToken);
+    const { allowed, userId } = await getShareUserContext(env, userToken);
     const body = (await request.json().catch(() => null)) as BatchBody | null;
     const tokens = parseTokens(body?.tokens);
     if (!tokens.length) return withCors(errorJson(400, "请选择至少一个共享链接", "missing_tokens"), request, env, "admin");
     const action = String(body?.action || "").trim();
     const allowedActions = new Set(["revoke", "restore", "update", "refresh-index", "delete-inactive"]);
     if (!allowedActions.has(action)) return withCors(errorJson(400, "批量操作无效", "bad_batch_action"), request, env, "admin");
+    if (body && Object.prototype.hasOwnProperty.call(body, "expiresIn") && !isValidShareTtl(body.expiresIn)) {
+      return withCors(errorJson(400, "共享链接有效期选项无效", "invalid_share_expiry"), request, env, "admin");
+    }
 
     const ttl = parseShareTtl(body?.expiresIn);
     const requestedVisibility: ShareMailVisibility | undefined = body?.mailVisibility === "new" || body?.mailVisibility === "all" ? body.mailVisibility : undefined;
-    const results = [];
-    const deletedTokens = [];
-    const failures = [];
+    const results: ShareAdminSummary[] = [];
+    const deletedTokens: string[] = [];
+    const failures: Array<{ token: string; message: string }> = [];
 
-    for (const token of tokens) {
+    await mapWithConcurrency(tokens, 4, async (token) => {
       try {
         const current = await readShareRecord(env, token);
         if (!current) throw new Error("共享链接不存在");
-        if (!shareBelongsToUser(current, allowed)) throw new Error("无权管理该共享链接");
+        if (!shareBelongsToUser(current, allowed, userId)) throw new Error("无权管理该共享链接");
+        if (action === "restore" && current.revokedAt) throw new Error("已撤销的共享链接不可恢复，请创建新链接");
         let share = null;
         if (action === "delete-inactive") {
           const deleted = await deleteInactiveShareRecord(env, token);
           if (!deleted) throw new Error("共享链接不存在");
           deletedTokens.push(token);
-          continue;
+          return;
         } else if (action === "revoke") {
           share = await revokeShare(env, token);
         } else if (action === "refresh-index") {
@@ -79,7 +83,7 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       } catch (error) {
         failures.push({ token, message: error instanceof Error ? error.message : "操作失败" });
       }
-    }
+    });
 
     return withCors(json({ ok: failures.length === 0, results, deletedTokens, failures }), request, env, "admin");
   } catch (error) {

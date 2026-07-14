@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, Loader2, Send, Sparkles } from 'lucide-react';
 import type { Requester } from '../lib/api';
 import { buildMailHtmlDocument } from '../lib/mailParser';
 import { safeJsonParse } from '../lib/format';
 import { getRuntimeLocale, localeText } from '../lib/locale';
+import { createOutboundIdempotencyTracker } from '../lib/outboundIdempotency';
 import type { BindingSendPayload, ComposePayload } from '../types/api';
 import type { Notify } from '../components/Common';
 
@@ -38,6 +39,7 @@ export function ComposeView({ request, notify, seed, clearSeed }: { request: Req
   const [binding, setBinding] = useState<BindingDraft>(emptyBinding);
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState(false);
+  const outboundRequests = useRef(createOutboundIdempotencyTracker()).current;
 
   useEffect(() => {
     if (Object.keys(seed).length) {
@@ -67,7 +69,18 @@ export function ComposeView({ request, notify, seed, clearSeed }: { request: Req
     if (!model.from_mail.trim() || !model.to_mail.trim() || !model.subject.trim() || !model.content.trim()) { notify('error', t('请填写发件地址、收件地址、主题和正文', 'Fill sender, recipient, subject, and body')); return; }
     if (!isEmail(model.from_mail)) { notify('error', t('发件地址格式不正确', 'Sender address is invalid')); return; }
     if (!isEmail(model.to_mail)) { notify('error', t('收件地址格式不正确', 'Recipient address is invalid')); return; }
-    await request('/admin/send_mail', { method: 'POST', body: model });
+    const attempt = outboundRequests.begin('/admin/send_mail', model);
+    try {
+      await request('/admin/send_mail', {
+        method: 'POST',
+        body: model,
+        headers: { 'Idempotency-Key': attempt.key },
+      });
+    } catch (error) {
+      outboundRequests.failed(attempt, error);
+      throw error;
+    }
+    outboundRequests.succeeded(attempt);
     notify('success', t('邮件已发送', 'Mail sent'));
     setModel(emptyModel);
     clearSeed();
@@ -82,7 +95,18 @@ export function ComposeView({ request, notify, seed, clearSeed }: { request: Req
     if (binding.replyTo.trim() && !isEmail(binding.replyTo)) { notify('error', t('Reply-To 格式不正确', 'Reply-To is invalid')); return; }
     const headers = safeJsonParse<Record<string, string> | null>(binding.headersJson, null);
     if (headers === null || typeof headers !== 'object' || Array.isArray(headers)) { notify('error', t('Headers 必须是 JSON 对象', 'Headers must be a JSON object')); return; }
-    await request('/admin/send_mail_by_binding', { method: 'POST', body: bindingPayload });
+    const attempt = outboundRequests.begin('/admin/send_mail_by_binding', bindingPayload);
+    try {
+      await request('/admin/send_mail_by_binding', {
+        method: 'POST',
+        body: bindingPayload,
+        headers: { 'Idempotency-Key': attempt.key },
+      });
+    } catch (error) {
+      outboundRequests.failed(attempt, error);
+      throw error;
+    }
+    outboundRequests.succeeded(attempt);
     notify('success', t('Binding 邮件已发送', 'Binding mail sent'));
     setBinding(emptyBinding);
   };
@@ -99,7 +123,13 @@ export function ComposeView({ request, notify, seed, clearSeed }: { request: Req
     }
   };
 
-  return <div className="compose-view-shell h-full overflow-y-auto p-3 md:p-5"><div className="mx-auto max-w-5xl panel p-4 md:p-6"><div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('写邮件', 'Compose')}</h2></div><div className="flex gap-2"><button type="button" className="btn-secondary" onClick={() => setPreview(!preview)}><Eye size={16} /> {preview ? t('编辑', 'Edit') : t('预览', 'Preview')}</button></div></div><div className="compose-mode-switch mb-4 grid rounded-2xl bg-slate-50 p-1 sm:grid-cols-2"><button type="button" className={mode === 'standard' ? 'rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm' : 'rounded-xl px-4 py-2 text-sm font-medium text-slate-500'} onClick={() => setMode('standard')}>{t('标准发送', 'Standard')}</button><button type="button" className={mode === 'binding' ? 'rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm' : 'rounded-xl px-4 py-2 text-sm font-medium text-slate-500'} onClick={() => setMode('binding')}><Sparkles className="mr-1 inline h-4 w-4" />Binding</button></div>{mode === 'standard' ? <StandardComposer model={model} setModel={setModel} preview={preview} /> : <BindingComposer binding={binding} setBinding={setBinding} preview={preview} payload={bindingPayload} />}<div className="mt-5 flex justify-end gap-3"><button type="button" className="btn-secondary" onClick={() => mode === 'standard' ? setModel(emptyModel) : setBinding(emptyBinding)}>{t('清空', 'Clear')}</button><button type="button" className="btn-primary" disabled={sending} onClick={send}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />} {t('发送', 'Send')}</button></div></div></div>;
+  const clearDraft = () => {
+    outboundRequests.clear();
+    if (mode === 'standard') setModel(emptyModel);
+    else setBinding(emptyBinding);
+  };
+
+  return <div className="compose-view-shell h-full overflow-y-auto p-3 md:p-5"><div className="mx-auto max-w-5xl panel p-4 md:p-6"><div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('写邮件', 'Compose')}</h2></div><div className="flex gap-2"><button type="button" className="btn-secondary" onClick={() => setPreview(!preview)}><Eye size={16} /> {preview ? t('编辑', 'Edit') : t('预览', 'Preview')}</button></div></div><div className="compose-mode-switch mb-4 grid rounded-2xl bg-slate-50 p-1 sm:grid-cols-2"><button type="button" className={mode === 'standard' ? 'rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm' : 'rounded-xl px-4 py-2 text-sm font-medium text-slate-500'} onClick={() => setMode('standard')}>{t('标准发送', 'Standard')}</button><button type="button" className={mode === 'binding' ? 'rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm' : 'rounded-xl px-4 py-2 text-sm font-medium text-slate-500'} onClick={() => setMode('binding')}><Sparkles className="mr-1 inline h-4 w-4" />Binding</button></div>{mode === 'standard' ? <StandardComposer model={model} setModel={setModel} preview={preview} /> : <BindingComposer binding={binding} setBinding={setBinding} preview={preview} payload={bindingPayload} />}<div className="mt-5 flex justify-end gap-3"><button type="button" className="btn-secondary" onClick={clearDraft}>{t('清空', 'Clear')}</button><button type="button" className="btn-primary" disabled={sending} onClick={send}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />} {t('发送', 'Send')}</button></div></div></div>;
 }
 
 function StandardComposer({ model, setModel, preview }: { model: ComposePayload; setModel: (model: ComposePayload) => void; preview: boolean }) {

@@ -1,4 +1,4 @@
-import { normalizeFrontendBaseUrl } from './frontendBase';
+import { normalizeFrontendBaseUrl } from './frontendBase.ts';
 
 export async function copyText(value: string): Promise<void> {
   const text = value.trim();
@@ -31,7 +31,7 @@ export async function copyText(value: string): Promise<void> {
 export function buildAddressLoginUrl(jwt: string, frontendBase?: string): string {
   const fallback = typeof window !== 'undefined' ? window.location.origin : '';
   const base = normalizeFrontendBaseUrl(frontendBase || fallback || '');
-  return `${base || ''}/?JWT=${encodeURIComponent(jwt)}`;
+  return `${base || ''}/#JWT=${encodeURIComponent(jwt)}`;
 }
 
 export function readJwtFromQuery(search: string): string {

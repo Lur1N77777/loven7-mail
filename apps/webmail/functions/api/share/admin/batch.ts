@@ -1,5 +1,5 @@
 import { corsHeaders, errorJson, json, withCors } from "../../../_lib/http";
-import { adminShare, assertShareAdmin, deleteInactiveShareRecord, getLatestMailCutoff, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareMailVisibility } from "../../../_lib/share";
+import { adminShare, assertShareAdmin, deleteInactiveShareRecord, getLatestMailCutoff, isValidShareTtl, mapWithConcurrency, normalizeSharePermissions, parseShareTtl, readShareRecord, revokeShare, shareError, updateShareRecord, type ShareAdminSummary, type ShareMailVisibility } from "../../../_lib/share";
 import type { PagesHandler } from "../../../_lib/types";
 
 type BatchBody = {
@@ -12,7 +12,7 @@ type BatchBody = {
 
 function parseTokens(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.map((item) => String(item || "").trim()).filter((item) => /^[A-Za-z0-9_-]{12,96}$/.test(item)))].slice(0, 100);
+  return [...new Set(value.map((item) => String(item || "").trim()).filter((item) => /^[A-Za-z0-9_-]{12,96}$/.test(item)))].slice(0, 25);
 }
 
 export const onRequestOptions: PagesHandler = ({ request, env }) => {
@@ -28,21 +28,24 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
     const action = String(body?.action || "").trim();
     const allowedActions = new Set(["revoke", "restore", "update", "refresh-index", "delete-inactive"]);
     if (!allowedActions.has(action)) return withCors(errorJson(400, "批量操作无效", "bad_batch_action"), request, env, "admin");
+    if (body && Object.prototype.hasOwnProperty.call(body, "expiresIn") && !isValidShareTtl(body.expiresIn)) {
+      return withCors(errorJson(400, "共享链接有效期选项无效", "invalid_share_expiry"), request, env, "admin");
+    }
 
     const ttl = parseShareTtl(body?.expiresIn);
     const requestedVisibility: ShareMailVisibility | undefined = body?.mailVisibility === "new" || body?.mailVisibility === "all" ? body.mailVisibility : undefined;
-    const results = [];
-    const deletedTokens = [];
-    const failures = [];
+    const results: ShareAdminSummary[] = [];
+    const deletedTokens: string[] = [];
+    const failures: Array<{ token: string; message: string }> = [];
 
-    for (const token of tokens) {
+    await mapWithConcurrency(tokens, 4, async (token) => {
       try {
         let share = null;
         if (action === "delete-inactive") {
           const deleted = await deleteInactiveShareRecord(env, token);
           if (!deleted) throw new Error("共享链接不存在");
           deletedTokens.push(token);
-          continue;
+          return;
         } else if (action === "revoke") {
           share = await revokeShare(env, token);
         } else if (action === "refresh-index") {
@@ -50,6 +53,7 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
           if (share) await updateShareRecord(env, token, (payload) => ({ ...payload, updatedAt: new Date().toISOString() }));
         } else {
           const current = await readShareRecord(env, token);
+          if (action === "restore" && current?.revokedAt) throw new Error("已撤销的共享链接不可恢复，请创建新链接");
           const cutoffById = new Map<string, { sinceMailId: number; sinceCreatedAt: string | null }>();
           if (current && requestedVisibility === "new") {
             for (const mailbox of current.addresses) {
@@ -74,7 +78,7 @@ export const onRequestPost: PagesHandler = async ({ request, env }) => {
       } catch (error) {
         failures.push({ token, message: error instanceof Error ? error.message : "操作失败" });
       }
-    }
+    });
 
     return withCors(json({ ok: failures.length === 0, results, deletedTokens, failures }), request, env, "admin");
   } catch (error) {

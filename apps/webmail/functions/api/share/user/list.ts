@@ -1,6 +1,6 @@
 import { corsHeaders, errorJson, json, withCors } from "../../../_lib/http";
 import { listShareRecords, listShareRecordsForAddressIds, shareError } from "../../../_lib/share";
-import { getAllowedShareAddresses, shareBelongsToUser } from "../../../_lib/shareUser";
+import { getShareUserContext, shareBelongsToUser } from "../../../_lib/shareUser";
 import type { PagesHandler } from "../../../_lib/types";
 import { getUserToken, missingUserToken } from "../../../_lib/user";
 
@@ -27,8 +27,7 @@ export const onRequestGet: PagesHandler = async ({ request, env }) => {
   try {
     const userToken = getUserToken(request);
     if (!userToken) return withCors(missingUserToken(), request, env, "admin");
-    const allowed = await getAllowedShareAddresses(env, userToken);
-    if (allowed.size === 0) return withCors(json({ ok: true, results: [], cursor: null, hasMore: false }), request, env, "admin");
+    const { allowed, userId } = await getShareUserContext(env, userToken);
     const url = new URL(request.url);
     const limit = clampNumber(url.searchParams.get("limit"), 20, 1, 100);
     const options = {
@@ -38,8 +37,8 @@ export const onRequestGet: PagesHandler = async ({ request, env }) => {
       status: url.searchParams.get("status") || undefined,
       query: url.searchParams.get("query") || undefined,
     };
-    const indexed = await listShareRecordsForAddressIds(env, Array.from(allowed.keys()), options);
-    const results = indexed.results.filter((share) => shareBelongsToUser(share, allowed));
+    const indexed = await listShareRecordsForAddressIds(env, Array.from(allowed.keys()), { ...options, creatorUserId: userId });
+    const results = indexed.results.filter((share) => shareBelongsToUser(share, allowed, userId));
     let cursor: string | null = indexed.cursor;
     let hasMore = indexed.hasMore;
 
@@ -48,7 +47,7 @@ export const onRequestGet: PagesHandler = async ({ request, env }) => {
       for (const share of fallback.results) {
         if (results.length >= limit) break;
         if (results.some((item) => item.token === share.token)) continue;
-        if (shareBelongsToUser(share, allowed)) results.push(share);
+        if (shareBelongsToUser(share, allowed, userId)) results.push(share);
       }
     }
 

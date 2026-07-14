@@ -3,7 +3,7 @@
   src: url("/fonts/loven7-brand-script-latin-v2.woff2") format("woff2");
   font-style: normal;
   font-weight: 400;
-  font-display: block;
+  font-display: swap;
 }
 
 :root {
@@ -676,7 +676,7 @@ button:disabled {
 }
 
 .mail-html-view {
-  min-height: 100%;
+  min-height: clamp(420px, 68vh, 920px);
 }
 
 .mail-image-loading {
@@ -849,7 +849,7 @@ button:disabled {
 
   .mail-frame,
   .mail-html-view {
-    min-height: 0;
+    min-height: 62vh;
   }
 
   .plain-body {
@@ -2539,6 +2539,9 @@ textarea {
   background:
     linear-gradient(90deg, rgba(18, 16, 13, .46), rgba(18, 16, 13, .05) 52%, rgba(18, 16, 13, .18)),
     url("/loven7-portal-hero-v2.png") center / cover no-repeat;
+  background-image:
+    linear-gradient(90deg, rgba(18, 16, 13, .46), rgba(18, 16, 13, .05) 52%, rgba(18, 16, 13, .18)),
+    image-set(url("/loven7-portal-hero-v2.webp") type("image/webp") 1x, url("/loven7-portal-hero-v2.png") type("image/png") 1x);
 }
 
 .account-portal-hero::after {
@@ -2690,6 +2693,9 @@ textarea {
   .account-portal-hero {
     min-height: 132px;
     background-position: center 48%;
+    background-image:
+      linear-gradient(90deg, rgba(18, 16, 13, .46), rgba(18, 16, 13, .05) 52%, rgba(18, 16, 13, .18)),
+      image-set(url("/loven7-portal-hero-v2-768.webp") type("image/webp") 1x, url("/loven7-portal-hero-v2.png") type("image/png") 1x);
   }
 
   .account-portal-panel {
@@ -2830,6 +2836,53 @@ textarea {
   will-change: max-height, opacity, transform, margin, padding;
   animation: webmail-mail-delete-exit 260ms cubic-bezier(.4, 0, .2, 1) both !important;
 }
+
+.recovery-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #f7f8fb;
+  color: #172033;
+}
+
+.recovery-card {
+  width: min(100%, 440px);
+  padding: 28px;
+  border: 1px solid rgba(103, 119, 148, .18);
+  border-radius: 28px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 18px 48px rgba(20, 32, 55, .08);
+}
+
+.recovery-card h1 { margin: 0; font-size: 22px; }
+.recovery-card p { margin: 12px 0 20px; color: #607089; line-height: 1.65; }
+.recovery-card > div { display: flex; justify-content: center; gap: 10px; }
+
+.webmail-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(20, 28, 44, .36);
+  backdrop-filter: blur(8px);
+}
+
+.webmail-modal-card {
+  width: min(100%, 430px);
+  padding: 24px;
+  border: 1px solid rgba(103, 119, 148, .18);
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(20, 32, 55, .2);
+}
+
+.webmail-modal-card h2 { margin: 0 0 18px; font-size: 20px; color: #172033; }
+.webmail-modal-card input { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid rgba(103, 119, 148, .24); border-radius: 14px; background: #fff; color: #172033; font: inherit; }
+.webmail-modal-card > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
 @media (prefers-reduced-motion: reduce) {
   .mail-row.removing {

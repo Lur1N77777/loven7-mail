@@ -65,6 +65,13 @@ for (const code of ['mail_worker_not_configured', 'share_kv_not_configured', 'sh
   assertNoStore(configError, `${code} response`);
 }
 
+const missingShareSecret = await runtimeConfigErrorJson('share_secret_not_configured').clone().json();
+assert.match(
+  missingShareSecret.error.message,
+  /SHARE_ENCRYPTION_SECRET_V2.*SHARE_ENCRYPTION_SECRET/,
+  'share secret configuration error documents the V2-preferred key ring',
+);
+
 const mappedConfigError = mapUpstreamError(new RuntimeConfigError('mail_worker_not_configured'));
 const mappedBody = await mappedConfigError.clone().json();
 assert.equal(mappedBody.error.code, 'mail_worker_not_configured', 'mapUpstreamError() keeps runtime config code');
@@ -114,6 +121,41 @@ assert.deepEqual(completeRuntime.missing, [], 'runtimeDiagnostics() has no requi
 assert.deepEqual(completeRuntime.optionalMissing, [], 'runtimeDiagnostics() has no optional missing values');
 assert.doesNotMatch(JSON.stringify(completeRuntime), new RegExp(secretValue), 'runtimeDiagnostics() never leaks secret values');
 
+const weakSecretRuntime = runtimeDiagnostics({
+  MAIL_WORKER_BASE_URL: 'https://worker.example.test',
+  SHARE_KV: { get: async () => null },
+  SHARE_ENCRYPTION_SECRET: 'too-short',
+});
+assert.equal(weakSecretRuntime.ok, false, 'runtimeDiagnostics() rejects weak share secrets');
+assert(weakSecretRuntime.missing.includes('SHARE_ENCRYPTION_SECRET'), 'weak share secret is actionable in missing list');
+
+const v2SecretValue = 'v2-random-key-material-0123456789-ABCDEFG';
+const v2OnlyRuntime = runtimeDiagnostics({
+  MAIL_WORKER_BASE_URL: 'https://worker.example.test',
+  SHARE_KV: { get: async () => null },
+  SHARE_ENCRYPTION_SECRET_V2: v2SecretValue,
+});
+assert.equal(v2OnlyRuntime.ok, true, 'a new deployment can use a strong V2 key without a legacy key');
+assert.equal(v2OnlyRuntime.checks.shareEncryptionSecret, true, 'generic share-key readiness accepts V2-only deployments');
+
+const v2Runtime = runtimeDiagnostics({
+  MAIL_WORKER_BASE_URL: 'https://worker.example.test',
+  SHARE_KV: { get: async () => null },
+  SHARE_ENCRYPTION_SECRET: 'legacy-may-be-short-during-migration',
+  SHARE_ENCRYPTION_SECRET_V2: v2SecretValue,
+});
+assert.equal(v2Runtime.ok, true, 'runtimeDiagnostics() prefers a strong V2 write key');
+assert.equal(v2Runtime.checks.shareEncryptionSecretV2, true, 'runtimeDiagnostics() reports V2 readiness');
+assert.doesNotMatch(JSON.stringify(v2Runtime), new RegExp(v2SecretValue), 'runtimeDiagnostics() never leaks V2 secret values');
+
+const weakV2Runtime = runtimeDiagnostics({
+  MAIL_WORKER_BASE_URL: 'https://worker.example.test',
+  SHARE_KV: { get: async () => null },
+  SHARE_ENCRYPTION_SECRET: secretValue,
+  SHARE_ENCRYPTION_SECRET_V2: 'weak-v2',
+});
+assert.equal(weakV2Runtime.ok, false, 'configured weak V2 key cannot silently fall back to legacy for writes');
+
 console.log(JSON.stringify({
   ok: true,
   checked: [
@@ -125,6 +167,9 @@ console.log(JSON.stringify({
     'withCors(json)',
     'runtimeDiagnostics(missing)',
     'runtimeDiagnostics(complete, no secret leak)',
+    'runtimeDiagnostics(weak secret)',
+    'runtimeDiagnostics(V2 key ring)',
+    'V2-only runtime diagnostics and actionable secret error',
   ],
   cacheControl: ok.headers.get('cache-control'),
 }, null, 2));

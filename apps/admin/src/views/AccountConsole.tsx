@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
-import { AlertCircle, BarChart2, Copy, ExternalLink, Inbox, KeyRound, ListFilter, Loader2, LogOut, MailOpen, Plus, RefreshCw, Search, Send, Share2, X } from 'lucide-react';
+import { AlertCircle, BarChart2, ChevronLeft, Copy, ExternalLink, Inbox, KeyRound, ListFilter, Loader2, LogOut, MailOpen, Plus, RefreshCw, Search, Send, Share2, X } from 'lucide-react';
 import { EmptyState, LoadingState, Modal, NoticeToast, Pagination, PopoverSelect, useConfirm, useNotice } from '../components/Common';
 import { Header, MobileNav, Sidebar, type MenuKey } from '../components/Shell';
 import { ActivityLogo, AddressLogo, ChartLogo, HeroOrbitLogo, InboxLogo, TimeLogo } from '../components/BrandIcons';
@@ -11,9 +11,11 @@ import { cls, formatDateTime, formatShortDate } from '../lib/format';
 import { isLocalAdminOrigin, normalizeFrontendBaseUrl } from '../lib/frontendBase';
 import { localeText, type AppLocale } from '../lib/locale';
 import { readStorage, writeLocalStorage } from '../lib/storage';
+import { buildCacheScope } from '../lib/cacheScope';
 import {
   createUserAddress,
   createUserShare,
+  changeAddressPassword,
   fetchAddressJwt,
   fetchAddressMails,
   fetchUserAddresses,
@@ -42,7 +44,7 @@ const EMPTY_STATS: Statistics = {
   activeAddressCount30days: 0,
 };
 
-const ACCOUNT_ALLOWED_MENUS: MenuKey[] = ['dashboard', 'stats', 'address', 'inbox', 'sent', 'unknown'];
+const ACCOUNT_ALLOWED_MENUS: MenuKey[] = ['dashboard', 'stats', 'address', 'inbox', 'sent'];
 const DIRECT_ALLOWED_MENUS: MenuKey[] = ['inbox'];
 
 function mailTitle(mail: AddressMail, locale: AppLocale) {
@@ -188,7 +190,6 @@ function AccountDashboardView({ stats, profile, loading, locale, refresh, setAct
     { menu: 'address', icon: AddressLogo, title: t('地址管理', 'Addresses') },
     { menu: 'inbox', icon: InboxLogo, title: t('收件箱', 'Inbox') },
     { menu: 'sent', icon: Send, title: t('发件箱', 'Sent') },
-    { menu: 'unknown', icon: AlertCircle, title: t('未知邮件', 'Unknown') },
     { menu: 'stats', icon: ChartLogo, title: t('统计', 'Stats') },
   ];
   return (
@@ -281,7 +282,7 @@ function AccountStatsView({ stats, locale, refresh, loading }: { stats: Statisti
   );
 }
 
-function MailDetail({ mail, mode, locale }: { mail: AddressMail | null; mode: MailMode; locale: AppLocale }) {
+function MailDetail({ mail, mode, locale, onBack }: { mail: AddressMail | null; mode: MailMode; locale: AppLocale; onBack?: () => void }) {
   const t = useLocaleText(locale);
   if (!mail) {
     const emptyIcon = mode === 'sent' ? Send : mode === 'unknown' ? AlertCircle : Inbox;
@@ -296,6 +297,7 @@ function MailDetail({ mail, mode, locale }: { mail: AddressMail | null; mode: Ma
   return (
     <div className="mail-detail-scroll h-full overflow-y-auto p-3 md:p-5">
       <article className="mail-detail-card min-h-full rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm md:p-6">
+        {onBack ? <button type="button" className="btn-secondary compact mb-3 lg:hidden" onClick={onBack}><ChevronLeft size={16} />{t('返回列表', 'Back to list')}</button> : null}
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="mail-time mail-detail-meta-pill rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{formatDateTime(mail.created_at)}</span>
@@ -334,31 +336,44 @@ function MailboxReader({ apiBase, jwt, address, locale, mode = 'inbox', refreshK
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [count, setCount] = useState(0);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const t = useLocaleText(locale);
   const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
   const emptyIcon = mode === 'sent' ? Send : mode === 'unknown' ? AlertCircle : Inbox;
 
   const load = useCallback(async () => {
     if (mode !== 'inbox') {
-      setMails([]);
-      setSelected(null);
-      onMailCountChange?.(0);
-      return;
+      if (mode === 'unknown') {
+        setMails([]);
+        setSelected(null);
+        setCount(0);
+        onMailCountChange?.(0);
+        return;
+      }
     }
     if (!jwt) return;
     setLoading(true);
     setError('');
     try {
-      const page = await fetchAddressMails(apiBase, jwt, 80, 0);
-      setMails(page.results);
-      onMailCountChange?.(page.count || page.results.length);
-      setSelected((current) => (current && page.results.some((mail) => mail.id === current.id) ? current : page.results[0] || null));
+      const result = await fetchAddressMails(apiBase, jwt, pageSize, (page - 1) * pageSize, mode);
+      setMails(result.results);
+      setCount(result.count || result.results.length);
+      onMailCountChange?.(result.count || result.results.length);
+      setSelected((current) => (current && result.results.some((mail) => mail.id === current.id) ? current : result.results[0] || null));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('邮件加载失败', 'Failed to load mail'));
     } finally {
       setLoading(false);
     }
-  }, [apiBase, jwt, mode, onMailCountChange, t]);
+  }, [apiBase, jwt, mode, onMailCountChange, page, pageSize, t]);
+
+  useEffect(() => {
+    setPage(1);
+    setMobileDetailOpen(false);
+  }, [address, jwt, mode]);
 
   useEffect(() => {
     void load();
@@ -378,7 +393,7 @@ function MailboxReader({ apiBase, jwt, address, locale, mode = 'inbox', refreshK
 
   return (
     <div className="mail-workspace flex h-full min-h-0 overflow-hidden bg-white">
-      <div className="mail-list-panel relative flex h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-100 lg:w-[430px] xl:w-[470px]">
+      <div className={cls('mail-list-panel relative h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-100 lg:flex lg:w-[430px] xl:w-[470px]', mobileDetailOpen ? 'hidden' : 'flex')}>
         <div className="mail-list-header shrink-0 px-2.5 py-2 md:p-4 md:pb-2">
           <div className="mail-toolbar flex flex-wrap items-center gap-2">
             <div className="mr-auto min-w-0">
@@ -423,7 +438,7 @@ function MailboxReader({ apiBase, jwt, address, locale, mode = 'inbox', refreshK
               <button
                 key={mail.id}
                 type="button"
-                onClick={() => setSelected(mail)}
+                onClick={() => { setSelected(mail); setMobileDetailOpen(true); }}
                 className={cls('mail-list-item group relative mb-1 w-full cursor-pointer px-3 py-2 text-left transition-all md:px-3.5', active ? 'mail-row-selected' : 'mail-row-idle')}
               >
                 <div className="flex min-w-0 items-start gap-2.5">
@@ -447,9 +462,10 @@ function MailboxReader({ apiBase, jwt, address, locale, mode = 'inbox', refreshK
             );
           })}
         </div>
+        <Pagination page={page} setPage={(nextPage) => { setPage(nextPage); setMobileDetailOpen(false); }} pageSize={pageSize} setPageSize={(nextPageSize) => { setPageSize(nextPageSize); setPage(1); setMobileDetailOpen(false); }} totalPages={Math.max(1, Math.ceil(count / pageSize))} count={count} />
       </div>
-      <div className="mail-detail-pane hidden h-full min-w-0 flex-1 flex-col bg-slate-50/40 lg:flex">
-        <MailDetail mail={selected} mode={mode} locale={locale} />
+      <div className={cls('mail-detail-pane h-full min-w-0 flex-1 flex-col bg-slate-50/40 lg:flex', mobileDetailOpen ? 'flex' : 'hidden')}>
+        <MailDetail mail={selected} mode={mode} locale={locale} onBack={() => setMobileDetailOpen(false)} />
       </div>
     </div>
   );
@@ -838,7 +854,36 @@ export function DirectMailboxConsole({ apiBase, jwt, address, locale, theme, set
 }) {
   const [mailRefreshKey, setMailRefreshKey] = useState(0);
   const [mailCount, setMailCount] = useState(0);
+  const [activeJwt, setActiveJwt] = useState(jwt);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const { notice, push } = useNotice();
   const stats = useMemo(() => ({ ...EMPTY_STATS, addressCount: 1, mailCount }), [mailCount]);
+  const t = useLocaleText(locale);
+
+  useEffect(() => setActiveJwt(jwt), [jwt]);
+
+  const savePassword = async () => {
+    const value = newPassword.trim();
+    if (value.length < 6) {
+      push('error', t('新密码至少需要 6 位', 'Use at least 6 characters'));
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      const nextJwt = await changeAddressPassword(apiBase, activeJwt, value);
+      setActiveJwt(nextJwt);
+      setNewPassword('');
+      setPasswordOpen(false);
+      setMailRefreshKey((current) => current + 1);
+      push('success', t('密码已更新，邮箱凭据已安全轮换', 'Password updated and mailbox credential rotated'));
+    } catch (error) {
+      push('error', error instanceof Error ? error.message : t('密码更新失败', 'Password update failed'));
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
 
   return (
     <div className={cls('h-[100dvh] w-full overflow-hidden bg-[var(--color-bg)] font-sans text-slate-800', theme === 'dark' && 'theme-dark')}>
@@ -862,16 +907,24 @@ export function DirectMailboxConsole({ apiBase, jwt, address, locale, theme, set
           miniActionColumns={2}
           sidebarSubtitle={localeText('邮箱直达', 'Mailbox', locale)}
         >
+          <button type="button" className="sidebar-mini-btn" onClick={() => setPasswordOpen(true)} title={t('修改邮箱密码', 'Change mailbox password')}><KeyRound size={15} />{t('改密', 'Password')}</button>
           <button type="button" className="sidebar-mini-btn" onClick={onSignOut} title={localeText('退出登录', 'Sign out', locale)}><LogOut size={15} />{localeText('退出', 'Sign out', locale)}</button>
         </Sidebar>
         <main className="mobile-page-swipe-zone mobile-mail-shell relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-surface)]">
           <Header activeMenu="inbox" setActiveMenu={() => undefined} query="" setQuery={() => undefined} refresh={() => setMailRefreshKey((value) => value + 1)} apiBase={apiBase} locale={locale} />
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden pb-[calc(62px+env(safe-area-inset-bottom))] md:pb-0">
-            <MailboxReader apiBase={apiBase} jwt={jwt} address={address} locale={locale} refreshKey={mailRefreshKey} onMailCountChange={setMailCount} />
+            <MailboxReader apiBase={apiBase} jwt={activeJwt} address={address} locale={locale} refreshKey={mailRefreshKey} onMailCountChange={setMailCount} />
           </div>
           <MobileNav activeMenu="inbox" visualActiveMenu="inbox" setActiveMenu={() => undefined} locale={locale} allowedMenus={DIRECT_ALLOWED_MENUS} />
         </main>
       </div>
+      {passwordOpen ? <Modal title={t('修改邮箱密码', 'Change mailbox password')} onClose={() => { if (!passwordBusy) setPasswordOpen(false); }}>
+        <div className="space-y-4">
+          <input className="form-input" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={t('输入至少 6 位新密码', 'Enter a new password (6+ characters)')} />
+          <button type="button" className="btn-primary w-full justify-center" disabled={passwordBusy} onClick={() => void savePassword()}>{passwordBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound size={16} />}{passwordBusy ? t('保存中...', 'Saving...') : t('保存并轮换凭据', 'Save and rotate credential')}</button>
+        </div>
+      </Modal> : null}
+      <NoticeToast notice={notice} />
     </div>
   );
 }
@@ -897,6 +950,7 @@ export function AccountConsole({ apiBase, profile, locale, theme, setTheme, setL
   const [mailRefreshKey, setMailRefreshKey] = useState(0);
   const domains = useMemo(() => roleDomains(profile), [profile]);
   const stats = useMemo(() => statsFromAddresses(addresses), [addresses]);
+  const cacheScope = useMemo(() => buildCacheScope(apiBase, profile.userId ? `user:${profile.userId}` : `email:${profile.userEmail}`), [apiBase, profile.userEmail, profile.userId]);
   const t = useLocaleText(locale);
   const apiClient = useMemo(() => createApiClient(
     () => apiBase,
@@ -1083,7 +1137,7 @@ export function AccountConsole({ apiBase, profile, locale, theme, setTheme, setL
         >
           <UserCredentialButton profile={profile} locale={locale} onSignOut={onSignOut} />
         </Sidebar>
-        <main className={cls('mobile-page-swipe-zone relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-surface)]', (activeMenu === 'inbox' || activeMenu === 'sent' || activeMenu === 'unknown') && 'mobile-mail-shell')}>
+        <main className={cls('mobile-page-swipe-zone relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-surface)]', (activeMenu === 'inbox' || activeMenu === 'sent') && 'mobile-mail-shell')}>
           <Header activeMenu={activeMenu} setActiveMenu={setActiveMenu} query="" setQuery={() => undefined} refresh={refreshCurrent} apiBase={apiBase} locale={locale} />
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden pb-[calc(62px+env(safe-area-inset-bottom))] md:pb-0">
             <section className={cls('h-full min-h-0 min-w-0', activeMenu === 'dashboard' ? 'block' : 'hidden')} aria-hidden={activeMenu !== 'dashboard'}>
@@ -1098,6 +1152,7 @@ export function AccountConsole({ apiBase, profile, locale, theme, setTheme, setL
                 notify={push}
                 ask={ask}
                 globalQuery=""
+                cacheScope={cacheScope}
                 accountUserToken={profile.userToken}
                 accountUserEmail={profile.userEmail}
                 accountUserRoleLabel={profile.roleLabel || profile.roleKey || (profile.isAdmin ? 'Admin' : t('普通用户', 'Member'))}
@@ -1111,9 +1166,6 @@ export function AccountConsole({ apiBase, profile, locale, theme, setTheme, setL
             </section>
             <section className={cls('h-full min-h-0 min-w-0', activeMenu === 'sent' ? 'block' : 'hidden')} aria-hidden={activeMenu !== 'sent'}>
               {renderMailSection('sent')}
-            </section>
-            <section className={cls('h-full min-h-0 min-w-0', activeMenu === 'unknown' ? 'block' : 'hidden')} aria-hidden={activeMenu !== 'unknown'}>
-              {renderMailSection('unknown')}
             </section>
           </div>
           <MobileNav activeMenu={activeMenu} visualActiveMenu={activeMenu} setActiveMenu={setActiveMenu} locale={locale} allowedMenus={ACCOUNT_ALLOWED_MENUS} />

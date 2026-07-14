@@ -6,6 +6,9 @@ import { cls, formatShortDate, normalizeSearch } from '../lib/format';
 import { getRuntimeLocale, localeText } from '../lib/locale';
 import { copyText } from '../lib/clipboard';
 import { readJsonStorage, readStorage, writeJsonStorage, writeLocalStorage } from '../lib/storage';
+import { scopedStorageKey } from '../lib/cacheScope';
+import { preserveRowsBelowAuthoritativeHead } from '../lib/mailSync';
+import { readTrustedMailFrameMessage } from '../lib/mailFrameMessages';
 import { buildMailHtmlDocument, getDownloadEmlUrl, looksLikeMimeSource, parseRawMail, parseRawMailListItem, parseSendbox, sanitizeMailHtml, sanitizeVerificationCode } from '../lib/mailParser';
 import type { ComposePayload, ListResponse, ParsedMail, ParsedSendbox, RawMailRecord, SendboxRecord } from '../types/api';
 import { EmptyState, LoadingState, type Notify, useConfirm } from '../components/Common';
@@ -374,12 +377,12 @@ function normalizeRemoteMailState(remote: RemoteMailState | null | undefined, mo
   };
 }
 
-function mailListCacheKey(mode: MailMode, page: number, pageSize: number, address: string): string {
-  return `${STORAGE_KEYS.mailListCachePrefix}${mode}:${page}:${pageSize}:${encodeURIComponent(address.trim())}`;
+function mailListCacheKey(scope: string, mode: MailMode, page: number, pageSize: number, address: string): string {
+  return scopedStorageKey(STORAGE_KEYS.mailListCachePrefix, scope, mode, page, pageSize, address.trim());
 }
 
-function mailDetailCacheKey(mode: MailMode, id: number): string {
-  return `${STORAGE_KEYS.mailDetailSessionPrefix}${mode}:${id}`;
+function mailDetailCacheKey(scope: string, mode: MailMode, id: number): string {
+  return scopedStorageKey(STORAGE_KEYS.mailDetailSessionPrefix, scope, mode, id);
 }
 
 function stripForListCache(mail: AnyMail): AnyMail {
@@ -405,20 +408,20 @@ function stripForSessionDetail(mail: AnyMail): AnyMail {
   return clone as AnyMail;
 }
 
-function readSessionMailDetail(mode: MailMode, id: number): AnyMail | null {
+function readSessionMailDetail(scope: string, mode: MailMode, id: number): AnyMail | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(mailDetailCacheKey(mode, id));
+    const raw = window.sessionStorage.getItem(mailDetailCacheKey(scope, mode, id));
     return raw ? JSON.parse(raw) as AnyMail : null;
   } catch {
     return null;
   }
 }
 
-function writeSessionMailDetail(mode: MailMode, mail: AnyMail): void {
+function writeSessionMailDetail(scope: string, mode: MailMode, mail: AnyMail): void {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(mailDetailCacheKey(mode, mail.id), JSON.stringify(stripForSessionDetail(mail)));
+    window.sessionStorage.setItem(mailDetailCacheKey(scope, mode, mail.id), JSON.stringify(stripForSessionDetail(mail)));
   } catch {
     // 会话缓存失败不影响主流程
   }
@@ -477,6 +480,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const mobileListContextRef = useRef('');
   const mobileLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const mailWorkspaceRef = useRef<HTMLDivElement | null>(null);
+  const activeMailFrameWindowRef = useRef<Window | null>(null);
   const mailListPanelRef = useRef<HTMLDivElement | null>(null);
   const mailListViewportRef = useRef<HTMLDivElement | null>(null);
   const mobileChromeRef = useRef({ collapsed: false, lastScrollTop: 0, progress: 0 });
@@ -509,7 +513,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
   const immersiveMobileMail = mode === 'inbox' || mode === 'sent';
   const ownsMobileChrome = visualActive && immersiveMobileMail && compactViewport && !isMobileDetail;
-  const currentListCacheKey = useMemo(() => mailListCacheKey(mode, page, pageSize, address), [address, mode, page, pageSize]);
+  const currentListCacheKey = useMemo(() => mailListCacheKey(mailStateScope, mode, page, pageSize, address), [address, mailStateScope, mode, page, pageSize]);
 
   useEffect(() => {
     mobileListContextRef.current = mobileListContext;
@@ -648,7 +652,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   }, [currentListCacheKey]);
 
   const hydrateListCache = useCallback((targetAddress: string, targetPage = 1) => {
-    const cacheKey = mailListCacheKey(mode, targetPage, pageSize, targetAddress.trim());
+    const cacheKey = mailListCacheKey(mailStateScope, mode, targetPage, pageSize, targetAddress.trim());
     const cached = readJsonStorage<MailListCache | null>(cacheKey, null);
     if (!cached || cached.version !== MAIL_LIST_CACHE_VERSION || !Array.isArray(cached.items)) return false;
     const cachedItems = filterDeletedMails(applyLocalState(cached.items, mode, readIds, starredIds, readAllBefore));
@@ -656,7 +660,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     setCount(Math.max(cachedItems.length, (cached.count || cached.items.length) - (cached.items.length - cachedItems.length)));
     setMailListExhausted(cachedItems.length < pageSize);
     return true;
-  }, [filterDeletedMails, mode, pageSize, readAllBefore, readIds, starredIds]);
+  }, [filterDeletedMails, mailStateScope, mode, pageSize, readAllBefore, readIds, starredIds]);
 
   const loadPage = useCallback(async (offset: number, forceRefresh = false, targetAddress = address, signal?: AbortSignal, limitOverride = pageSize) => {
     const normalizedAddress = targetAddress.trim();
@@ -693,7 +697,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       const parsed = filterDeletedMails(applyLocalState(results, mode, readIds, starredIds, readAllBefore));
       const reportedCount = typeof totalCount === 'number' ? totalCount : 0;
       const deletedFromPage = Math.max(0, results.length - parsed.length);
-      const nextCount = Math.max(reportedCount - deletedFromPage, parsed.length, incremental ? currentMails.length : 0);
+      const nextCount = Math.max(reportedCount - deletedFromPage, parsed.length);
       setCount(nextCount);
 
       if (incremental && targetPage !== 1) {
@@ -710,11 +714,12 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       if (incremental && currentMails.length > 0) {
         const existing = new Set(currentMails.map((mail) => mail.id));
         const added = parsed.filter((mail) => !existing.has(mail.id));
-        const merged = filterDeletedMails(mergeMailLists(parsed, currentMails));
+        const olderRows = preserveRowsBelowAuthoritativeHead<AnyMail>(currentMails, parsed, results.length >= pageSize);
+        const merged = filterDeletedMails(mergeMailLists(parsed, olderRows));
         setMails(merged);
         const mergedCount = Math.max(nextCount, merged.length);
         setCount(mergedCount);
-        saveListCache(merged, mergedCount, mailListCacheKey(mode, targetPage, pageSize, targetAddress));
+        saveListCache(merged, mergedCount, mailListCacheKey(mailStateScope, mode, targetPage, pageSize, targetAddress));
         if (added.length) {
           setNewIds(new Set(added.map((mail) => mail.id)));
           if (newIdsTimerRef.current !== null) window.clearTimeout(newIdsTimerRef.current);
@@ -723,7 +728,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         }
       } else {
         setMails(parsed);
-        saveListCache(parsed, nextCount, mailListCacheKey(mode, targetPage, pageSize, targetAddress));
+        saveListCache(parsed, nextCount, mailListCacheKey(mailStateScope, mode, targetPage, pageSize, targetAddress));
       }
     } catch (error) {
       if (abortController.signal.aborted) return;
@@ -737,7 +742,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         if (fetchAbortRef.current === abortController) fetchAbortRef.current = null;
       }
     }
-  }, [address, autoSeconds, filterDeletedMails, loadPage, locale, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds, t]);
+  }, [address, autoSeconds, filterDeletedMails, loadPage, locale, mailStateScope, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds, t]);
 
   const loadSearchIndex = useCallback(async (forceRefresh = false) => {
     const normalizedAddress = address.trim();
@@ -1218,7 +1223,12 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     const matchesTab = activeTab === 'all' || (activeTab === 'attachments' && isParsed(mail) && mail.attachments.length > 0) || (activeTab === 'starred' && Boolean(mail.isStarred)) || (activeTab === 'unread' && Boolean(mail.isUnread)) || (activeTab === 'read' && !mail.isUnread);
     return matchesQuery && matchesAddress && matchesTab;
   }), [activeTab, deferredAddressQuery, deferredQuery, searchSource]);
-  const mailListEntries = useMemo(() => groupConsecutiveSenderMails(filtered, mode !== 'sent'), [filtered, mode]);
+  // 产品规则：每封邮件独立展示，不再按发件人折叠或堆叠。
+  const mailListEntries = useMemo<MailListEntry[]>(() => filtered.map((mail) => ({
+    type: 'single',
+    key: `mail:${mail.id}`,
+    mail,
+  })), [filtered]);
   const selected = detailClosed ? null : filtered.find((mail) => mail.id === selectedId) || filtered[0] || null;
   const selectedIndex = selected ? filtered.findIndex((mail) => mail.id === selected.id) : -1;
   const detailPositionLabel = selectedIndex >= 0 ? `${selectedIndex + 1} of ${Math.max(filtered.length, 1)}` : `0 of ${Math.max(filtered.length, 1)}`;
@@ -1332,16 +1342,16 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     next.add(key);
     persistReadIds(next);
     patchRemoteMailState({ readIdsToAdd: [key] });
-    const cachedDetail = readSessionMailDetail(mode, mail.id);
+    const cachedDetail = readSessionMailDetail(mailStateScope, mode, mail.id);
     if (cachedDetail && !(isParsed(cachedDetail) && !cachedDetail.message && (cachedDetail.raw || (isParsed(mail) && mail.raw)))) {
       setMails((current) => current.map((item) => (item.id === mail.id ? { ...item, ...cachedDetail } : item)));
     } else {
-      writeSessionMailDetail(mode, mail);
+      writeSessionMailDetail(mailStateScope, mode, mail);
       const rawSource = isParsed(cachedDetail || mail) ? String((cachedDetail || mail).raw || (isParsed(mail) ? mail.raw || '' : '')) : '';
       if (isParsed(mail) && !mail.message && (mail.raw || rawSource)) {
         parseRawMail({ ...mail, raw: mail.raw || rawSource })
           .then((fullMail) => {
-            writeSessionMailDetail(mode, fullMail);
+            writeSessionMailDetail(mailStateScope, mode, fullMail);
             setMails((current) => current.map((item) => (item.id === mail.id ? { ...item, ...fullMail, isUnread: false, isStarred: item.isStarred } : item)));
           })
           .catch((error) => console.warn('mail detail parse failed', error));
@@ -1349,7 +1359,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     }
     setSelectedId(mail.id);
     if (compactViewport) setIsMobileDetail(true);
-  }, [compactViewport, mode, patchRemoteMailState, persistReadIds, readIds]);
+  }, [compactViewport, mailStateScope, mode, patchRemoteMailState, persistReadIds, readIds]);
   const navigateDetail = useCallback((offset: number) => {
     if (selectedIndex < 0) return;
     const next = filtered[selectedIndex + offset];
@@ -1520,13 +1530,13 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   useEffect(() => {
     if (!isMobileDetail) return undefined;
     const handleFrameSwipe = (event: MessageEvent) => {
-      const data = event.data as { type?: string; direction?: 'left' | 'right'; dx?: number } | null;
+      const data = readTrustedMailFrameMessage(event, activeMailFrameWindowRef.current);
       if (!data) return;
       if (data.type === 'loven7-mail-iframe-swipe-progress') {
         setMobileDetailSettling(false);
         const width = typeof window === 'undefined' ? 420 : Math.max(window.innerWidth, 360);
         const limit = Math.min(width * .42, 180);
-        setMobileDetailDragX(Math.max(-limit, Math.min(limit, Number(data.dx || 0))));
+        setMobileDetailDragX(Math.max(-limit, Math.min(limit, data.dx)));
         return;
       }
       if (data.type !== 'loven7-mail-iframe-swipe') return;
@@ -1696,14 +1706,14 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         </div>
       </div>
       <div className="mail-detail-pane hidden h-full min-w-0 flex-1 flex-col lg:flex">
-        {!compactViewport && <MailDetail mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} />}
+        {!compactViewport && <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} />}
       </div>
       {isMobileDetail && (
         <div
           className={cls('mobile-mail-detail absolute inset-0 z-40 flex h-full min-h-0 flex-col bg-white lg:hidden', mobileDetailSettling && 'mobile-detail-settling')}
           style={{ transform: `translate3d(${mobileDetailDragX}px, 0, 0)` }}
         >
-          <MailDetail mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} mobile />
+          <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} mobile />
         </div>
       )}
     </div>
@@ -1728,6 +1738,7 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, d
   const senderName = getSenderName(mail);
   const recipientAddress = getRecipient(mail);
   const recipientCopyKey = `recipient-list-${mode}-${mail.id}`;
+  const verificationCodes = getVerificationCodes(mail);
   const recipientPressRef = useRef<PressPoint | null>(null);
   const inert = deleting || exiting;
   return (
@@ -1782,6 +1793,24 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, d
           <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
         </button>
       </div>
+      {verificationCodes.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {verificationCodes.slice(0, 3).map((code) => (
+            <button
+              key={code}
+              type="button"
+              className="verify-pill compact"
+              disabled={inert}
+              onClick={(event) => {
+                event.stopPropagation();
+                onCopy(code, t('验证码已复制', 'Verification code copied'), `verify-list-${mode}-${mail.id}-${code}`);
+              }}
+            >
+              {code}
+            </button>
+          ))}
+        </div>
+      )}
         </div>
       </div>
     </div>
@@ -1916,6 +1945,7 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
 });
 
 function MailDetail({
+  cacheScope,
   mail,
   mode,
   deletingMailId,
@@ -1930,8 +1960,10 @@ function MailDetail({
   canPrevious,
   canNext,
   positionLabel,
+  onFrameWindowChange,
   mobile: _mobile = false,
 }: {
+  cacheScope: string;
   mail: AnyMail | null;
   mode: MailMode;
   theme: 'light' | 'dark';
@@ -1947,11 +1979,12 @@ function MailDetail({
   canPrevious: boolean;
   canNext: boolean;
   positionLabel: string;
+  onFrameWindowChange?: (frameWindow: Window | null) => void;
   mobile?: boolean;
 }) {
   const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
-  useEffect(() => { if (mail) writeSessionMailDetail(mode, mail); }, [mail, mode]);
+  useEffect(() => { if (mail) writeSessionMailDetail(cacheScope, mode, mail); }, [cacheScope, mail, mode]);
   const parsedForMemo = mail ? isParsed(mail) : false;
   const htmlForFrame = mail ? String(parsedForMemo ? mail.message : mail.is_html ? mail.content : '') : '';
   const rawForDownload = mail && parsedForMemo ? String(mail.raw || '') : '';
@@ -2020,7 +2053,7 @@ function MailDetail({
           </header>
           <div className="my-2 h-px shrink-0 bg-slate-100 md:my-2.5" />
           <div className="mail-detail-body min-h-0 flex-1 overflow-hidden">
-            {iframeDocument ? <iframe title={`mail-${mail.id}`} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={iframeDocument} referrerPolicy="no-referrer" className="mail-frame" /> : <pre className="mail-text">{text || mail.preview || t('邮件正文仍在后台同步，请稍后刷新。', 'Message body is still syncing. Please refresh later.')}</pre>}
+            {iframeDocument ? <iframe ref={(node) => onFrameWindowChange?.(node?.contentWindow || null)} title={`mail-${mail.id}`} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={iframeDocument} referrerPolicy="no-referrer" className="mail-frame" /> : <pre className="mail-text">{text || mail.preview || t('邮件正文仍在后台同步，请稍后刷新。', 'Message body is still syncing. Please refresh later.')}</pre>}
           </div>
           {parsed && mail.attachments.length > 0 && <div className="mt-2.5 shrink-0"><h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800"><Paperclip size={16} /> {t('附件', 'Attachments')} ({mail.attachments.length})</h4><div className="grid max-h-24 gap-2 overflow-y-auto sm:grid-cols-2">{mail.attachments.map((attachment) => <a key={attachment.id} href={attachment.url} download={attachment.filename} className="flex items-center justify-between rounded-2xl border border-slate-200 p-2 transition hover:bg-slate-50"><div className="flex min-w-0 items-center gap-2"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-[10px] font-bold uppercase text-slate-700">{attachment.filename.split('.').pop() || 'file'}</div><div className="min-w-0"><p className="truncate text-xs font-medium text-slate-700">{attachment.filename}</p><p className="text-[11px] text-slate-400">{attachment.size}</p></div></div><Download size={14} className="text-slate-400" /></a>)}</div></div>}
         </article>

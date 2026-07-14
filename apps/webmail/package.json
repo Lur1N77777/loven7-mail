@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "tsc -p tsconfig.json && vite build && node ../../scripts/prune-unused-public-assets.mjs apps/webmail",
     "preview": "vite preview --host 0.0.0.0",
     "deploy": "npm run build && node scripts/deploy-pages.mjs",
     "check:functions:headers": "node scripts/check-functions-headers.mjs",
     "check:functions:image": "node scripts/check-image-proxy.mjs",
     "check:functions:cors": "node scripts/check-share-cors.mjs",
+    "check:functions:share-delete": "node scripts/check-share-delete.mjs",
+    "check:functions:regressions": "node scripts/check-pages-function-regressions.mjs",
+    "check:functions:brand": "node scripts/check-brand-icon-proxy.mjs",
+    "test": "node --experimental-strip-types --test tests/frontend-release.test.ts",
     "smoke:local": "node scripts/smoke-local.mjs"
   },
   "dependencies": {

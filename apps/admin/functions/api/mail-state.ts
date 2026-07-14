@@ -1,6 +1,12 @@
 type KVNamespace = {
   get<T = unknown>(key: string, options?: { type?: "json" }): Promise<T | null>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+  list(options?: { prefix?: string; cursor?: string; limit?: number }): Promise<{
+    keys: Array<{ name: string }>;
+    list_complete: boolean;
+    cursor?: string;
+  }>;
 };
 
 type MailStateEnv = {
@@ -22,6 +28,17 @@ type StoredMailState = {
   starredIds: string[];
   readAllBefore: number;
   updatedAt: number;
+  compactedThrough: string;
+};
+
+type MailStateOperation = {
+  version: 2;
+  createdAt: number;
+  readIdsToAdd: string[];
+  readIdsToRemove: string[];
+  starredIdsToAdd: string[];
+  starredIdsToRemove: string[];
+  readAllBefore: number;
 };
 
 type IdentityCacheEntry = {
@@ -30,8 +47,14 @@ type IdentityCacheEntry = {
 };
 
 const STATE_VERSION = 1;
+const OPERATION_VERSION = 2;
+const OPERATION_TTL_SECONDS = 365 * 24 * 60 * 60;
+const OPERATION_COMPACTION_GRACE_MS = 5 * 60 * 1000;
+const MAX_COMPACTION_OPERATIONS = 128;
+const MAX_OPERATION_DELETES = 256;
 const MAX_STATE_IDS = 5000;
 const IDENTITY_CACHE_MS = 5 * 60 * 1000;
+const IDENTITY_CACHE_MAX = 256;
 const identityCache = new Map<string, IdentityCacheEntry>();
 
 const JSON_HEADERS = {
@@ -135,6 +158,7 @@ function emptyState(): StoredMailState {
     starredIds: [],
     readAllBefore: 0,
     updatedAt: 0,
+    compactedThrough: "",
   };
 }
 
@@ -173,9 +197,12 @@ function workerBase(env: MailStateEnv) {
 }
 
 async function fetchUserIdentity(env: MailStateEnv, token: string) {
+  const tenant = (await sha256(`worker:${workerBase(env).toLowerCase()}`)).slice(0, 24);
   const tokenHash = await sha256(token);
-  const cached = identityCache.get(tokenHash);
+  const cacheKey = `${tenant}:${tokenHash}`;
+  const cached = identityCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.identity;
+  if (cached) identityCache.delete(cacheKey);
 
   const headers: Record<string, string> = {
     "x-lang": "zh",
@@ -189,12 +216,21 @@ async function fetchUserIdentity(env: MailStateEnv, token: string) {
   const user = asRecord(profile.user) || profile;
   const userId = firstString({ ...profile, ...user }, ["user_id", "userId", "id", "sub"]);
   const email = firstString({ ...profile, ...user }, ["user_email", "userEmail", "email", "mail"]).toLowerCase();
-  const identity = userId
+  const subject = userId
     ? `user:${userId}`
     : email
       ? `email:${email}`
       : `token:${tokenHash.slice(0, 32)}`;
-  identityCache.set(tokenHash, { identity, expiresAt: Date.now() + IDENTITY_CACHE_MS });
+  const identity = `tenant:${tenant}:${subject}`;
+  for (const [key, entry] of identityCache) {
+    if (entry.expiresAt <= Date.now()) identityCache.delete(key);
+  }
+  while (identityCache.size >= IDENTITY_CACHE_MAX) {
+    const oldest = identityCache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    identityCache.delete(oldest);
+  }
+  identityCache.set(cacheKey, { identity, expiresAt: Date.now() + IDENTITY_CACHE_MS });
   return identity;
 }
 
@@ -205,7 +241,8 @@ async function resolveIdentity(context: PagesContext) {
   const providedAdminPassword = context.request.headers.get("x-admin-auth")?.trim() || "";
   const configuredAdminPassword = context.env.ADMIN_PASSWORD?.trim() || "";
   if (providedAdminPassword && configuredAdminPassword && providedAdminPassword === configuredAdminPassword) {
-    return `admin:${(await sha256(configuredAdminPassword)).slice(0, 32)}`;
+    const tenant = (await sha256(`worker:${workerBase(context.env).toLowerCase()}`)).slice(0, 24);
+    return `tenant:${tenant}:admin:${(await sha256(configuredAdminPassword)).slice(0, 32)}`;
   }
   throw new Error("unauthorized");
 }
@@ -214,7 +251,29 @@ function stateKey(identity: string, mode: MailMode) {
   return `mail-state:v1:${identity}:${mode}`;
 }
 
-async function readState(kv: KVNamespace, key: string, mode: MailMode): Promise<StoredMailState> {
+function operationPrefix(identity: string, mode: MailMode) {
+  return `mail-state-op:v2:${identity}:${stateMode(mode)}:`;
+}
+
+function operationKey(identity: string, mode: MailMode, createdAt: number) {
+  const random = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().replace(/-/g, "")
+    : [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${operationPrefix(identity, mode)}${String(createdAt).padStart(13, "0")}:${random}`;
+}
+
+function operationCreatedAtFromKey(key: string, prefix: string) {
+  if (!key.startsWith(prefix)) return 0;
+  const match = /^(\d{13}):.+$/.exec(key.slice(prefix.length));
+  return match ? Math.max(0, Number(match[1]) || 0) : 0;
+}
+
+function normalizeCompactedThrough(value: unknown, prefix: string) {
+  const key = typeof value === "string" ? value.trim() : "";
+  return operationCreatedAtFromKey(key, prefix) > 0 ? key : "";
+}
+
+async function readState(kv: KVNamespace, key: string, mode: MailMode, prefix: string): Promise<StoredMailState> {
   const raw = await kv.get<Partial<StoredMailState>>(key, { type: "json" }).catch(() => null);
   if (!raw || typeof raw !== "object") return emptyState();
   const readAllBefore = Math.max(0, Number(raw.readAllBefore || 0) || 0);
@@ -224,6 +283,7 @@ async function readState(kv: KVNamespace, key: string, mode: MailMode): Promise<
     starredIds: compactIds(normalizeIds(mode, raw.starredIds), 0),
     readAllBefore,
     updatedAt: Math.max(0, Number(raw.updatedAt || 0) || 0),
+    compactedThrough: normalizeCompactedThrough(raw.compactedThrough, prefix),
   };
 }
 
@@ -235,19 +295,154 @@ function mergeStates(mode: MailMode, states: StoredMailState[]): StoredMailState
     starredIds: compactIds(states.flatMap((state) => normalizeIds(mode, state.starredIds)), 0),
     readAllBefore,
     updatedAt: Math.max(0, ...states.map((state) => Number(state.updatedAt || 0) || 0)),
+    compactedThrough: states.map((state) => state.compactedThrough).filter(Boolean).sort().at(-1) || "",
   };
+}
+
+async function readOperations(kv: KVNamespace, identity: string, mode: MailMode, compactedThrough: string) {
+  const canonicalMode = stateMode(mode);
+  const prefix = operationPrefix(identity, canonicalMode);
+  const observedKeys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await kv.list({ prefix, cursor, limit: 1000 });
+    observedKeys.push(...page.keys.map((item) => item.name));
+    cursor = page.list_complete ? undefined : page.cursor || undefined;
+  } while (cursor);
+  observedKeys.sort((left, right) => left.localeCompare(right));
+
+  // Cloudflare KV list/read propagation is eventually consistent. The grace
+  // window keeps a same-millisecond sibling from appearing behind a watermark
+  // while it is still converging between edges.
+  const compactableKeys: string[] = [];
+  const compactBefore = Date.now() - OPERATION_COMPACTION_GRACE_MS;
+  for (const key of observedKeys) {
+    if (compactedThrough && key <= compactedThrough) continue;
+    const createdAt = operationCreatedAtFromKey(key, prefix);
+    if (!createdAt || createdAt > compactBefore) break;
+    compactableKeys.push(key);
+    if (compactableKeys.length >= MAX_COMPACTION_OPERATIONS) break;
+  }
+  const nextCompactedThrough = compactableKeys.at(-1) || compactedThrough;
+  const compactableOperations: Array<{ key: string; value: MailStateOperation }> = [];
+  const tailOperations: Array<{ key: string; value: MailStateOperation }> = [];
+  for (const key of observedKeys) {
+    if (compactedThrough && key <= compactedThrough) continue;
+    const value = await kv.get<Partial<MailStateOperation>>(key, { type: "json" }).catch(() => null);
+    if (!value || value.version !== OPERATION_VERSION) continue;
+    const operation = {
+      key,
+      value: {
+        version: OPERATION_VERSION,
+        createdAt: Math.max(0, Number(value.createdAt) || 0),
+        readIdsToAdd: normalizeIds(canonicalMode, value.readIdsToAdd),
+        readIdsToRemove: normalizeIds(canonicalMode, value.readIdsToRemove),
+        starredIdsToAdd: normalizeIds(canonicalMode, value.starredIdsToAdd),
+        starredIdsToRemove: normalizeIds(canonicalMode, value.starredIdsToRemove),
+        readAllBefore: Math.max(0, Number(value.readAllBefore) || 0),
+      },
+    } satisfies { key: string; value: MailStateOperation };
+    if (nextCompactedThrough && key <= nextCompactedThrough) {
+      compactableOperations.push(operation);
+    } else {
+      tailOperations.push(operation);
+    }
+  }
+  const deleteThrough = nextCompactedThrough || compactedThrough;
+  const deleteKeys = deleteThrough
+    ? observedKeys.filter((key) => key <= deleteThrough).slice(0, MAX_OPERATION_DELETES)
+    : [];
+  return {
+    compactableOperations,
+    tailOperations,
+    nextCompactedThrough,
+    deleteKeys,
+  };
+}
+
+function applyOperations(mode: MailMode, snapshot: StoredMailState, operations: Array<{ value: MailStateOperation }>) {
+  const canonicalMode = stateMode(mode);
+  const read = new Set(snapshot.readIds);
+  const starred = new Set(snapshot.starredIds);
+  let readAllBefore = snapshot.readAllBefore;
+  let updatedAt = snapshot.updatedAt;
+  for (const { value } of operations) {
+    for (const id of value.readIdsToAdd) read.add(id);
+    for (const id of value.readIdsToRemove) read.delete(id);
+    for (const id of value.starredIdsToAdd) starred.add(id);
+    for (const id of value.starredIdsToRemove) starred.delete(id);
+    readAllBefore = Math.max(readAllBefore, value.readAllBefore);
+    updatedAt = Math.max(updatedAt, value.createdAt);
+  }
+  return {
+    version: STATE_VERSION,
+    readIds: compactIds(read, readAllBefore),
+    starredIds: compactIds(starred, 0),
+    readAllBefore,
+    updatedAt,
+    compactedThrough: snapshot.compactedThrough,
+  } satisfies StoredMailState;
+}
+
+async function deleteObservedOperations(kv: KVNamespace, keys: string[]) {
+  for (let offset = 0; offset < keys.length; offset += 32) {
+    await Promise.all(keys.slice(offset, offset + 32).map((key) => kv.delete(key).catch(() => undefined)));
+  }
 }
 
 async function readMergedState(kv: KVNamespace, identity: string, mode: MailMode): Promise<StoredMailState> {
   const canonicalMode = stateMode(mode);
+  const prefix = operationPrefix(identity, canonicalMode);
+  const key = stateKey(identity, canonicalMode);
+  let snapshot: StoredMailState;
   if (canonicalMode !== "inbox") {
-    return readState(kv, stateKey(identity, canonicalMode), canonicalMode);
+    snapshot = await readState(kv, key, canonicalMode, prefix);
+  } else {
+    const [inboxState, legacyUnknownState] = await Promise.all([
+      readState(kv, stateKey(identity, "inbox"), "inbox", prefix),
+      readState(kv, stateKey(identity, "unknown"), "unknown", prefix),
+    ]);
+    snapshot = mergeStates(canonicalMode, [inboxState, legacyUnknownState]);
   }
-  const [inboxState, legacyUnknownState] = await Promise.all([
-    readState(kv, stateKey(identity, "inbox"), "inbox"),
-    readState(kv, stateKey(identity, "unknown"), "unknown"),
-  ]);
-  return mergeStates(canonicalMode, [inboxState, legacyUnknownState]);
+  const operations = await readOperations(kv, identity, canonicalMode, snapshot.compactedThrough);
+  const compactedSnapshot = applyOperations(canonicalMode, snapshot, operations.compactableOperations);
+  compactedSnapshot.compactedThrough = operations.nextCompactedThrough;
+  const response = applyOperations(canonicalMode, compactedSnapshot, operations.tailOperations);
+  const shouldPersist = operations.nextCompactedThrough !== snapshot.compactedThrough || operations.deleteKeys.length > 0;
+  if (shouldPersist) {
+    try {
+      await kv.put(key, JSON.stringify(compactedSnapshot));
+      await deleteObservedOperations(kv, operations.deleteKeys);
+    } catch {
+      // A snapshot failure must never be followed by event deletion.
+    }
+  }
+  return response;
+}
+
+function operationFromBody(mode: MailMode, body: Record<string, unknown>, createdAt: number): MailStateOperation {
+  const canonicalMode = stateMode(mode);
+  const readAllBeforeInput = asRecord(body.readAllBefore);
+  return {
+    version: OPERATION_VERSION,
+    createdAt,
+    readIdsToAdd: normalizeIds(canonicalMode, [
+      ...(Array.isArray(body.readIds) ? body.readIds : []),
+      ...(Array.isArray(body.readIdsToAdd) ? body.readIdsToAdd : []),
+    ]),
+    readIdsToRemove: normalizeIds(canonicalMode, body.readIdsToRemove),
+    starredIdsToAdd: normalizeIds(canonicalMode, [
+      ...(Array.isArray(body.starredIds) ? body.starredIds : []),
+      ...(Array.isArray(body.starredIdsToAdd) ? body.starredIdsToAdd : []),
+    ]),
+    starredIdsToRemove: normalizeIds(canonicalMode, body.starredIdsToRemove),
+    readAllBefore: Math.max(
+      0,
+      Number(body.readAllBefore || 0) || 0,
+      Number(readAllBeforeInput[mode] || 0) || 0,
+      Number(readAllBeforeInput[canonicalMode] || 0) || 0,
+    ),
+  };
 }
 
 function responseState(mode: MailMode, state: StoredMailState) {
@@ -291,38 +486,10 @@ export async function onRequestPatch(context: PagesContext) {
 
   try {
     const identity = await resolveIdentity(context);
-    const canonicalMode = stateMode(mode);
-    const key = stateKey(identity, canonicalMode);
-    const current = await readMergedState(kv, identity, mode);
-    const readAllBeforeInput = asRecord(body.readAllBefore);
-    const nextReadAllBefore = Math.max(
-      current.readAllBefore,
-      Number(body.readAllBefore || 0) || 0,
-      Number(readAllBeforeInput[mode] || 0) || 0,
-      Number(readAllBeforeInput[canonicalMode] || 0) || 0,
-    );
-
-    const readIds = compactIds([
-      ...current.readIds,
-      ...normalizeIds(canonicalMode, body.readIds),
-      ...normalizeIds(canonicalMode, body.readIdsToAdd),
-    ], nextReadAllBefore);
-
-    const starred = new Set(compactIds([
-      ...current.starredIds,
-      ...normalizeIds(canonicalMode, body.starredIds),
-      ...normalizeIds(canonicalMode, body.starredIdsToAdd),
-    ], 0));
-    for (const id of normalizeIds(canonicalMode, body.starredIdsToRemove)) starred.delete(id);
-
-    const next: StoredMailState = {
-      version: STATE_VERSION,
-      readIds,
-      starredIds: [...starred].slice(-MAX_STATE_IDS),
-      readAllBefore: nextReadAllBefore,
-      updatedAt: Date.now(),
-    };
-    await kv.put(key, JSON.stringify(next));
+    const createdAt = Date.now();
+    const operation = operationFromBody(mode, body, createdAt);
+    await kv.put(operationKey(identity, mode, createdAt), JSON.stringify(operation), { expirationTtl: OPERATION_TTL_SECONDS });
+    const next = await readMergedState(kv, identity, mode);
     return json(responseState(mode, next));
   } catch (error) {
     const message = error instanceof Error ? error.message : "";

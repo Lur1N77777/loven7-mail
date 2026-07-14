@@ -1,5 +1,4 @@
 import {
-  decodeJwtAddress,
   errorJson,
   fetchAdminWorkerJson,
   fetchWorkerJson,
@@ -33,6 +32,7 @@ export type ShareMailbox = {
 export type SharePayload = {
   version: 2;
   token?: string;
+  creatorUserId?: string;
   createdAt: string;
   updatedAt?: string;
   expiresAt: string | null;
@@ -50,6 +50,7 @@ export type PublicShareMailbox = {
 
 export type ShareAdminSummary = {
   token: string;
+  creatorUserId?: string;
   url: string;
   createdAt: string;
   updatedAt: string;
@@ -84,15 +85,25 @@ export type ShareAdminAuth = {
 const SHARE_PREFIX = "share:";
 const SHARE_SUMMARY_PREFIX = "share-summary:";
 const SHARE_ADDRESS_PREFIX = "share-address:";
+const SHARE_CREATOR_PREFIX = "share-creator:";
+const SHARE_ORDER_PREFIX = "share-order:";
+const SHARE_REVOKED_PREFIX = "share-revoked:";
 const TOKEN_BYTES = 18;
 const MAX_LIST_SCAN_PAGES = 8;
-const MAX_SHARE_TTL_DAYS = 30;
+const SHARE_AUDIT_RETENTION_SECONDS = 90 * 24 * 60 * 60;
 const DEFAULT_PERMISSIONS: SharePermissions = { hideMail: true };
 const ADDRESS_CURSOR_PREFIX = "addr:";
+const LIST_CURSOR_PREFIX = "list:";
 
 type AddressListCursor = {
   createdAt: string;
   token: string;
+};
+
+type ShareIndexCursor = {
+  phase: "order" | "summary" | "record";
+  pageCursor?: string;
+  offset: number;
 };
 
 function base64Url(bytes: Uint8Array) {
@@ -155,6 +166,9 @@ function normalizeSharePayload(payload: Partial<SharePayload> | null, token: str
   return {
     version: 2,
     token,
+    ...(typeof payload.creatorUserId === "string" && payload.creatorUserId.trim()
+      ? { creatorUserId: payload.creatorUserId.trim() }
+      : {}),
     createdAt,
     updatedAt: normalizeIso(payload.updatedAt, createdAt) || createdAt,
     expiresAt: normalizeIso(payload.expiresAt, null),
@@ -170,16 +184,58 @@ async function importShareKey(secret: string) {
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
-function requireShareEnv(env: CloudmailEnv) {
-  if (!env.SHARE_KV) throw new RuntimeConfigError("share_kv_not_configured");
-  if (!env.SHARE_ENCRYPTION_SECRET?.trim()) throw new RuntimeConfigError("share_secret_not_configured");
-  return { kv: env.SHARE_KV, secret: env.SHARE_ENCRYPTION_SECRET.trim() };
+function isStrongShareSecret(secret: string) {
+  const bytes = new TextEncoder().encode(secret);
+  return bytes.byteLength >= 32 && new Set(bytes).size >= 12;
 }
 
-function adminAccessTokenFromRequest(request: Request) {
+function requireShareEnv(env: CloudmailEnv) {
+  if (!env.SHARE_KV) throw new RuntimeConfigError("share_kv_not_configured");
+  const legacySecret = env.SHARE_ENCRYPTION_SECRET?.trim() || "";
+  const v2Secret = env.SHARE_ENCRYPTION_SECRET_V2?.trim() || "";
+  if (!legacySecret && !v2Secret) throw new RuntimeConfigError("share_secret_not_configured");
+  if (v2Secret && !isStrongShareSecret(v2Secret)) {
+    throw new UpstreamError(500, "", "SHARE_ENCRYPTION_SECRET_V2 至少需要 32 个 UTF-8 字节并使用高熵随机值");
+  }
+  if (!v2Secret && !isStrongShareSecret(legacySecret)) {
+    throw new UpstreamError(500, "", "共享加密密钥至少需要 32 个 UTF-8 字节并使用高熵随机值");
+  }
+  return {
+    kv: env.SHARE_KV,
+    writeSecret: v2Secret || legacySecret,
+    writeKid: v2Secret ? "v2" as const : undefined,
+    legacySecret: legacySecret || undefined,
+    v2Secret: v2Secret || undefined,
+  };
+}
+
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const width = Math.min(items.length, Math.max(1, Math.floor(concurrency) || 1));
+  await Promise.all(Array.from({ length: width }, async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  }));
+  return results;
+}
+
+function adminAccessTokensFromRequest(request: Request) {
   const auth = request.headers.get("authorization") || "";
   const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  return bearer || request.headers.get("x-user-access-token")?.trim() || request.headers.get("x-user-token")?.trim() || "";
+  return [...new Set([
+    request.headers.get("x-user-token")?.trim(),
+    request.headers.get("x-user-access-token")?.trim(),
+    bearer,
+  ].filter((token): token is string => Boolean(token)))];
 }
 
 type AdminProfile = {
@@ -289,9 +345,14 @@ function adminPasswordHeaders(env: CloudmailEnv, adminPassword: string, hasJsonB
 
 export function parseShareTtl(value: unknown): { label: string; expiresAt: string | null; ttlSeconds?: number } {
   const key = String(value || "7d").trim().toLowerCase();
-  const days = key === "1d" ? 1 : key === "7d" ? 7 : key === "30d" ? 30 : MAX_SHARE_TTL_DAYS;
+  if (key === "forever") return { label: "永久", expiresAt: null };
+  const days = key === "1d" ? 1 : key === "30d" ? 30 : 7;
   const ttlSeconds = days * 24 * 60 * 60;
   return { label: `${days}天`, expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(), ttlSeconds };
+}
+
+export function isValidShareTtl(value: unknown) {
+  return typeof value === "string" && ["1d", "7d", "30d", "forever"].includes(value.trim().toLowerCase());
 }
 
 export function newShareToken() {
@@ -300,19 +361,26 @@ export function newShareToken() {
   return base64Url(bytes);
 }
 
-async function sealPayload(payload: SharePayload, secret: string) {
+async function sealPayload(payload: SharePayload, secret: string, kid?: "v2") {
   const iv = new Uint8Array(12);
   crypto.getRandomValues(iv);
   const key = await importShareKey(secret);
   const plain = new TextEncoder().encode(JSON.stringify(payload));
   const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain));
-  return JSON.stringify({ v: 1, iv: base64Url(iv), data: base64Url(encrypted) });
+  return JSON.stringify({ v: 1, ...(kid ? { kid } : {}), iv: base64Url(iv), data: base64Url(encrypted) });
 }
 
-async function openPayload(value: string, secret: string, token: string): Promise<SharePayload | null> {
+async function openPayload(
+  value: string,
+  keyring: { legacySecret?: string; v2Secret?: string },
+  token: string,
+): Promise<SharePayload | null> {
   try {
-    const sealed = JSON.parse(value) as { v?: number; iv?: string; data?: string };
+    const sealed = JSON.parse(value) as { v?: number; kid?: unknown; iv?: string; data?: string };
     if (sealed.v !== 1 || !sealed.iv || !sealed.data) return null;
+    if (sealed.kid !== undefined && sealed.kid !== "v2") return null;
+    const secret = sealed.kid === "v2" ? keyring.v2Secret : keyring.legacySecret;
+    if (!secret) return null;
     const key = await importShareKey(secret);
     const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromBase64Url(sealed.iv) }, key, fromBase64Url(sealed.data));
     const payload = JSON.parse(new TextDecoder().decode(decrypted)) as Record<string, unknown>;
@@ -344,6 +412,7 @@ function summaryFromPayload(token: string, payload: SharePayload): StoredShareSu
     .filter((count) => Number.isFinite(count) && count >= 0);
   return {
     token,
+    ...(payload.creatorUserId ? { creatorUserId: payload.creatorUserId } : {}),
     createdAt: payload.createdAt,
     updatedAt: payload.updatedAt || payload.createdAt,
     expiresAt: payload.expiresAt,
@@ -370,7 +439,9 @@ function kvExpirationOptions(expiresAt: string | null): { expirationTtl: number 
   if (!expiresAt) return undefined;
   const expiresTime = Date.parse(expiresAt);
   if (!Number.isFinite(expiresTime)) return { expirationTtl: 60 };
-  const ttl = Math.floor((expiresTime - Date.now()) / 1000);
+  // Business expiry and physical retention are deliberately separate so an
+  // expired/revoked link remains auditable and can be explicitly cleaned.
+  const ttl = Math.floor((expiresTime - Date.now()) / 1000) + SHARE_AUDIT_RETENTION_SECONDS;
   return { expirationTtl: Math.max(60, ttl) };
 }
 
@@ -384,15 +455,33 @@ function shareAddressIndexKey(addressId: string, token: string, payload: SharePa
   return `${SHARE_ADDRESS_PREFIX}${addressId}:${reverseCreatedAtKey(payload.createdAt)}:${token}`;
 }
 
+function shareOrderIndexKey(token: string, createdAt: string) {
+  return `${SHARE_ORDER_PREFIX}${reverseCreatedAtKey(createdAt)}:${token}`;
+}
+
+function shareCreatorIndexKey(creatorUserId: string, token: string, payload: Pick<SharePayload, "createdAt">) {
+  return `${SHARE_CREATOR_PREFIX}${creatorUserId}:${reverseCreatedAtKey(payload.createdAt)}:${token}`;
+}
+
 async function saveShareSummary(env: CloudmailEnv, token: string, payload: SharePayload) {
   const { kv } = requireShareEnv(env);
-  await kv.put(`${SHARE_SUMMARY_PREFIX}${token}`, JSON.stringify(summaryFromPayload(token, payload)), kvExpirationOptions(payload.expiresAt));
+  const summary = JSON.stringify(summaryFromPayload(token, payload));
+  const options = kvExpirationOptions(payload.expiresAt);
+  await Promise.all([
+    kv.put(`${SHARE_SUMMARY_PREFIX}${token}`, summary, options),
+    kv.put(shareOrderIndexKey(token, payload.createdAt), summary, options),
+  ]);
 }
 
 async function saveShareAddressIndexes(env: CloudmailEnv, token: string, payload: SharePayload) {
   const { kv } = requireShareEnv(env);
   const options = kvExpirationOptions(payload.expiresAt);
-  await Promise.all(payload.addresses.map((mailbox) => kv.put(shareAddressIndexKey(mailbox.id, token, payload), "1", options)));
+  await Promise.all([
+    ...payload.addresses.map((mailbox) => kv.put(shareAddressIndexKey(mailbox.id, token, payload), "1", options)),
+    ...(payload.creatorUserId
+      ? [kv.put(shareCreatorIndexKey(payload.creatorUserId, token, payload), "1", options)]
+      : []),
+  ]);
 }
 
 async function deleteShareAddressIndexes(env: CloudmailEnv, token: string, createdAt: string, addresses: Array<{ id: string }>) {
@@ -419,6 +508,9 @@ function normalizeStoredSummary(raw: unknown, token: string): StoredShareSummary
   if (!createdAt) return null;
   return {
     token,
+    ...(typeof src.creatorUserId === "string" && src.creatorUserId.trim()
+      ? { creatorUserId: src.creatorUserId.trim() }
+      : {}),
     createdAt,
     updatedAt: normalizeIso(src.updatedAt, createdAt) || createdAt,
     expiresAt: normalizeIso(src.expiresAt, null),
@@ -435,31 +527,85 @@ function normalizeStoredSummary(raw: unknown, token: string): StoredShareSummary
 
 async function readShareSummary(env: CloudmailEnv, token: string): Promise<StoredShareSummary | null> {
   const { kv } = requireShareEnv(env);
-  const raw = await kv.get(`${SHARE_SUMMARY_PREFIX}${token}`);
+  const [raw, revokedAt] = await Promise.all([
+    kv.get(`${SHARE_SUMMARY_PREFIX}${token}`),
+    readRevocationTombstone(env, token),
+  ]);
   if (!raw) return null;
   try {
-    return normalizeStoredSummary(JSON.parse(raw), token);
+    const summary = normalizeStoredSummary(JSON.parse(raw), token);
+    return summary && revokedAt ? { ...summary, revokedAt } : summary;
   } catch {
     return null;
   }
 }
 
+async function readShareOrderSummary(env: CloudmailEnv, key: string, token: string): Promise<StoredShareSummary | null> {
+  const { kv } = requireShareEnv(env);
+  const [raw, revokedAt] = await Promise.all([
+    kv.get(key),
+    readRevocationTombstone(env, token),
+  ]);
+  if (!raw) return null;
+  try {
+    const summary = normalizeStoredSummary(JSON.parse(raw), token);
+    return summary && revokedAt ? { ...summary, revokedAt } : summary;
+  } catch {
+    return null;
+  }
+}
+
+async function readRevocationTombstone(env: CloudmailEnv, token: string): Promise<string | null> {
+  const { kv } = requireShareEnv(env);
+  const raw = await kv.get(`${SHARE_REVOKED_PREFIX}${token}`);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { revokedAt?: unknown };
+    return normalizeIso(parsed.revokedAt, null);
+  } catch {
+    return normalizeIso(raw, null);
+  }
+}
+
+async function writeRevocationTombstone(env: CloudmailEnv, token: string, revokedAt: string) {
+  const { kv } = requireShareEnv(env);
+  await kv.put(`${SHARE_REVOKED_PREFIX}${token}`, JSON.stringify({ version: 1, revokedAt }));
+}
+
 export async function saveShare(env: CloudmailEnv, token: string, payload: SharePayload) {
-  const { kv, secret } = requireShareEnv(env);
-  const normalized = normalizeSharePayload({ ...payload, token }, token);
+  const { kv, writeSecret, writeKid } = requireShareEnv(env);
+  const tombstone = await readRevocationTombstone(env, token);
+  const normalized = normalizeSharePayload({
+    ...payload,
+    token,
+    ...(tombstone ? { revokedAt: tombstone } : {}),
+  }, token);
   if (!normalized) throw new UpstreamError(500, "", "共享记录格式无效");
-  await kv.put(`${SHARE_PREFIX}${token}`, await sealPayload(normalized, secret), kvExpirationOptions(normalized.expiresAt));
-  await saveShareSummary(env, token, normalized).catch(() => undefined);
-  await saveShareAddressIndexes(env, token, normalized).catch(() => undefined);
+  await kv.put(`${SHARE_PREFIX}${token}`, await sealPayload(normalized, writeSecret, writeKid), kvExpirationOptions(normalized.expiresAt));
+  const indexWrites = await Promise.allSettled([
+    saveShareSummary(env, token, normalized),
+    saveShareAddressIndexes(env, token, normalized),
+  ]);
+  const failures = indexWrites.filter((result) => result.status === "rejected");
+  if (failures.length) {
+    console.error(JSON.stringify({
+      event: "share_index_write_failed",
+      tokenSuffix: token.slice(-6),
+      failedWrites: failures.length,
+    }));
+  }
 }
 
 export async function readShareRecord(env: CloudmailEnv, token: string): Promise<SharePayload | null> {
-  const { kv, secret } = requireShareEnv(env);
+  const { kv, legacySecret, v2Secret } = requireShareEnv(env);
   if (!/^[A-Za-z0-9_-]{12,96}$/.test(token)) return null;
-  const raw = await kv.get(`${SHARE_PREFIX}${token}`);
+  const [raw, revokedAt] = await Promise.all([
+    kv.get(`${SHARE_PREFIX}${token}`),
+    readRevocationTombstone(env, token),
+  ]);
   if (!raw) return null;
-  const payload = await openPayload(raw, secret, token);
-  if (payload) void saveShareSummary(env, token, payload);
+  const opened = await openPayload(raw, { legacySecret, v2Secret }, token);
+  const payload = opened && revokedAt ? { ...opened, revokedAt } : opened;
   return payload;
 }
 
@@ -479,11 +625,20 @@ export async function updateShareRecord(env: CloudmailEnv, token: string, update
 }
 
 export async function revokeShare(env: CloudmailEnv, token: string): Promise<SharePayload | null> {
-  return updateShareRecord(env, token, (payload) => ({
-    ...payload,
-    revokedAt: payload.revokedAt || new Date().toISOString(),
+  const current = await readShareRecord(env, token);
+  if (!current) return null;
+  const revokedAt = current.revokedAt || new Date().toISOString();
+  // This key is never removed by ordinary updates. A stale read-modify-write
+  // can overwrite the encrypted snapshot, but it cannot erase revocation.
+  await writeRevocationTombstone(env, token, revokedAt);
+  const next = normalizeSharePayload({
+    ...current,
+    revokedAt,
     updatedAt: new Date().toISOString(),
-  }));
+  }, token);
+  if (!next) throw new UpstreamError(500, "", "共享记录撤销后格式无效");
+  await saveShare(env, token, next);
+  return next;
 }
 
 export async function deleteInactiveShareRecord(env: CloudmailEnv, token: string): Promise<boolean> {
@@ -495,6 +650,7 @@ export async function deleteInactiveShareRecord(env: CloudmailEnv, token: string
     await Promise.all([
       kv.delete(`${SHARE_PREFIX}${token}`),
       kv.delete(`${SHARE_SUMMARY_PREFIX}${token}`),
+      kv.delete(`${SHARE_REVOKED_PREFIX}${token}`),
     ]);
     return false;
   }
@@ -504,6 +660,11 @@ export async function deleteInactiveShareRecord(env: CloudmailEnv, token: string
   await Promise.all([
     kv.delete(`${SHARE_PREFIX}${token}`),
     kv.delete(`${SHARE_SUMMARY_PREFIX}${token}`),
+    kv.delete(shareOrderIndexKey(token, summary.createdAt)),
+    kv.delete(`${SHARE_REVOKED_PREFIX}${token}`),
+    ...(summary.creatorUserId
+      ? [kv.delete(shareCreatorIndexKey(summary.creatorUserId, token, summary))]
+      : []),
     deleteShareAddressIndexes(env, token, summary.createdAt, summary.addresses),
   ]);
   return true;
@@ -557,65 +718,146 @@ function decodeAddressListCursor(value: string | undefined): AddressListCursor |
   }
 }
 
+function encodeShareIndexCursor(cursor: ShareIndexCursor) {
+  return `${LIST_CURSOR_PREFIX}${base64Url(new TextEncoder().encode(JSON.stringify(cursor)))}`;
+}
+
+function decodeShareIndexCursor(value: string | undefined): ShareIndexCursor {
+  if (!value) return { phase: "order", offset: 0 };
+  if (!value.startsWith(LIST_CURSOR_PREFIX)) {
+    // Backward compatibility for cursors issued by the previous implementation.
+    return { phase: "summary", pageCursor: value, offset: 0 };
+  }
+  try {
+    const raw = new TextDecoder().decode(fromBase64Url(value.slice(LIST_CURSOR_PREFIX.length)));
+    const parsed = JSON.parse(raw) as Partial<ShareIndexCursor>;
+    if (parsed.phase !== "order" && parsed.phase !== "summary" && parsed.phase !== "record") throw new Error("bad phase");
+    const offset = Math.max(0, Math.min(100, Math.floor(Number(parsed.offset) || 0)));
+    return {
+      phase: parsed.phase,
+      ...(typeof parsed.pageCursor === "string" && parsed.pageCursor ? { pageCursor: parsed.pageCursor } : {}),
+      offset,
+    };
+  } catch {
+    return { phase: "order", offset: 0 };
+  }
+}
+
+function tokenFromIndexKey(key: string) {
+  return key.slice(key.lastIndexOf(":") + 1);
+}
+
 export async function listShareRecords(env: CloudmailEnv, options: ShareListOptions) {
   const { kv } = requireShareEnv(env);
   const limit = Math.min(100, Math.max(1, options.limit || 20));
   const normalizedStatus = ["active", "expired", "revoked"].includes(String(options.status)) ? String(options.status) : "";
   const normalizedQuery = String(options.query || "").trim().toLowerCase();
   const results = new Map<string, ShareAdminSummary>();
-  let cursor = options.cursor || undefined;
-  let complete = false;
+  let state = decodeShareIndexCursor(options.cursor);
   let scannedPages = 0;
+  let complete = false;
 
   while (results.size < limit && !complete && scannedPages < MAX_LIST_SCAN_PAGES) {
     scannedPages += 1;
-    const page = await kv.list({ prefix: SHARE_SUMMARY_PREFIX, cursor, limit: 100 });
-    cursor = page.cursor || undefined;
-    complete = Boolean(page.list_complete);
-    for (const key of page.keys) {
-      const token = key.name.slice(SHARE_SUMMARY_PREFIX.length);
-      const summary = await readShareSummary(env, token).catch(() => null);
-      if (!summary) continue;
-      const admin = adminShareFromSummary(options.request, summary);
-      if (!summaryMatches(admin, normalizedStatus, normalizedQuery)) continue;
-      results.set(token, admin);
-      if (results.size >= limit) break;
-    }
-    if (!cursor) complete = true;
-  }
+    const prefix = state.phase === "order"
+      ? SHARE_ORDER_PREFIX
+      : state.phase === "summary"
+        ? SHARE_SUMMARY_PREFIX
+        : SHARE_PREFIX;
+    const pageCursor = state.pageCursor;
+    const page = await kv.list({ prefix, cursor: pageCursor, limit: 100 });
+    const keys = page.keys;
 
-  if (results.size < limit) {
-    let legacyCursor: string | undefined;
-    let legacyComplete = false;
-    let legacyPages = 0;
-    while (results.size < limit && !legacyComplete && legacyPages < MAX_LIST_SCAN_PAGES) {
-      legacyPages += 1;
-      const page = await kv.list({ prefix: SHARE_PREFIX, cursor: legacyCursor, limit: 80 });
-      legacyCursor = page.cursor || undefined;
-      legacyComplete = Boolean(page.list_complete);
-      for (const key of page.keys) {
-        const token = key.name.slice(SHARE_PREFIX.length);
-        if (results.has(token)) continue;
+    for (let index = state.offset; index < keys.length; index += 1) {
+      state = { ...state, offset: index + 1 };
+      const token = state.phase === "order"
+        ? tokenFromIndexKey(keys[index].name)
+        : state.phase === "summary"
+          ? keys[index].name.slice(SHARE_SUMMARY_PREFIX.length)
+          : keys[index].name.slice(SHARE_PREFIX.length);
+      if (!token || results.has(token)) continue;
+
+      let admin: ShareAdminSummary | null = null;
+      if (state.phase === "record") {
+        const existingSummary = await kv.get(`${SHARE_SUMMARY_PREFIX}${token}`).catch(() => null);
+        if (existingSummary) continue;
         const payload = await readShareRecord(env, token).catch(() => null);
         if (!payload) continue;
-        const summary = adminShare(options.request, token, payload);
-        if (!summaryMatches(summary, normalizedStatus, normalizedQuery)) continue;
-        results.set(token, summary);
-        if (results.size >= limit) break;
+        admin = adminShare(options.request, token, payload);
+        await saveShareSummary(env, token, payload).catch(() => {
+          console.error(JSON.stringify({ event: "share_index_repair_failed", tokenSuffix: token.slice(-6) }));
+        });
+      } else {
+        const summary = state.phase === "order"
+          ? await readShareOrderSummary(env, keys[index].name, token).catch(() => null)
+          : await readShareSummary(env, token).catch(() => null);
+        if (!summary) continue;
+        admin = adminShareFromSummary(options.request, summary);
       }
-      if (!legacyCursor) legacyComplete = true;
+      if (state.phase === "summary" && admin) {
+        const summary = admin;
+        const indexed = await kv.get(shareOrderIndexKey(token, summary.createdAt)).catch(() => null);
+        if (indexed) continue;
+        await kv.put(
+          shareOrderIndexKey(token, summary.createdAt),
+          JSON.stringify(summary),
+          kvExpirationOptions(summary.expiresAt),
+        ).catch(() => {
+          console.error(JSON.stringify({ event: "share_index_repair_failed", tokenSuffix: token.slice(-6) }));
+        });
+      }
+      if (!admin) continue;
+      if (!summaryMatches(admin, normalizedStatus, normalizedQuery)) continue;
+      results.set(token, admin);
+
+      if (results.size >= limit) {
+        if (state.offset >= keys.length) {
+          if (page.list_complete) {
+            state = state.phase === "order"
+              ? { phase: "summary", offset: 0 }
+              : state.phase === "summary"
+                ? { phase: "record", offset: 0 }
+                : state;
+            complete = state.phase === "record" && page.list_complete && prefix === SHARE_PREFIX;
+          } else {
+            state = { phase: state.phase, pageCursor: page.cursor, offset: 0 };
+          }
+        }
+        const sorted = Array.from(results.values()).sort(compareShareOrder);
+        return {
+          results: sorted.slice(0, limit),
+          cursor: complete ? null : encodeShareIndexCursor(state),
+          hasMore: !complete,
+        };
+      }
+    }
+
+    if (page.list_complete || !page.cursor) {
+      if (state.phase === "order") {
+        state = { phase: "summary", offset: 0 };
+      } else if (state.phase === "summary") {
+        state = { phase: "record", offset: 0 };
+      } else {
+        complete = true;
+      }
+    } else {
+      state = { phase: state.phase, pageCursor: page.cursor, offset: 0 };
     }
   }
 
   const sorted = Array.from(results.values()).sort(compareShareOrder);
   return {
     results: sorted.slice(0, limit),
-    cursor: complete ? null : cursor || null,
-    hasMore: !complete && Boolean(cursor),
+    cursor: complete ? null : encodeShareIndexCursor(state),
+    hasMore: !complete,
   };
 }
 
-export async function listShareRecordsForAddressIds(env: CloudmailEnv, addressIds: string[], options: ShareListOptions) {
+export async function listShareRecordsForAddressIds(
+  env: CloudmailEnv,
+  addressIds: string[],
+  options: ShareListOptions & { creatorUserId?: string },
+) {
   const { kv } = requireShareEnv(env);
   const limit = Math.min(100, Math.max(1, options.limit || 20));
   const normalizedStatus = ["active", "expired", "revoked"].includes(String(options.status)) ? String(options.status) : "";
@@ -624,16 +866,25 @@ export async function listShareRecordsForAddressIds(env: CloudmailEnv, addressId
   const results = new Map<string, ShareAdminSummary>();
   let exhaustedAllIndexes = true;
 
-  for (const addressId of [...new Set(addressIds.map((item) => String(item).trim()).filter(Boolean))]) {
+  const prefixes = [
+    ...[...new Set(addressIds.map((item) => String(item).trim()).filter(Boolean))]
+      .map((addressId) => `${SHARE_ADDRESS_PREFIX}${addressId}:`),
+    ...(options.creatorUserId ? [`${SHARE_CREATOR_PREFIX}${options.creatorUserId}:`] : []),
+  ];
+  for (const prefix of prefixes) {
     let cursor: string | undefined;
     let complete = false;
-    let scannedPages = 0;
-    while (!complete && scannedPages < MAX_LIST_SCAN_PAGES) {
-      scannedPages += 1;
-      const page = await kv.list({ prefix: `${SHARE_ADDRESS_PREFIX}${addressId}:`, cursor, limit: 100 });
+    let matchedForAddress = 0;
+    const anchorKey = addressCursor
+      ? `${prefix}${reverseCreatedAtKey(addressCursor.createdAt)}:${addressCursor.token}`
+      : "";
+    while (!complete && matchedForAddress < limit) {
+      const page = await kv.list({ prefix, cursor, limit: 100 });
       cursor = page.cursor || undefined;
       complete = Boolean(page.list_complete);
-      for (const key of page.keys) {
+      for (let keyIndex = 0; keyIndex < page.keys.length; keyIndex += 1) {
+        const key = page.keys[keyIndex];
+        if (anchorKey && key.name <= anchorKey) continue;
         const token = key.name.slice(key.name.lastIndexOf(":") + 1);
         if (results.has(token)) continue;
         const summary = await readShareSummary(env, token).catch(() => null);
@@ -642,6 +893,11 @@ export async function listShareRecordsForAddressIds(env: CloudmailEnv, addressId
         if (addressCursor && compareShareOrder(admin, addressCursor) <= 0) continue;
         if (!summaryMatches(admin, normalizedStatus, normalizedQuery)) continue;
         results.set(token, admin);
+        matchedForAddress += 1;
+        if (matchedForAddress >= limit) {
+          if (keyIndex < page.keys.length - 1 || !page.list_complete) complete = false;
+          break;
+        }
       }
       if (!cursor) complete = true;
     }
@@ -662,8 +918,8 @@ export async function listShareRecordsForAddressIds(env: CloudmailEnv, addressId
 
 export async function assertShareAdmin(request: Request, env: CloudmailEnv) {
   const adminPassword = request.headers.get("x-admin-auth")?.trim() || "";
-  const adminToken = adminAccessTokenFromRequest(request);
-  if (!adminPassword && !adminToken) throw new UpstreamError(401, "", "缺少管理员凭证");
+  const adminTokens = adminAccessTokensFromRequest(request);
+  if (!adminPassword && !adminTokens.length) throw new UpstreamError(401, "", "缺少管理员凭证");
   const requestSitePassword = request.headers.get("x-custom-auth")?.trim() || "";
   const workerEnv = requestSitePassword && !env.SITE_PASSWORD ? { ...env, SITE_PASSWORD: requestSitePassword } : env;
   if (adminPassword) {
@@ -673,24 +929,37 @@ export async function assertShareAdmin(request: Request, env: CloudmailEnv) {
 
   const injectedAdminPassword = configuredAdminPassword(workerEnv);
   if (injectedAdminPassword) {
-    const profileRaw = await fetchWorkerJsonWithHeaders<unknown>(
-      workerEnv,
-      "/user_api/settings",
-      adminAccessHeaders(workerEnv, adminToken),
-      { search: new URLSearchParams() }
-    );
-    const profile = profileRaw && typeof profileRaw === "object" && !Array.isArray(profileRaw) ? profileRaw as AdminProfile : {};
-    if (!profileIsAdmin(profile)) throw new UpstreamError(403, "", "当前账号不是管理员或登录已失效");
+    let verified = false;
+    for (const token of adminTokens) {
+      try {
+        const profileRaw = await fetchWorkerJsonWithHeaders<unknown>(
+          workerEnv,
+          "/user_api/settings",
+          adminAccessHeaders(workerEnv, token),
+          { search: new URLSearchParams() }
+        );
+        const profile = profileRaw && typeof profileRaw === "object" && !Array.isArray(profileRaw) ? profileRaw as AdminProfile : {};
+        if (profileIsAdmin(profile)) {
+          verified = true;
+          break;
+        }
+      } catch (error) {
+        if (!(error instanceof UpstreamError) || ![401, 403].includes(error.status)) throw error;
+      }
+    }
+    if (!verified) throw new UpstreamError(403, "", "当前账号不是管理员或登录已失效");
     await fetchAdminWorkerJson<unknown>(workerEnv, "/admin/statistics", injectedAdminPassword, { search: new URLSearchParams() });
     return { workerEnv, headers: adminPasswordHeaders(workerEnv, injectedAdminPassword) };
   }
 
-  const headers = adminAccessHeaders(workerEnv, adminToken);
-  try {
-    await fetchWorkerJsonWithHeaders<unknown>(workerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
-    return { workerEnv, headers };
-  } catch (error) {
-    if (!(error instanceof UpstreamError) || (error.status !== 401 && error.status !== 403)) throw error;
+  for (const token of adminTokens) {
+    const headers = adminAccessHeaders(workerEnv, token);
+    try {
+      await fetchWorkerJsonWithHeaders<unknown>(workerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
+      return { workerEnv, headers };
+    } catch (error) {
+      if (!(error instanceof UpstreamError) || ![401, 403].includes(error.status)) throw error;
+    }
   }
 
   const adminProxyBase = adminProxyBaseFromRequest(request, workerEnv);
@@ -698,8 +967,16 @@ export async function assertShareAdmin(request: Request, env: CloudmailEnv) {
     throw new Error("用户站缺少 ADMIN_PASSWORD secret，无法用管理员账号创建共享链接");
   }
   const adminWorkerEnv = { ...workerEnv, MAIL_WORKER_BASE_URL: adminProxyBase };
-  await fetchWorkerJsonWithHeaders<unknown>(adminWorkerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
-  return { workerEnv, adminWorkerEnv, headers };
+  for (const token of adminTokens) {
+    const headers = adminAccessHeaders(workerEnv, token);
+    try {
+      await fetchWorkerJsonWithHeaders<unknown>(adminWorkerEnv, "/admin/statistics", headers, { search: new URLSearchParams() });
+      return { workerEnv, adminWorkerEnv, headers };
+    } catch (error) {
+      if (!(error instanceof UpstreamError) || ![401, 403].includes(error.status)) throw error;
+    }
+  }
+  throw new UpstreamError(403, "", "当前账号不是管理员或登录已失效");
 }
 
 export async function fetchShareAdminWorkerJson<T>(
@@ -740,13 +1017,12 @@ export function filterSharedMailPage(raw: unknown, mailbox: ShareMailbox, share:
 }
 
 export async function validateJwtAddress(env: CloudmailEnv, jwt: string, fallback = "") {
-  const fallbackAddress = fallback || decodeJwtAddress(jwt);
   try {
     const settingsRaw = await fetchWorkerJson<unknown>(env, "/api/settings", { jwt });
-    const settings = sanitizeSettings(settingsRaw, fallbackAddress);
-    return settings.address || fallbackAddress;
+    const settings = sanitizeSettings(settingsRaw);
+    return settings.address || "";
   } catch {
-    return fallbackAddress;
+    return "";
   }
 }
 

@@ -7,6 +7,7 @@ export type RuntimeDiagnostics = {
     sitePassword: boolean;
     shareKv: boolean;
     shareEncryptionSecret: boolean;
+    shareEncryptionSecretV2: boolean;
     shareAdminCorsOrigins: boolean;
   };
   required: string[];
@@ -27,12 +28,22 @@ function hasBinding(value: unknown) {
   return Boolean(value);
 }
 
+function hasStrongSecret(value: unknown) {
+  if (!hasText(value)) return false;
+  const bytes = new TextEncoder().encode(String(value).trim());
+  return bytes.byteLength >= 32 && new Set(bytes).size >= 12;
+}
+
 export function runtimeDiagnostics(env: Record<string, unknown> = {}): RuntimeDiagnostics {
+  const hasV2Secret = hasText(env.SHARE_ENCRYPTION_SECRET_V2);
   const checks = {
     mailWorkerBaseUrl: hasText(env.MAIL_WORKER_BASE_URL),
     sitePassword: hasText(env.SITE_PASSWORD),
     shareKv: hasBinding(env.SHARE_KV),
-    shareEncryptionSecret: hasText(env.SHARE_ENCRYPTION_SECRET),
+    shareEncryptionSecret: hasV2Secret
+      ? hasStrongSecret(env.SHARE_ENCRYPTION_SECRET_V2)
+      : hasStrongSecret(env.SHARE_ENCRYPTION_SECRET),
+    shareEncryptionSecretV2: hasV2Secret && hasStrongSecret(env.SHARE_ENCRYPTION_SECRET_V2),
     shareAdminCorsOrigins:
       hasText(env.SHARE_ADMIN_CORS_ORIGINS) ||
       hasText(env.SHARE_ADMIN_ALLOWED_ORIGINS) ||
@@ -56,7 +67,7 @@ export function runtimeDiagnostics(env: Record<string, unknown> = {}): RuntimeDi
     hints.push("Bind SHARE_KV in this Webmail Pages environment, then redeploy.");
   }
   if (!checks.shareEncryptionSecret) {
-    hints.push("Set SHARE_ENCRYPTION_SECRET in this Webmail Pages environment, then redeploy.");
+    hints.push("Set SHARE_ENCRYPTION_SECRET_V2 (preferred) or SHARE_ENCRYPTION_SECRET to a high-entropy random value of at least 32 UTF-8 bytes, then redeploy.");
   }
   if (!checks.sitePassword) {
     hints.push("SITE_PASSWORD is optional; set it only if the upstream mail Worker requires a site password.");

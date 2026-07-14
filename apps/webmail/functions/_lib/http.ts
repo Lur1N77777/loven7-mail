@@ -19,7 +19,7 @@ export type RuntimeConfigErrorCode =
 const RUNTIME_CONFIG_MESSAGES: Record<RuntimeConfigErrorCode, string> = {
   mail_worker_not_configured: "邮箱 API 未配置。请在 Cloudflare Pages 环境变量中填写 MAIL_WORKER_BASE_URL 后重新部署。",
   share_kv_not_configured: "共享功能未完成配置。请在 Cloudflare Pages 为 Webmail 绑定 SHARE_KV 后重新部署。",
-  share_secret_not_configured: "共享功能未完成配置。请在 Cloudflare Pages 设置 SHARE_ENCRYPTION_SECRET 后重新部署。",
+  share_secret_not_configured: "共享功能未完成配置。请在 Cloudflare Pages 设置 SHARE_ENCRYPTION_SECRET_V2（推荐）或 SHARE_ENCRYPTION_SECRET 后重新部署。",
 };
 
 export class RuntimeConfigError extends UpstreamError {

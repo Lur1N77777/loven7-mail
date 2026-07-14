@@ -5,6 +5,19 @@ import type {
   SessionResponse,
   ShareInfo,
 } from "./types";
+import { reportAuthenticationFailure } from "./authFailure.ts";
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message || `Request failed (${status})`);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 function currentLocale() {
   if (typeof document !== "undefined" && document.documentElement.dataset.locale === "en-US") return "en-US";
@@ -59,7 +72,9 @@ async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const code = String(data?.error?.code || "");
     const message = data?.error?.message || data?.message || "";
-    throw new Error(friendlyErrorMessage(code, message));
+    const error = new ApiError(response.status, code, friendlyErrorMessage(code, message));
+    reportAuthenticationFailure(error);
+    throw error;
   }
   return data as T;
 }
@@ -153,4 +168,17 @@ export async function patchMailState(jwt: string, body: Partial<RemoteMailState>
     signal: options.signal,
   });
   return parseResponse<RemoteMailState>(response);
+}
+
+export async function changeAddressPassword(jwt: string, passwordHash: string, options: RequestOptions = {}): Promise<string> {
+  const response = await fetch("/api/address_change_password", {
+    method: "POST",
+    headers: { ...authHeaders(jwt), "content-type": "application/json" },
+    body: JSON.stringify({ new_password: passwordHash }),
+    signal: options.signal,
+  });
+  const result = await parseResponse<{ success?: boolean; jwt?: string }>(response);
+  const nextJwt = String(result?.jwt || "").trim();
+  if (!nextJwt) throw new Error(currentLocale() === "en-US" ? "Password changed, but the replacement credential is missing" : "密码已更新，但后端未返回新的邮箱凭据");
+  return nextJwt;
 }

@@ -43,6 +43,11 @@ const ADMIN_PROXY_HEADERS = {
 };
 
 const CORS_ALLOW_HEADERS = "authorization,content-type,x-admin-auth,x-custom-auth,x-fingerprint,x-lang,x-user-access-token,x-user-token";
+const PROXY_DEADLINE_MS = 12_000;
+const ADMIN_CACHE_MAX = 256;
+const ADMIN_CACHE_TRUE_MS = 15_000;
+const ADMIN_CACHE_FALSE_MS = 5_000;
+const adminVerificationCache = new Map<string, { isAdmin: boolean; expiresAt: number }>();
 
 function jsonError(status: number, message: string, code = "admin_proxy_error") {
   return new Response(JSON.stringify({ error: { code, message } }), {
@@ -88,13 +93,14 @@ function targetUrl(context: PagesContext, prefix: string) {
   return target;
 }
 
-function tokenFromRequest(request: Request) {
+function tokensFromRequest(request: Request) {
   const auth = request.headers.get("authorization") || "";
   const bearer = auth.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  return bearer
-    || request.headers.get("x-user-access-token")?.trim()
-    || request.headers.get("x-user-token")?.trim()
-    || "";
+  return [...new Set([
+    request.headers.get("x-user-token")?.trim(),
+    request.headers.get("x-user-access-token")?.trim(),
+    bearer,
+  ].filter((value): value is string => Boolean(value)))];
 }
 
 function normalizeRole(value: unknown) {
@@ -132,8 +138,34 @@ function profileIsAdmin(profile: UserSettings) {
     || isAdminRole(roleRecord.value);
 }
 
-async function verifyAdminAccount(env: AdminProxyEnv, token: string) {
+async function verificationCacheKey(env: AdminProxyEnv, token: string) {
+  const input = `${workerBase(env).toLowerCase()}\n${env.SITE_PASSWORD || ""}\n${token}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function cacheAdminResult(key: string, isAdmin: boolean) {
+  const now = Date.now();
+  for (const [cacheKey, entry] of adminVerificationCache) {
+    if (entry.expiresAt <= now) adminVerificationCache.delete(cacheKey);
+  }
+  while (adminVerificationCache.size >= ADMIN_CACHE_MAX) {
+    const oldest = adminVerificationCache.keys().next().value as string | undefined;
+    if (!oldest) break;
+    adminVerificationCache.delete(oldest);
+  }
+  adminVerificationCache.set(key, {
+    isAdmin,
+    expiresAt: now + (isAdmin ? ADMIN_CACHE_TRUE_MS : ADMIN_CACHE_FALSE_MS),
+  });
+}
+
+async function verifyAdminAccount(env: AdminProxyEnv, token: string, signal: AbortSignal) {
   if (!token) return false;
+  const cacheKey = await verificationCacheKey(env, token);
+  const cached = adminVerificationCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.isAdmin;
+  if (cached) adminVerificationCache.delete(cacheKey);
   const url = new URL(`${workerBase(env)}/user_api/settings`);
   const headers: Record<string, string> = {
     "x-lang": "zh",
@@ -141,11 +173,29 @@ async function verifyAdminAccount(env: AdminProxyEnv, token: string) {
     "Authorization": `Bearer ${token}`,
   };
   if (env.SITE_PASSWORD) headers["x-custom-auth"] = env.SITE_PASSWORD;
-  const response = await fetch(url.toString(), { headers });
-  if (!response.ok) return false;
+  const response = await fetch(url.toString(), { headers, signal });
+  if (!response.ok) {
+    cacheAdminResult(cacheKey, false);
+    return false;
+  }
   const raw = await response.json().catch(() => null) as unknown;
   const profile = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as UserSettings : {};
-  return profileIsAdmin(profile);
+  const isAdmin = profileIsAdmin(profile);
+  cacheAdminResult(cacheKey, isAdmin);
+  return isAdmin;
+}
+
+async function verifyAnyAdminAccount(env: AdminProxyEnv, tokens: string[], signal: AbortSignal) {
+  for (const token of tokens) {
+    try {
+      if (await verifyAdminAccount(env, token, signal)) return true;
+    } catch {
+      if (signal.aborted) throw new DOMException("Request timed out", "AbortError");
+      // A selected mailbox often supplies an address JWT in Authorization.
+      // One invalid candidate must not mask another valid user/admin token.
+    }
+  }
+  return false;
 }
 
 function upstreamHeaders(request: Request, env: AdminProxyEnv, hasBody: boolean) {
@@ -187,35 +237,36 @@ export async function proxyToWorker(context: PagesContext, prefix: string, optio
   const request = context.request;
   const hasBody = !["GET", "HEAD"].includes(request.method.toUpperCase());
   const headers = upstreamHeaders(request, context.env, hasBody);
-
-  if (options.admin) {
-    const providedAdminPassword = request.headers.get("x-admin-auth")?.trim() || "";
-    const adminPassword = context.env.ADMIN_PASSWORD?.trim() || "";
-    if (!adminPassword) return jsonError(500, "管理员后台代理未配置 ADMIN_PASSWORD。", "missing_admin_password");
-    if (providedAdminPassword) {
-      if (providedAdminPassword !== adminPassword) return jsonError(403, "管理员凭据无效。", "invalid_admin_password");
-      headers.set("x-admin-auth", adminPassword);
-    } else {
-      let isAdmin = false;
-      try {
-        isAdmin = await verifyAdminAccount(context.env, tokenFromRequest(request));
-      } catch {
-        isAdmin = false;
-      }
-      if (!isAdmin) return jsonError(403, "当前账号不是管理员或登录已失效。", "not_admin");
-      headers.set("x-admin-auth", adminPassword);
-    }
-  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROXY_DEADLINE_MS);
 
   try {
+    if (options.admin) {
+      const providedAdminPassword = request.headers.get("x-admin-auth")?.trim() || "";
+      const adminPassword = context.env.ADMIN_PASSWORD?.trim() || "";
+      if (!adminPassword) return jsonError(500, "管理员后台代理未配置 ADMIN_PASSWORD。", "missing_admin_password");
+      if (providedAdminPassword) {
+        if (providedAdminPassword !== adminPassword) return jsonError(403, "管理员凭据无效。", "invalid_admin_password");
+        headers.set("x-admin-auth", adminPassword);
+      } else {
+        const isAdmin = await verifyAnyAdminAccount(context.env, tokensFromRequest(request), controller.signal);
+        if (!isAdmin) return jsonError(403, "当前账号不是管理员或登录已失效。", "not_admin");
+        headers.set("x-admin-auth", adminPassword);
+      }
+    }
+
     const upstream = await fetch(url.toString(), {
       method: request.method,
       headers,
       body: hasBody ? request.body : undefined,
+      signal: controller.signal,
     });
     return proxyResponse(upstream, request);
   } catch {
+    if (controller.signal.aborted) return jsonError(504, "上游邮件 Worker 请求超时。", "upstream_timeout");
     return jsonError(502, "上游邮件 Worker 暂时不可用。", "upstream_unavailable");
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
