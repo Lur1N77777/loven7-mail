@@ -337,12 +337,12 @@ async function run() {
   await setInput(login, '.password-input-wrap input', 'good');
   await click(login, '.login-button');
   await waitUntil(login, `document.querySelectorAll('.mail-row').length >= 2`);
-  await waitUntil(login, `document.querySelector('.mail-html-view')?.shadowRoot?.textContent?.includes('HTML rendered cleanly')`);
+  await waitUntil(login, `document.querySelector('.mail-html-view')?.srcdoc?.includes('HTML rendered cleanly')`);
   const inboxMetrics = JSON.parse(await evaluate(login, `JSON.stringify({
     xOverflow: document.documentElement.scrollWidth > innerWidth + 1,
     rows: document.querySelectorAll('.mail-row').length,
     hasRawMime: /Content-Type:|MIME-Version:/.test(document.body.innerText),
-    htmlText: document.querySelector('.mail-html-view')?.shadowRoot?.textContent || '',
+    htmlText: document.querySelector('.mail-html-view')?.srcdoc || '',
     hasLoadingText: document.body.innerText.includes('正在优化') || document.body.innerText.includes('Loading images'),
     emptyHuge: false
   })`));
