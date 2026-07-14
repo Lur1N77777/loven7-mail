@@ -396,7 +396,7 @@ async function run() {
   await setInput(raceLogin, '.password-input-wrap input', 'good');
   await click(raceLogin, '.login-button');
   await waitUntil(raceLogin, `window.__webmailSmokeRace.pending('mails:jwt-old') >= 1 && document.body.innerText.includes('old@example.test')`);
-  await click(raceLogin, '.toolbar .ghost-button');
+  await click(raceLogin, '.toolbar .ghost-button:last-child');
   await waitUntil(raceLogin, `document.body.innerText.includes('请输入管理员提供的邮箱与密码') && !document.querySelector('.mail-row')`);
   await setInput(raceLogin, 'input[type="email"]', 'new@example.test');
   await setInput(raceLogin, '.password-input-wrap input', 'good');
