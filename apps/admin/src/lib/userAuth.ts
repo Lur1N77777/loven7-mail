@@ -328,6 +328,9 @@ export async function loginAccountUser(apiBase: string, email: string, password:
       return await loginWithPasswordAttempt(apiBase, email, attempt);
     } catch (error) {
       lastError = error;
+      if (!(error instanceof UserApiError) || (error.status !== 400 && error.status !== 401)) {
+        throw error;
+      }
     }
   }
   throw lastError instanceof Error ? lastError : new Error('邮箱或密码错误');

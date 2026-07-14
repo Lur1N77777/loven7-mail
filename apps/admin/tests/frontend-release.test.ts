@@ -8,7 +8,7 @@ import { subscribeAuthenticationFailures } from '../src/lib/authFailure.ts';
 import { createApiClient } from '../src/lib/api.ts';
 import { buildCacheScope, scopedStorageKey } from '../src/lib/cacheScope.ts';
 import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
-import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, registerAccountUser } from '../src/lib/userAuth.ts';
+import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, loginAccountUser, registerAccountUser } from '../src/lib/userAuth.ts';
 import { readTrustedMailFrameMessage } from '../src/lib/mailFrameMessages.ts';
 import { preserveRowsBelowAuthoritativeHead } from '../src/lib/mailSync.ts';
 import { createOutboundIdempotencyTracker } from '../src/lib/outboundIdempotency.ts';
@@ -85,6 +85,31 @@ test('only explicit 401 and 403 responses invalidate an account session', () => 
   assert.equal(isAuthenticationFailure(new UserApiError(403, 'forbidden')), true);
   assert.equal(isAuthenticationFailure(new UserApiError(500, 'temporary outage')), false);
   assert.equal(isAuthenticationFailure(new TypeError('Failed to fetch')), false);
+});
+
+test('account login does not retry plaintext after a backend failure', async () => {
+  const originalFetch = globalThis.fetch;
+  let loginRequests = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(String(input), 'https://api.example');
+    if (url.pathname === '/user_api/login') {
+      loginRequests += 1;
+      return new Response(JSON.stringify({ message: 'temporary outage' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    throw new Error(`unexpected request ${url.pathname}`);
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      loginAccountUser('https://api.example', 'user@example.com', 'password123'),
+      (error: any) => error instanceof UserApiError && error.status === 500,
+    );
+    assert.equal(loginRequests, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('admin API boundaries report runtime 401/403 but preserve sessions for network and 5xx failures', async () => {
