@@ -11,6 +11,7 @@
 - 公开发布脱敏门禁 `npm run check:public`。
 - 可复制的强约束 AI Agent 双 Pages 部署流程。
 - 公开源码与自用配置边界、版本和升级策略。
+- Dependabot 依赖更新与 CodeQL 静态安全扫描。
 
 ### Changed
 
