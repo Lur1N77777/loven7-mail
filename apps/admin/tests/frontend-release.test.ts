@@ -11,9 +11,18 @@ import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
 import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, loginAccountUser, registerAccountUser } from '../src/lib/userAuth.ts';
 import { readTrustedMailFrameMessage } from '../src/lib/mailFrameMessages.ts';
 import { adminMailStateEndpoint } from '../src/lib/mailStateEndpoint.ts';
+import { sanitizeMailHtmlWithoutDom } from '../src/lib/mailSanitizerFallback.ts';
 import { preserveRowsBelowAuthoritativeHead } from '../src/lib/mailSync.ts';
 import { createOutboundIdempotencyTracker } from '../src/lib/outboundIdempotency.ts';
 import { selectExpiredShareTokens, shareLifecycleStatus } from '../src/lib/shareLifecycle.ts';
+
+test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
+  const sanitized = sanitizeMailHtmlWithoutDom(
+    '<p>Hello</p><a href="javascript:alert(1)">Open</a><img src=x onerror=alert(1)><script>alert(1)</script>',
+  );
+  assert.match(sanitized, /Hello/);
+  assert.doesNotMatch(sanitized, /<(?:a|img|script)\b|javascript:|onerror/i);
+});
 
 test('admin outbound attempts use RFC 4122 UUIDs by default', () => {
   const tracker = createOutboundIdempotencyTracker();

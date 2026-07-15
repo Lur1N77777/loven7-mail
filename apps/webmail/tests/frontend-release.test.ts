@@ -7,7 +7,28 @@ import { ApiError, fetchSafeSettings } from "../src/api.ts";
 import { prepareMailboxCachePayload } from "../src/cache.ts";
 import { isChunkLoadError } from "../src/appRecovery.ts";
 import { reconcileServerMailRange } from "../src/mailSync.ts";
-import { buildMailFrameSrcDoc } from "../src/mailParser.ts";
+import { buildMailFrameSrcDoc, isSafeNavigationUrl, sanitizeMailHtml } from "../src/mailParser.ts";
+
+test("webmail sanitizer fails closed when DOMParser is unavailable", () => {
+  const sanitized = sanitizeMailHtml(
+    '<p>Hello</p><a href="javascript:alert(1)">Open</a><img src=x onerror=alert(1)><script>alert(1)</script>'
+  );
+  assert.match(sanitized, /Hello/);
+  assert.doesNotMatch(sanitized, /<(?:a|img|script)\b|javascript:|onerror/i);
+});
+
+test("webmail navigation URL policy uses an explicit scheme allowlist", () => {
+  assert.equal(isSafeNavigationUrl("https://example.com/path"), true);
+  assert.equal(isSafeNavigationUrl("/relative/path"), true);
+  assert.equal(isSafeNavigationUrl("mailto:user@example.com"), true);
+  assert.equal(isSafeNavigationUrl("data:image/png;base64,AA=="), true);
+  assert.equal(isSafeNavigationUrl("javascript:alert(1)"), false);
+  assert.equal(isSafeNavigationUrl("java\nscript:alert(1)"), false);
+  assert.equal(isSafeNavigationUrl("vbscript:msgbox(1)"), false);
+  assert.equal(isSafeNavigationUrl("file:///etc/passwd"), false);
+  assert.equal(isSafeNavigationUrl("data:text/html,<script>alert(1)</script>"), false);
+  assert.equal(isSafeNavigationUrl("data:image/svg+xml,<svg onload=alert(1)>"), false);
+});
 
 test("mailbox cache key is isolated by API origin and mailbox identity", async () => {
   const first = await buildSessionCacheKey("https://mail-a.example", "user@example.com", "jwt-a");

@@ -1,6 +1,7 @@
 import type { ParsedAttachment, ParsedMail, ParsedSendbox, RawMailRecord, SendboxRecord } from '../types/api';
 import { PREVIEW_LEN } from './constants';
 import { humanBytes, safeJsonParse } from './format';
+import { sanitizeMailHtmlWithoutDom } from './mailSanitizerFallback';
 
 const DANGEROUS_PROTOCOL = /^\s*(?:javascript|vbscript|data|file|blob|jar):/i;
 const SCRIPTABLE_PROTOCOL = /^\s*(?:javascript|vbscript|file|jar):/i;
@@ -43,7 +44,7 @@ function stripHtml(html: string): string {
 export function sanitizeMailHtml(html: string, options: { allowExternalImages?: boolean } = {}): string {
   if (!html) return '';
   if (typeof window === 'undefined' || !window.DOMParser) {
-    return html.replace(/<script[\s\S]*?<\/script>/gi, '');
+    return sanitizeMailHtmlWithoutDom(html);
   }
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');

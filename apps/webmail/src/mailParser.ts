@@ -27,6 +27,15 @@ function stripHtml(html = "") {
     .trim();
 }
 
+function escapeHtmlText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function truncate(text = "", length = 180) {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > length ? `${clean.slice(0, length)}…` : clean;
@@ -129,9 +138,16 @@ function inlineEmbeddedImages(html: string | undefined, attachments: Attachment[
   return nextHtml;
 }
 
-function isSafeNavigationUrl(value: string) {
-  const trimmed = value.trim().toLowerCase();
-  return Boolean(trimmed && !trimmed.startsWith("javascript:") && !trimmed.startsWith("data:text/html"));
+export function isSafeNavigationUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/^data:image\/(?:png|jpe?g|gif|webp|bmp|x-icon);base64,/i.test(trimmed)) return true;
+  try {
+    const parsed = new URL(trimmed, "https://mail.invalid/");
+    return new Set(["http:", "https:", "mailto:", "tel:", "cid:", "blob:"]).has(parsed.protocol);
+  } catch {
+    return false;
+  }
 }
 
 function isEmbeddedImage(value: string) {
@@ -141,11 +157,7 @@ function isEmbeddedImage(value: string) {
 
 function sanitizeHtmlForFrame(html: string, allowExternalImages: boolean) {
   if (typeof DOMParser === "undefined") {
-    return html
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<base[\s\S]*?>/gi, "")
-      .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, "")
-      .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, "");
+    return escapeHtmlText(stripHtml(html));
   }
 
   const doc = new DOMParser().parseFromString(html, "text/html");
