@@ -50,20 +50,23 @@ jobs:
             exit 1
           fi
 
+          git checkout --detach "refs/tags/${tag}"
+          node scripts/check-public-release.mjs
+
           mkdir -p release-assets
           asset="release-assets/loven7-mail-cloudflare-suite-${tag}-source.zip"
           git archive --format=zip --prefix="loven7-mail-cloudflare-suite-${tag}/" -o "$asset" "$tag"
-          sha256sum "$asset" | tee release-assets/SHA256SUMS.txt
+          (cd release-assets && sha256sum "$(basename "$asset")" > SHA256SUMS.txt)
 
-          cat > release-assets/RELEASE_NOTES.md <<EOF
-          ${tag}
-
-          自动同步当前 tag 对应的源码压缩包。
-
-          资产：
-          - loven7-mail-cloudflare-suite-${tag}-source.zip
-          - SHA256SUMS.txt
-          EOF
+          version="${tag#v}"
+          awk -v heading="## [${version}]" '
+            $0 == heading { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-assets/RELEASE_NOTES.md
+          if [ ! -s release-assets/RELEASE_NOTES.md ]; then
+            printf 'Source release for %s. See CHANGELOG.md for details.\n' "$tag" > release-assets/RELEASE_NOTES.md
+          fi
 
       - name: Create or update GitHub Release
         shell: bash

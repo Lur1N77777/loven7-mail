@@ -24,7 +24,7 @@
 | `SITE_PASSWORD` | 否 | 上游 Worker 如果配置了站点密码，就填写。 |
 | `SHARE_ENCRYPTION_SECRET_V2` | 新部署推荐 | 当前写入密钥，必须是至少 32 UTF-8 字节的高熵随机值；新记录带 `kid=v2`。 |
 | `SHARE_ENCRYPTION_SECRET` | 兼容旧记录 | 没有 V2 时作为当前密钥；启用 V2 后仅用于解密旧的无 `kid` 记录，迁移完成前不要删除或改值。 |
-| `SHARE_ADMIN_CORS_ORIGINS` | 分站管理分享时必填 | 允许跨源调用分享管理接口的后台来源，逗号分隔，例如 `https://your-admin.pages.dev`。 |
+| `SHARE_ADMIN_CORS_ORIGINS` | 分站管理分享时必填 | 允许跨源调用分享管理接口的后台来源，逗号分隔，例如 `https://admin.example.com`。 |
 | `SHARE_PUBLIC_CORS_ORIGINS` | 否 | 公开分享 API 的额外跨源来源；默认空，仅允许同源分享页调用。 |
 | `MAIL_READ_STATE_KV` | 推荐 | 邮件已读状态同步 KV。和管理后台绑定到同一个 Namespace 时，电脑端/手机端/后台/用户站可共享已读状态。 |
 | `ASSET_PROXY_RATE_LIMITER` | 否 | Cloudflare Rate Limiting binding；配置时优先使用分布式限流，未配置时 Functions 使用有界的单 isolate/IP 令牌桶兜底。 |
@@ -65,7 +65,7 @@ npm run dev
 npm run build
 npx wrangler pages dev dist \
   --compatibility-date=2026-05-11 \
-  --binding MAIL_WORKER_BASE_URL=https://your-worker.example.workers.dev \
+  --binding MAIL_WORKER_BASE_URL=https://worker.example.com \
   --binding SHARE_ENCRYPTION_SECRET=replace-with-a-long-random-secret \
   --binding SHARE_ENCRYPTION_SECRET_V2=replace-with-a-different-long-random-v2-secret \
   --binding SHARE_ADMIN_CORS_ORIGINS=http://localhost:5173

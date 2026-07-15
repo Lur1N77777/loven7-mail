@@ -7,15 +7,16 @@
 ```bash
 npm --prefix apps/admin ci
 npm --prefix apps/webmail ci
+npm run check:public
 npm run check:release
 ```
 
-`check:release` 会运行 Cloudflare 预检、管理后台 TypeScript 检查、Webmail Functions 检查、两个前端构建，以及 Admin/Webmail 浏览器冒烟测试。
+`check:public` 检查公开版脱敏和文档边界；`check:release` 会再次运行该门禁，并执行 Cloudflare 预检、管理后台 TypeScript、Webmail Functions、两个前端构建和浏览器冒烟测试。
 
 ## 提交前检查
 
 - 不提交 `.env`、`.dev.vars`、`.wrangler/`、`dist/`、`node_modules/`。
-- 不提交真实 Worker API、Cloudflare Token、管理员密码、站点密码、JWT、KV Namespace ID。
+- 不提交真实 Worker API/域名、Cloudflare Token、管理员密码、站点密码、JWT、KV Namespace ID、本机路径或生产运维材料。
 - 如果改了 Cloudflare Pages Functions，请运行：
 
 ```bash

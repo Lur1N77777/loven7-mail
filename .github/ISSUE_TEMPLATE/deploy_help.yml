@@ -10,7 +10,7 @@ body:
       options:
         - label: I already have a Cloudflare Temp Mail / cloudflare_temp_email upstream Worker.
         - label: I have read docs/DEPLOYMENT_QUICKSTART.md.
-        - label: I will not paste tokens, passwords, JWTs, secrets, or real KV Namespace IDs.
+        - label: I will not paste tokens, passwords, JWTs, secrets, private domains/project names, or real Cloudflare resource IDs.
   - type: dropdown
     id: deploy_mode
     attributes:

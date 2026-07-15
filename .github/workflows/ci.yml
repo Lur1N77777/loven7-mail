@@ -41,6 +41,9 @@ jobs:
         working-directory: apps/admin
         run: npm run lint
 
+      - name: Check public release privacy boundary
+        run: npm run check:public
+
       - name: Check Cloudflare Pages preflight
         run: npm run check:cloudflare
 

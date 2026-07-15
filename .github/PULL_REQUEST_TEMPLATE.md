@@ -10,6 +10,7 @@
 
 ## Checks
 
+- [ ] `npm run check:public`
 - [ ] `npm run check:cloudflare`
 - [ ] `npm run check:webmail`
 - [ ] `npm --prefix apps/admin run lint`
@@ -17,4 +18,4 @@
 
 ## Safety
 
-- [ ] No API tokens, passwords, JWTs, secrets, personal domains, or real KV Namespace IDs were added.
+- [ ] No API tokens, passwords, JWTs, secrets, deployment domains/project names, local paths, or real Cloudflare resource IDs were added.

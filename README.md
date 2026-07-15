@@ -4,9 +4,7 @@
 
 # Loven7 Mail Cloudflare Suite
 
-接入 Cloudflare Temp Mail / `cloudflare_temp_email` 的现代化前端套件。
-
-管理后台、用户邮箱站、分享链接、验证码识别、移动端体验和 PWA 都整理在一个仓库里。
+一套面向 Cloudflare Temp Mail / `cloudflare_temp_email` 的现代化双站前端：管理后台、用户邮箱、分享链接与 Pages Functions 集中维护。
 
 <p>
   <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/Lur1N77777/loven7-mail-cloudflare-suite?style=flat-square" /></a>
@@ -16,168 +14,182 @@
   <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml/badge.svg" /></a>
 </p>
 
-<p>
-  <a href="#快速开始">快速开始</a>
-  ·
-  <a href="#界面预览">界面预览</a>
-  ·
-  <a href="#手动部署">手动部署</a>
-  ·
-  <a href="#文档">文档</a>
-</p>
+[5 分钟部署](#5-分钟部署) · [功能](#功能) · [手动部署](#手动部署) · [配置边界](#公开版与自用配置边界) · [文档](#文档)
 
 </div>
 
-> 本仓库不包含上游 Worker 后端源码，不内置私人 API、密码、Token、KV ID 或个人域名。部署后在网页界面里填写自己的连接信息即可。
+> 这是可复用的公开版前端仓库，不包含任何部署者的 Worker 地址、Cloudflare 资源 ID、域名、账号、密码、Token、密钥或生产运维记录。所有私有值都在部署平台或浏览器中注入。
 
-## 它是什么
+## 项目组成
 
-Loven7 Mail Cloudflare Suite 是给 Cloudflare Temp Mail / `cloudflare_temp_email` 用的增强前端，不替代上游 Worker。
+| 应用 | 目录 | 作用 |
+| --- | --- | --- |
+| Admin | `apps/admin` | 地址、用户、收发件、分享、系统设置与维护工具 |
+| Webmail | `apps/webmail` | 用户登录、邮箱阅读、单/多邮箱分享与 Pages Functions |
 
-| 应用 | 用途 |
-| --- | --- |
-| `apps/admin` | 管理邮箱地址、用户、收件箱、未知邮件、发件箱、分享链接和系统设置 |
-| `apps/webmail` | 用户邮箱站 / 分享站，支持 JWT 登录、单邮箱分享、多邮箱聚合分享 |
+本仓库只提供前端和 Pages Functions。你需要先部署兼容的 Cloudflare Temp Mail / `cloudflare_temp_email` Worker；数据库、邮件路由和 Worker 迁移均由后端项目负责。
 
-## 主要能力
+## 功能
 
-- 管理后台：邮箱地址、用户、邮件、发件箱、分享链接和维护工具。
-- 用户站：单邮箱登录、分享访问、自动刷新、验证码快捷复制。
-- 分享：单邮箱、多邮箱、聚合分享、仅新增邮件、撤回/恢复、访客隐藏邮件。
-- 体验：中英切换、浅/深色模式、PWA、移动端操作菜单、品牌头像。
-- 部署：Cloudflare Pages + Pages Functions + KV Namespace。
+- 管理后台：仪表盘、地址/用户管理、收件箱、未知邮件、发件箱、分享管理与维护入口。
+- 用户邮箱：邮箱密码/JWT 登录、自动刷新、验证码识别与复制、移动端自适应。
+- 分享能力：单邮箱、多邮箱、聚合分享、仅新增邮件、撤回、过期与访客隐藏。
+- 邮件安全：HTML 沙箱、远程图片保护、附件处理、品牌头像代理与请求预算。
+- 工程能力：TypeScript、PWA、双 Pages 构建、运行时诊断、CI、脱敏门禁和发布检查。
 
-## 快速开始
+## 5 分钟部署
 
-如果你已经有 Cloudflare Temp Mail / `cloudflare_temp_email` 上游 Worker，可以直接让 AI Agent 自动部署。
+最省心的方式是把下面这段交给能操作 GitHub 和 Cloudflare 的 AI Agent。不要在聊天中补充任何密码或 Token；Agent 必须通过 Cloudflare 登录、Secret 输入或让你在控制台手动填写。
 
 ```text
-请帮我自动部署这个 GitHub 项目到我的 Cloudflare 账号：https://github.com/Lur1N77777/loven7-mail-cloudflare-suite 。我已经有 Cloudflare Temp Mail / cloudflare_temp_email 上游 Worker。请创建两个 Cloudflare Pages 项目：管理后台使用 apps/admin，构建命令 npm ci && npm run build，输出目录 dist；用户站使用 apps/webmail，构建命令 npm ci && npm run build，输出目录 dist。不要让我在公开 Prompt 里填写 Cloudflare Token、GitHub Token、管理员密码、站点密码、Worker API 地址或分享密钥；如需这些值，请通过安全输入、secrets、Cloudflare 登录或 MCP 流程收集，不要写进仓库、README、commit、Actions 日志或最终回复。用户站请配置 MAIL_WORKER_BASE_URL、可选 SITE_PASSWORD、生成并保存 SHARE_ENCRYPTION_SECRET，创建或复用 Cloudflare KV Namespace 并绑定为 SHARE_KV；管理后台和用户站分开部署时，在用户站设置 SHARE_ADMIN_CORS_ORIGINS=<管理后台 origin>。部署后请检查用户站 /api/runtime，并返回管理后台 URL、用户站 URL、部署结果，以及我下一步需要在管理后台网页里完成的配置。
+请严格按照仓库 docs/AGENT_DEPLOY_PROMPT.md 部署当前项目。先只读检查仓库和 Cloudflare 状态，再创建两个 Cloudflare Pages 项目，分别使用 apps/admin 与 apps/webmail。不得修改或重新部署上游邮件 Worker，不得要求我在聊天中发送任何密码、Token、Worker 私有地址或加密密钥，不得输出密钥原文。没有安全写入 Secret 的能力时，停止该步骤并告诉我在 Cloudflare 控制台的准确填写位置。完成构建、Pages 运行时变量、SHARE_KV 绑定和 /api/runtime 验收后，再报告两个站点 URL、检查结果、未完成项和回滚方法。
 ```
 
-更短的部署说明见 [部署速查](docs/DEPLOYMENT_QUICKSTART.md)，完整 Agent 指令见 [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md)。
-
-> Cloudflare 官方 `Deploy to Cloudflare` 按钮目前只支持 Workers，不支持本仓库的双 Pages 项目部署；建议先用上面的 Agent 指令或按下面步骤手动部署。
-
-## 界面预览
-
-点击图片可以查看大图。
-
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <a href="docs/screenshots/admin-dashboard.png"><img src="docs/screenshots/admin-dashboard.png" alt="管理后台仪表盘" height="220" /></a>
-      <br /><strong>管理后台 · 运营总览</strong>
-      <br /><sub>统计、快捷入口、能力覆盖和下一步操作集中展示。</sub>
-    </td>
-    <td width="50%" align="center">
-      <a href="docs/screenshots/admin-connection-settings.png"><img src="docs/screenshots/admin-connection-settings.png" alt="管理后台系统设置" height="220" /></a>
-      <br /><strong>系统设置 · 前端配置</strong>
-      <br /><sub>集中配置界面偏好、角色额度、登录链接前缀和自动刷新。</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <a href="docs/screenshots/admin-inbox.png"><img src="docs/screenshots/admin-inbox.png" alt="管理后台收件箱" height="220" /></a>
-      <br /><strong>管理后台 · 邮件工作台</strong>
-      <br /><sub>发件人品牌头像、验证码和正文统一展示，收件处理更直观。</sub>
-    </td>
-    <td width="50%" align="center">
-      <a href="docs/screenshots/mobile-address-actions.png"><img src="docs/screenshots/mobile-address-actions.png" alt="移动端地址管理" height="220" /></a>
-      <br /><strong>移动端 · 地址操作</strong>
-      <br /><sub>手机上也能复制、筛选、打开登录链接和分享动作。</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <a href="docs/screenshots/webmail-login.png"><img src="docs/screenshots/webmail-login.png" alt="用户站登录页" height="220" /></a>
-      <br /><strong>用户站 · 登录入口</strong>
-      <br /><sub>邮箱地址和密码登录，支持中英切换，适合直接交给用户。</sub>
-    </td>
-    <td width="50%" align="center">
-      <a href="docs/screenshots/webmail-share.png"><img src="docs/screenshots/webmail-share.png" alt="用户站分享页" height="220" /></a>
-      <br /><strong>用户站 · 分享访问</strong>
-      <br /><sub>分享链接可聚合多个邮箱，保留品牌头像、验证码复制和自动刷新。</sub>
-    </td>
-  </tr>
-</table>
+完整、可直接复制的强约束提示词见 [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md)。如果你更喜欢自己操作，继续阅读下一节。
 
 ## 手动部署
 
-创建两个 Cloudflare Pages 项目：
+### 1. 准备
 
-| 站点 | Root directory | Build command | Output |
-| --- | --- | --- | --- |
-| 管理后台 | `apps/admin` | `npm ci && npm run build` | `dist` |
-| 用户站 / 分享站 | `apps/webmail` | `npm ci && npm run build` | `dist` |
+- 一个可用的 Cloudflare 账号。
+- 一个已部署且 API 兼容的邮件 Worker。
+- 将本仓库 Fork 到你自己的 GitHub 账号。
 
-用户站运行时配置：
+### 2. 创建 Admin Pages
 
-| 配置 | 说明 |
+在 Cloudflare Dashboard 打开 **Workers & Pages → Create → Pages → Connect to Git**，选择你的 Fork：
+
+| 设置 | 值 |
 | --- | --- |
-| `MAIL_WORKER_BASE_URL` | 上游 Temp Mail Worker/API 根地址 |
-| `SITE_PASSWORD` | 可选，上游 Worker 开启站点密码时填写 |
-| `SHARE_ENCRYPTION_SECRET` | 分享功能需要，建议 32 字符以上随机字符串 |
-| `SHARE_ADMIN_CORS_ORIGINS` | 管理后台 origin，例如 `https://your-admin.pages.dev` |
-| `SHARE_PUBLIC_CORS_ORIGINS` | 可选，默认留空 |
-| `SHARE_KV` | KV Namespace 绑定名，分享功能唯一需要的数据库能力 |
+| Project name | `loven7-mail-admin`（可自定义） |
+| Root directory | `apps/admin` |
+| Build command | `npm ci && npm run build` |
+| Build output directory | `dist` |
 
-数据库部分只有 Cloudflare KV：不需要 SQL、不需要 D1、不需要迁移。Preview / Production 环境的变量、secret 和 KV 绑定彼此独立；部署 Preview 前确认后再设置 `WEBMAIL_PREVIEW_RUNTIME_CONFIRMED=1`。
+然后在 Admin Pages 的 **Settings → Variables and Secrets → Production** 设置：
 
-如果复用已有 Pages 项目，可以设置：
+| 名称 | 类型 | 说明 |
+| --- | --- | --- |
+| `MAIL_WORKER_BASE_URL` | Secret | 你的邮件 Worker 根地址，例如 `https://worker.example.com` |
+| `ADMIN_PASSWORD` | Secret | Worker 的管理员密码，仅由 Pages Functions 使用 |
+| `SITE_PASSWORD` | Secret，可选 | Worker 开启站点密码时填写 |
 
-```powershell
-$env:ADMIN_PAGES_PROJECT_NAME="你的管理后台 Pages 项目名"
-$env:WEBMAIL_PAGES_PROJECT_NAME="你的用户站 Pages 项目名"
-```
+不要设置 `VITE_API_BASE`。默认同域 Pages Functions 代理能避免把管理员密码打进浏览器构建产物。
 
-部署后：
+### 3. 创建 Webmail Pages
 
-1. 打开管理后台。
-2. 使用上游用户账号或 LinuxDo 登录。
-3. 在“系统设置”把“前端登录链接前缀”设置为用户站 URL。
-4. 到“地址管理”测试登录链接和分享链接。
+再次导入同一个 Fork：
 
-## 检查命令
+| 设置 | 值 |
+| --- | --- |
+| Project name | `loven7-mail-webmail`（可自定义） |
+| Root directory | `apps/webmail` |
+| Build command | `npm ci && npm run build` |
+| Build output directory | `dist` |
+
+在 Webmail Pages 的 **Production** 运行时设置中添加：
+
+| 名称 | 类型 | 说明 |
+| --- | --- | --- |
+| `MAIL_WORKER_BASE_URL` | Secret | 与 Admin 相同的 Worker 根地址 |
+| `SITE_PASSWORD` | Secret，可选 | Worker 开启站点密码时填写 |
+| `SHARE_ENCRYPTION_SECRET_V2` | Secret | 至少 32 字节的高熵随机值；新部署推荐只写 V2 |
+| `SHARE_ADMIN_CORS_ORIGINS` | Variable | Admin 的完整 origin，例如 `https://admin.example.com`；禁止 `*` |
+
+在 **Settings → Bindings → KV namespace bindings** 创建或选择一个 KV Namespace，绑定名必须是 `SHARE_KV`。如需 Admin 与 Webmail 跨设备共享已读/星标状态，再给两个项目绑定同一个 KV，绑定名均为 `MAIL_READ_STATE_KV`。
+
+Preview 与 Production 的变量、Secret 和 KV 绑定相互独立。需要预览完整功能时，请在 Preview 环境重复配置；否则只使用 Production。
+
+使用直接上传脚本复用已有项目时，显式设置 `ADMIN_PAGES_PROJECT_NAME` 和 `WEBMAIL_PAGES_PROJECT_NAME`。只有确认 Preview 已配置完整运行时后，才设置本地确认标记 `WEBMAIL_PREVIEW_RUNTIME_CONFIRMED=1`。
+
+### 4. 验收
+
+重新部署两个项目，然后依次检查：
+
+1. 打开 Webmail 的 `/api/runtime`，确认 `ok: true`；接口只报告配置状态，不返回 Secret。
+2. 使用上游用户账号登录 Admin，确认仪表盘和收件箱可加载。
+3. 在 Admin 的“系统设置 → 前端登录链接前缀”填写 Webmail URL，例如 `https://webmail.example.com`。
+4. 新建一条分享链接并在无痕窗口打开，确认邮件列表正常。
+
+如 `/api/runtime` 不完整，按返回的 `missing` 和 `hints` 补配置后重新部署。
+
+## 本地开发
+
+要求 Node.js 22+。两个应用独立安装依赖：
 
 ```bash
-npm run check:cloudflare
+npm --prefix apps/admin ci
+npm --prefix apps/webmail ci
+npm --prefix apps/admin run dev
+```
+
+另开一个终端启动 Webmail：
+
+```bash
+npm --prefix apps/webmail run dev
+```
+
+提交前运行完整检查：
+
+```bash
+npm run check:public
 npm run check:release
 ```
 
-刷新 README 示例截图：
+部署后可执行只读运行时探针：
 
 ```bash
-npm --prefix apps/admin install
-npm run docs:screenshots
+WEBMAIL_RUNTIME_URL=https://webmail.example.com npm run check:cloudflare:runtime
 ```
 
-部署后检查用户站运行时：
+## 公开版与自用配置边界
 
-```powershell
-$env:WEBMAIL_RUNTIME_URL="https://你的用户站域名"
-npm run check:cloudflare:runtime
-```
+公开仓库只保存通用代码、示例占位符和可复用文档；自用信息只存在于 Cloudflare/GitHub Secret、部署平台变量或本机 ignored 文件。
 
-用户站也提供只读诊断接口 `/api/runtime`，只返回配置是否存在和修复提示，不输出密钥原文。
+| 可以提交 | 不得提交 |
+| --- | --- |
+| `*.example`、`.dev.vars.example`、注释掉的 KV 占位符 | `.env`、`.dev.vars`、真实 Worker/站点域名 |
+| 通用 Pages 项目名和构建说明 | Cloudflare Account ID、KV/D1/R2 ID |
+| Loven7 品牌、通用截图和示例数据 | 密码、Token、JWT、Cookie、分享密钥 |
+| 通用排错与升级说明 | 自用生产清单、内部审计报告、客户或真实邮箱数据 |
+
+边界、同步方法和私有 overlay 建议见 [公开版与私有配置边界](docs/CONFIGURATION_BOUNDARY.md)。`npm run check:public` 会在 CI 中阻止常见私人域名、本机路径和生产材料重新进入公开仓库。
+
+## 版本与升级
+
+项目遵循 Semantic Versioning：修复用 PATCH，向后兼容功能用 MINOR，破坏性配置/API 变化用 MAJOR。每次升级先阅读 [CHANGELOG](CHANGELOG.md)，在 Preview 环境验证，再升级 Production。
+
+公开代码与自用配置分离后，升级只同步源码；不要把生产变量反向复制到公开分支。完整策略见 [版本策略](docs/VERSIONING.md)。
 
 ## 文档
 
 | 文档 | 用途 |
 | --- | --- |
-| [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 自动部署和手动部署最短路径 |
-| [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md) | 给 Claude Code、Codex、OpenCode 等 Agent 的完整指令 |
-| [Cloudflare Pages 部署说明](docs/CLOUDFLARE_PAGES.md) | Pages、Preview / Production、KV 和 runtime 排错 |
-| [GitHub Actions](docs/GITHUB_ACTIONS.md) | 自动构建和自动部署配置 |
-| [项目结构与维护边界](docs/PROJECT_STRUCTURE.md) | 目录放置规则、本地产物边界和提交前检查 |
-| [安全脱敏检查](docs/SECURITY_DESENSITIZATION.md) | 发布前避免泄露密钥、Token、KV ID |
-| [上游关系](docs/UPSTREAM.md) | 与 Cloudflare Temp Mail / `cloudflare_temp_email` 的关系 |
+| [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 最短的人工部署清单 |
+| [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md) | 强约束、分阶段、可验收的完整提示词 |
+| [Cloudflare Pages](docs/CLOUDFLARE_PAGES.md) | 变量、KV、Preview、探针与排错 |
+| [GitHub Actions](docs/GITHUB_ACTIONS.md) | CI 与可选自动部署 |
+| [配置边界](docs/CONFIGURATION_BOUNDARY.md) | 公开源码和自用配置如何长期分离 |
+| [版本策略](docs/VERSIONING.md) | 发版、升级与兼容约定 |
+| [项目结构](docs/PROJECT_STRUCTURE.md) | 模块职责和维护入口 |
+| [安全脱敏](docs/SECURITY_DESENSITIZATION.md) | 发布前检查与响应流程 |
+| [上游关系](docs/UPSTREAM.md) | 与邮件 Worker 的职责边界 |
 
-## 开源
+## 界面预览
 
-MIT License。欢迎 Issue、PR 和部署反馈。提交前请先看 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [SECURITY.md](SECURITY.md)。
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/admin-dashboard.png" alt="Admin dashboard" /></td>
+    <td width="50%"><img src="docs/screenshots/admin-inbox.png" alt="Admin inbox" /></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/webmail-login.png" alt="Webmail login" /></td>
+    <td width="50%"><img src="docs/screenshots/webmail-share.png" alt="Webmail share" /></td>
+  </tr>
+</table>
 
-## 友链 / Friendly Links
+## 开源与安全
 
-- [LinuxDo 社区](https://linux.do/)：认可并感谢 LinuxDo 社区对开源交流、开发者互助和中文技术社区建设的支持。
-- [LinuxDo Community](https://linux.do/): recognized with appreciation for its support of open-source discussion, developer collaboration, and the Chinese tech community.
+MIT License。欢迎 Issue 和 PR；贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请不要公开披露，按 [SECURITY.md](SECURITY.md) 的方式报告。
+
+感谢 [LinuxDo 社区](https://linux.do/) 对开源交流和开发者协作的支持。
