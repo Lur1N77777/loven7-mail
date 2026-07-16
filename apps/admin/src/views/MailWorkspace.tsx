@@ -1,5 +1,5 @@
 import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type TouchEvent, type UIEvent } from 'react';
-import { Archive, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Download, MoreHorizontal, Paperclip, RefreshCw, Reply, Star, Trash2, X } from 'lucide-react';
+import { Archive, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Download, Image, MoreHorizontal, Paperclip, RefreshCw, Reply, Star, Trash2, X } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
 import { ADDRESS_INPUT_DEBOUNCE_MS, CACHE_TTL, COPY_HINT_MS, DEFAULT_PAGE_SIZE, MAIL_READ_HISTORY_MAX, NEW_MAIL_FLASH_MS, STORAGE_KEYS } from '../lib/constants';
 import { cls, formatShortDate, normalizeSearch } from '../lib/format';
@@ -1992,9 +1992,11 @@ function MailDetail({
   const parsedForMemo = mail ? isParsed(mail) : false;
   const htmlForFrame = mail ? String(parsedForMemo ? mail.message : mail.is_html ? mail.content : '') : '';
   const rawForDownload = mail && parsedForMemo ? String(mail.raw || '') : '';
+  const [allowExternalImages, setAllowExternalImages] = useState(false);
+  useEffect(() => { setAllowExternalImages(false); }, [mail?.id]);
   const iframeDocument = useMemo(() => {
-    return htmlForFrame ? buildMailHtmlDocument(parsedForMemo ? htmlForFrame : sanitizeMailHtml(htmlForFrame)) : '';
-  }, [htmlForFrame, parsedForMemo]);
+    return htmlForFrame ? buildMailHtmlDocument(parsedForMemo ? htmlForFrame : sanitizeMailHtml(htmlForFrame), 'light', { allowExternalImages }) : '';
+  }, [htmlForFrame, parsedForMemo, allowExternalImages]);
   const emlUrl = useMemo(() => (rawForDownload ? getDownloadEmlUrl(rawForDownload) : ''), [rawForDownload]);
   useEffect(() => () => { if (emlUrl) URL.revokeObjectURL(emlUrl); }, [emlUrl]);
   if (!mail) return <div className="p-8"><EmptyState title={t('请选择一封邮件', 'Select a message')} /></div>;
@@ -2056,6 +2058,12 @@ function MailDetail({
             </div>
           </header>
           <div className="my-2 h-px shrink-0 bg-slate-100 md:my-2.5" />
+          {iframeDocument && !allowExternalImages ? (
+            <div className="mb-2 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <span>{t('远程图片已阻止，以保护隐私。', 'Remote images are blocked to protect your privacy.')}</span>
+              <button type="button" className="btn-secondary compact shrink-0" onClick={() => setAllowExternalImages(true)}><Image size={15} /> {t('显示远程图片', 'Show remote images')}</button>
+            </div>
+          ) : null}
           <div className="mail-detail-body min-h-0 flex-1 overflow-hidden">
             {iframeDocument ? <iframe ref={(node) => onFrameWindowChange?.(node?.contentWindow || null)} title={`mail-${mail.id}`} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={iframeDocument} referrerPolicy="no-referrer" className="mail-frame" /> : <pre className="mail-text">{text || mail.preview || t('邮件正文仍在后台同步，请稍后刷新。', 'Message body is still syncing. Please refresh later.')}</pre>}
           </div>
