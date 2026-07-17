@@ -25,3 +25,6 @@ _backup_*.log
 *.zip
 .DS_Store
 Thumbs.db
+
+.playwright-cli/
+.pnpm-store/
