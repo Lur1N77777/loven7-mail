@@ -59,7 +59,6 @@
 
 | 路径                                  | 用途                                        |
 | ------------------------------------- | ------------------------------------------- |
-| `docs/ENGINEER_HANDOFF.md`            | 工程师交接和功能修改路线                    |
 | `docs/PROJECT_STRUCTURE.md`           | 目录边界和维护约定                          |
 | `docs/DEPLOYMENT_QUICKSTART.md`       | 最短部署路径                                |
 | `docs/CLOUDFLARE_PAGES.md`            | Cloudflare Pages、Preview、KV、runtime 排错 |

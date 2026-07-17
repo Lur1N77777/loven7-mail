@@ -84,7 +84,9 @@ function walk(path) {
   if (!existsSync(path)) return [];
   if (!statSync(path).isDirectory()) return [path];
   return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
-    if (["node_modules", "dist", ".git", "tmp"].includes(entry.name)) return [];
+    // Build tools create these directories locally. They are ignored by Git and
+    // must not make a clean public source checkout fail its privacy gate.
+    if (["node_modules", "dist", ".git", ".wrangler", "tmp"].includes(entry.name)) return [];
     if (entry.name === "package-lock.json") return [];
     return walk(join(path, entry.name));
   });
