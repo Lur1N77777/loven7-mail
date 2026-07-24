@@ -20,6 +20,15 @@
 
 > 这是可复用的公开版前端仓库，不包含任何部署者的 Worker 地址、Cloudflare 资源 ID、域名、账号、密码、Token、密钥或生产运维记录。所有私有值都在部署平台或浏览器中注入。
 
+## v0.3.0 · 大前端更新
+
+管理后台完成一次完整的视觉与工作区重构，采用 **Paper, Ink & Sealing Wax** 设计语言：暖灰纸面、墨黑主操作与陶土红强调色贯穿仪表盘、统计、地址、用户、收发件、系统设置和维护页面。
+
+- 桌面端重新组织信息层级、指标卡片、管理表格和工具面板。
+- 平板与移动端补齐专用布局、底部导航、快捷操作菜单和无横向溢出体验。
+- 深色模式、表单控件、分页、弹层和代码面板使用统一的圆角与表面规范。
+- 保持现有 Worker API、Pages 运行时变量和 KV 数据结构不变，可从旧版本平滑升级。
+
 ## 项目组成
 
 | 应用 | 目录 | 作用 |
@@ -177,14 +186,41 @@ WEBMAIL_RUNTIME_URL=https://webmail.example.com npm run check:cloudflare:runtime
 
 ## 界面预览
 
+### Admin · Paper, Ink & Sealing Wax
+
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/admin-dashboard.png" alt="Admin dashboard" /></td>
-    <td width="50%"><img src="docs/screenshots/admin-inbox.png" alt="Admin inbox" /></td>
+    <td width="50%">
+      <strong>运营概览</strong><br />
+      <sub>邮件流量、地址活跃、站点规模与能力状态。</sub><br /><br />
+      <img src="docs/screenshots/admin-dashboard.png" alt="Admin 运营概览" />
+    </td>
+    <td width="50%">
+      <strong>收件箱工作区</strong><br />
+      <sub>高密度邮件列表、阅读器与快捷操作。</sub><br /><br />
+      <img src="docs/screenshots/admin-inbox.png" alt="Admin 收件箱工作区" />
+    </td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/webmail-login.png" alt="Webmail login" /></td>
-    <td width="50%"><img src="docs/screenshots/webmail-share.png" alt="Webmail share" /></td>
+    <td width="50%">
+      <strong>系统设置</strong><br />
+      <sub>界面、连接、邮件规则和账户策略分区管理。</sub><br /><br />
+      <img src="docs/screenshots/admin-connection-settings.png" alt="Admin 系统设置" />
+    </td>
+    <td width="50%" align="center">
+      <strong>移动端地址管理</strong><br />
+      <sub>响应式列表、底部导航和地址快捷操作。</sub><br /><br />
+      <img src="docs/screenshots/mobile-address-actions.png" alt="Admin 移动端地址管理" width="300" />
+    </td>
+  </tr>
+</table>
+
+### Webmail · 登录与分享
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/webmail-login.png" alt="Webmail 邮箱登录" /></td>
+    <td width="50%"><img src="docs/screenshots/webmail-share.png" alt="Webmail 多邮箱分享" /></td>
   </tr>
 </table>
 

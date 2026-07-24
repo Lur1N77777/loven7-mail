@@ -38,13 +38,13 @@ Release 附件只包含 Git 可追踪的公开源码与校验值，不能打包 
 自用部署不需要把私人差异提交到公开仓库。建议用部署元数据记录：
 
 ```text
-public_version = v0.2.0
+public_version = v0.3.0
 public_commit = <commit-sha>
 private_revision = 3
 deployed_at = <timestamp>
 ```
 
-如果必须创建私有源码提交，使用独立私有仓库和后缀，例如 `v0.2.0-private.3`。不要把私有 tag 或 Release 发布到公开仓库。
+如果必须创建私有源码提交，使用独立私有仓库和后缀，例如 `v0.3.0-private.3`。不要把私有 tag 或 Release 发布到公开仓库。
 
 ## 升级顺序
 
