@@ -80,7 +80,7 @@ test('admin smoke exposes Chrome startup failures while waiting for IPv4 CDP', (
   assert.match(source, /--remote-debugging-address=127\.0\.0\.1/);
   assert.match(source, /stdio:\s*\['ignore',\s*'pipe',\s*'pipe'\]/);
   assert.match(source, /watchedProcess\.exitCode !== null\s*\|\|\s*watchedProcess\.signalCode !== null/);
-  assert.match(source, /waitForHttp\([^;]+chromeProcess[^;]+Chrome/s);
+  assert.match(source, /waitForHttp\([^;]+60_000[^;]+chromeProcess[^;]+Chrome/s);
 });
 
 test('admin persistent cache keys are isolated by API and account', () => {

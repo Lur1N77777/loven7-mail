@@ -776,7 +776,7 @@ async function main() {
     secondaryApiBase = `http://127.0.0.1:${mockApiPort + 1}`;
   }
   chromeProcess = spawnChrome();
-  await waitForHttp(`http://127.0.0.1:${cdpPort}/json/version`, 20_000, chromeProcess, 'Chrome');
+  await waitForHttp(`http://127.0.0.1:${cdpPort}/json/version`, 60_000, chromeProcess, 'Chrome');
   const extraResults = [];
 
   if (process.env.SMOKE_LEGACY_AUTH === '1') {
