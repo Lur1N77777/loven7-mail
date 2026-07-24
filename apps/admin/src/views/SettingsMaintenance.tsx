@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Bot, Cloud, Database, Edit3, HardDrive, Languages, Link, Loader2, RefreshCw, Save, ShieldCheck, Trash2, Webhook } from 'lucide-react';
+import { Bot, Cloud, Database, Edit3, HardDrive, Languages, Link, Loader2, Plus, RefreshCw, Save, ShieldCheck, Trash2, Webhook, X } from 'lucide-react';
 import type { Requester } from '../lib/api';
 import { normalizeFrontendBaseUrl } from '../lib/frontendBase';
-import { jsonPretty, safeJsonParse } from '../lib/format';
+import { cls, jsonPretty, safeJsonParse } from '../lib/format';
 import { FRONTEND_LOGIN_BASE, STORAGE_KEYS } from '../lib/constants';
 import { readStorage, writeLocalStorage } from '../lib/storage';
 import { getLocaleShortLabel, getRuntimeLocale, localeText, toggleLocale, type AppLocale } from '../lib/locale';
@@ -461,7 +461,7 @@ function GenericSettingsCard({ title, endpoint, request, notify, testEndpoint }:
   const save = async () => { try { const parsed = JSON.parse(body || '{}'); await request(endpoint, { method: 'POST', body: parsed }); notify('success', locale === 'en-US' ? `${title} saved` : `${title} 已保存`); } catch (error) { notify('error', error instanceof Error ? error.message : locale === 'en-US' ? `${title} save failed` : `${title} 保存失败`); } };
   const parsedBody = safeJsonParse(body, {});
   const updateVisual = (next: unknown) => setBody(jsonPretty(next || {}));
-  return <div className="panel settings-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800">{title}</h3><div className="settings-card-meta mt-2"><span>{t('字段', 'Fields')}</span><code>{endpoint}</code></div></div><button type="button" className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 size={16} />}</button></div>{open && <Modal title={title} onClose={() => setOpen(false)} wide><div className="settings-editor-toolbar"><div><strong>{t('编辑方式', 'Editor mode')}</strong></div><div className="settings-editor-tabs"><button type="button" className={editorMode === 'visual' ? 'active' : ''} onClick={() => setEditorMode('visual')}>{t('表单', 'Form')}</button><button type="button" className={editorMode === 'json' ? 'active' : ''} onClick={() => setEditorMode('json')}>JSON</button></div></div>{editorMode === 'visual' ? <JsonVisualEditor value={parsedBody} onChange={updateVisual} /> : <textarea className="code-area h-[50vh]" value={body} onChange={(e) => setBody(e.target.value)} />}<div className="mt-5 flex justify-end gap-3">{testEndpoint && <button type="button" className="btn-secondary" onClick={async () => { await request(testEndpoint, { method: 'POST', body: safeJsonParse(body, {}) }); notify('success', t('测试请求已发送', 'Test request sent')); }}><Webhook size={16} /> {t('测试', 'Test')}</button>}<button type="button" className="btn-primary" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}</div>;
+  return <div className="panel settings-card settings-endpoint-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800">{title}</h3><div className="settings-card-meta mt-2"><span>{t('字段', 'Fields')}</span><code>{endpoint}</code></div></div><button type="button" className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Edit3 size={16} />}</button></div>{open && <Modal title={title} onClose={() => setOpen(false)} wide><div className="settings-editor-toolbar"><div><strong>{t('编辑方式', 'Editor mode')}</strong></div><div className="settings-editor-tabs"><button type="button" className={editorMode === 'visual' ? 'active' : ''} onClick={() => setEditorMode('visual')}>{t('表单', 'Form')}</button><button type="button" className={editorMode === 'json' ? 'active' : ''} onClick={() => setEditorMode('json')}>JSON</button></div></div>{editorMode === 'visual' ? <JsonVisualEditor value={parsedBody} onChange={updateVisual} /> : <textarea className="code-area h-[50vh]" value={body} onChange={(e) => setBody(e.target.value)} />}<div className="mt-5 flex justify-end gap-3">{testEndpoint && <button type="button" className="btn-secondary" onClick={async () => { await request(testEndpoint, { method: 'POST', body: safeJsonParse(body, {}) }); notify('success', t('测试请求已发送', 'Test request sent')); }}><Webhook size={16} /> {t('测试', 'Test')}</button>}<button type="button" className="btn-primary" onClick={save}><Save size={16} /> {t('保存', 'Save')}</button></div></Modal>}</div>;
 }
 
 function InterfacePreferenceCard({ locale, setLocale, authPanel }: { locale?: AppLocale; setLocale?: (locale: AppLocale) => void; authPanel?: ReactNode }) {
@@ -506,7 +506,66 @@ export function SettingsView({ request, notify, locale, setLocale, authPanel }: 
     [t('AI 提取设置', 'AI extraction settings'), '/admin/ai_extract/settings'],
     [t('Telegram 设置 JSON', 'Telegram settings JSON'), '/admin/telegram/settings'],
   ] as const;
-  return <div className="settings-view-shell h-full overflow-y-auto p-3 md:p-4 xl:p-6"><div className="space-y-3"><div><h2 className="page-title">{t('系统设置', 'System settings')}</h2></div><div className="settings-card-stack"><InterfacePreferenceCard locale={locale} setLocale={setLocale} authPanel={authPanel} /><div className="settings-balanced-grid"><div className="settings-card-column"><RoleAddressConfigPanel request={request} notify={notify} /></div><div className="settings-card-column"><MailRefreshPreferenceCard notify={notify} /><FrontendLoginBaseCard notify={notify} /><TelegramPanel request={request} notify={notify} /></div></div><AccountRulesPanel request={request} notify={notify} /><div className="settings-json-grid">{cards.map(([title, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}</div></div></div></div>;
+  return (
+    <div className="settings-view-shell h-full overflow-y-auto">
+      <div className="product-page">
+        <header className="page-head">
+          <div className="page-head-copy">
+            <span className="product-kicker">{t('管理配置', 'Administration')}</span>
+            <h1 className="page-title">{t('系统设置', 'System settings')}</h1>
+            <p className="page-lede">{t('界面偏好、邮件规则、账户策略与外部服务集成。', 'Interface preferences, mail rules, account policies and integrations.')}</p>
+          </div>
+        </header>
+
+        <div className="settings-flow">
+          <section className="settings-layout-section">
+            <header className="settings-section-heading">
+              <span>01</span>
+              <h2>{t('界面与连接', 'Interface and connection')}</h2>
+            </header>
+            <div className="settings-section-content settings-interface-grid">
+              <InterfacePreferenceCard locale={locale} setLocale={setLocale} authPanel={authPanel} />
+              <FrontendLoginBaseCard notify={notify} />
+            </div>
+          </section>
+
+          <section className="settings-layout-section">
+            <header className="settings-section-heading">
+              <span>02</span>
+              <h2>{t('邮件与地址', 'Mail and addresses')}</h2>
+            </header>
+            <div className="settings-section-content settings-mail-grid">
+              <RoleAddressConfigPanel request={request} notify={notify} />
+              <MailRefreshPreferenceCard notify={notify} />
+            </div>
+          </section>
+
+          <section className="settings-layout-section">
+            <header className="settings-section-heading">
+              <span>03</span>
+              <h2>{t('账户规则', 'Account rules')}</h2>
+            </header>
+            <div className="settings-section-content">
+              <AccountRulesPanel request={request} notify={notify} />
+            </div>
+          </section>
+
+          <section className="settings-layout-section">
+            <header className="settings-section-heading">
+              <span>04</span>
+              <h2>{t('服务与集成', 'Services and integrations')}</h2>
+            </header>
+            <div className="settings-section-content settings-integration-content">
+              <TelegramPanel request={request} notify={notify} />
+              <div className="settings-json-grid">
+                {cards.map(([title, endpoint, test]) => <GenericSettingsCard key={endpoint} title={title} endpoint={endpoint} request={request} notify={notify} testEndpoint={test} />)}
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type AccountSettingsState = {
@@ -538,10 +597,6 @@ const defaultAccountSettings: AccountSettingsState = {
   monthlyLimit: 3000,
 };
 
-function toLineText(values: string[]): string {
-  return values.filter(Boolean).join('\n');
-}
-
 function fromLineText(value: string): string[] {
   return value.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
 }
@@ -558,11 +613,33 @@ function storedFromMode(mode: AccountSettingsState['subdomainMode']): boolean | 
   return null;
 }
 
+type RuleListKey = 'blockList' | 'sendBlockList' | 'noLimitSendAddressList' | 'verifiedAddressList' | 'fromBlockList';
+
+const RULE_LISTS: Array<{ key: RuleListKey; zh: string; en: string; descZh: string; descEn: string }> = [
+  { key: 'blockList', zh: '地址黑名单', en: 'Address blacklist', descZh: '发往这些地址的邮件将被拒收', descEn: 'Inbound mail to these addresses is rejected' },
+  { key: 'sendBlockList', zh: '发件黑名单', en: 'Sender blacklist', descZh: '禁止这些地址对外发信', descEn: 'These addresses are barred from sending' },
+  { key: 'noLimitSendAddressList', zh: '免限制发件', en: 'Unlimited senders', descZh: '这些地址不受发信额度限制', descEn: 'Exempt from sending quotas' },
+  { key: 'verifiedAddressList', zh: '已验证地址', en: 'Verified addresses', descZh: '标记为已验证的发件地址', descEn: 'Senders marked as verified' },
+  { key: 'fromBlockList', zh: '来源黑名单', en: 'From blacklist', descZh: '拦截这些来源发来的邮件', descEn: 'Block mail coming from these origins' },
+];
+
 function AccountRulesPanel({ request, notify }: { request: Requester; notify: Notify }) {
   const { t } = useSettingsLocale();
   const [state, setState] = useState<AccountSettingsState>(defaultAccountSettings);
   const [loading, setLoading] = useState(false);
-  const setList = (key: keyof Pick<AccountSettingsState, 'blockList' | 'sendBlockList' | 'noLimitSendAddressList' | 'verifiedAddressList' | 'fromBlockList'>, value: string) => setState((current) => ({ ...current, [key]: fromLineText(value) }));
+  const [activeListKey, setActiveListKey] = useState<RuleListKey>('blockList');
+  const [draft, setDraft] = useState('');
+  const activeMeta = RULE_LISTS.find((meta) => meta.key === activeListKey) || RULE_LISTS[0];
+  const activeItems = state[activeMeta.key];
+  const addDraftEntries = () => {
+    const entries = fromLineText(draft);
+    if (!entries.length) return;
+    setState((current) => ({ ...current, [activeMeta.key]: [...new Set([...current[activeMeta.key], ...entries])] }));
+    setDraft('');
+  };
+  const removeEntry = (value: string) => {
+    setState((current) => ({ ...current, [activeMeta.key]: current[activeMeta.key].filter((item) => item !== value) }));
+  };
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -628,24 +705,79 @@ function AccountRulesPanel({ request, notify }: { request: Requester; notify: No
       <div><h3 className="font-semibold text-slate-800"><ShieldCheck className="mr-2 inline h-4 w-4 text-slate-600" />{t('账户规则设置', 'Account rules')}</h3></div>
       <button type="button" className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />}</button>
     </div>
-    <div className="mt-3 grid gap-3 lg:grid-cols-5">
-      <label className="lg:col-span-1"><span className="form-label">{t('地址黑名单', 'Address blacklist')}</span><textarea className="form-textarea compact-textarea" value={toLineText(state.blockList)} onChange={(e) => setList('blockList', e.target.value)} placeholder={t('每行一个', 'One per line')} /></label>
-      <label className="lg:col-span-1"><span className="form-label">{t('发件黑名单', 'Sender blacklist')}</span><textarea className="form-textarea compact-textarea" value={toLineText(state.sendBlockList)} onChange={(e) => setList('sendBlockList', e.target.value)} placeholder={t('每行一个', 'One per line')} /></label>
-      <label className="lg:col-span-1"><span className="form-label">{t('免限制发件', 'Unlimited senders')}</span><textarea className="form-textarea compact-textarea" value={toLineText(state.noLimitSendAddressList)} onChange={(e) => setList('noLimitSendAddressList', e.target.value)} placeholder={t('每行一个', 'One per line')} /></label>
-      <label className="lg:col-span-1"><span className="form-label">{t('验证地址', 'Verified addresses')}</span><textarea className="form-textarea compact-textarea" value={toLineText(state.verifiedAddressList)} onChange={(e) => setList('verifiedAddressList', e.target.value)} placeholder={t('每行一个', 'One per line')} /></label>
-      <label className="lg:col-span-1"><span className="form-label">{t('来源黑名单', 'From blacklist')}</span><textarea className="form-textarea compact-textarea" value={toLineText(state.fromBlockList)} onChange={(e) => setList('fromBlockList', e.target.value)} placeholder={t('每行一个', 'One per line')} /></label>
-    </div>
-    <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
-      <label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={state.blockReceiveUnknowAddressEmail} onChange={(e) => setState((current) => ({ ...current, blockReceiveUnknowAddressEmail: e.target.checked }))} />{t('拦截未知地址收件', 'Block unknown-address inbound mail')}</label>
-      <div><label className="form-label">{t('子域名匹配', 'Subdomain matching')}</label><PopoverSelect className="settings-popover-select compact-settings-select" ariaLabel={t('子域名匹配', 'Subdomain matching')} value={state.subdomainMode} options={[{ value: 'follow_env', label: t('跟随环境变量', 'Follow environment') }, { value: 'force_enable', label: t('强制开启', 'Force on') }, { value: 'force_disable', label: t('强制关闭', 'Force off') }]} onChange={(value) => setState((current) => ({ ...current, subdomainMode: value as AccountSettingsState['subdomainMode'] }))} /></div>
-      <div className="grid grid-cols-2 gap-2">
-        <label><span className="form-label">{t('日额度', 'Daily limit')}</span><input className="form-input compact-control" type="number" disabled={!state.dailyEnabled} value={state.dailyLimit} onChange={(e) => setState((current) => ({ ...current, dailyLimit: Number(e.target.value) }))} /></label>
-        <label><span className="form-label">{t('月额度', 'Monthly limit')}</span><input className="form-input compact-control" type="number" disabled={!state.monthlyEnabled} value={state.monthlyLimit} onChange={(e) => setState((current) => ({ ...current, monthlyLimit: Number(e.target.value) }))} /></label>
+    <div className="rules-manager">
+      <div className="rules-nav" role="tablist" aria-label={t('名单类别', 'List categories')}>
+        {RULE_LISTS.map((meta) => (
+          <button
+            key={meta.key}
+            type="button"
+            role="tab"
+            aria-selected={meta.key === activeListKey}
+            className={cls('rules-nav-item', meta.key === activeListKey && 'is-active')}
+            onClick={() => setActiveListKey(meta.key)}
+          >
+            <span>{t(meta.zh, meta.en)}</span>
+            <span className="rules-nav-count">{state[meta.key].length}</span>
+          </button>
+        ))}
       </div>
-      <div className="account-rule-toggle-group flex flex-wrap gap-2 md:justify-end">
-        <label className="check-row account-rule-toggle text-xs"><input type="checkbox" checked={state.dailyEnabled} onChange={(e) => setState((current) => ({ ...current, dailyEnabled: e.target.checked }))} />{t('日', 'Daily')}</label>
-        <label className="check-row account-rule-toggle text-xs"><input type="checkbox" checked={state.monthlyEnabled} onChange={(e) => setState((current) => ({ ...current, monthlyEnabled: e.target.checked }))} />{t('月', 'Monthly')}</label>
-        <button type="button" className="btn-primary compact" onClick={save}><Save size={15} /> {t('保存', 'Save')}</button>
+      <div className="rules-editor" role="tabpanel">
+        <div className="rules-editor-head">
+          <strong className="rules-editor-title">{t(activeMeta.zh, activeMeta.en)}</strong>
+          <span className="rules-editor-desc">{t(activeMeta.descZh, activeMeta.descEn)}</span>
+        </div>
+        <div className="rules-chip-area">
+          {activeItems.length === 0
+            ? <p className="rules-empty">{t('暂无条目。在下方输入后回车即可添加，支持逗号或换行批量粘贴。', 'No entries yet. Type below and press Enter; paste comma or newline separated batches.')}</p>
+            : activeItems.map((value) => (
+              <span className="rule-chip" key={value}>
+                <span className="rule-chip-text" title={value}>{value}</span>
+                <button type="button" className="rule-chip-remove" aria-label={`${t('移除', 'Remove')} ${value}`} onClick={() => removeEntry(value)}><X size={12} /></button>
+              </span>
+            ))}
+        </div>
+        <div className="rules-input-row">
+          <input
+            className="form-input"
+            value={draft}
+            placeholder={t('输入地址，回车添加', 'Type an address, press Enter')}
+            spellCheck={false}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addDraftEntries();
+              }
+            }}
+          />
+          <button type="button" className="btn-secondary" onClick={addDraftEntries}><Plus size={15} /> {t('添加', 'Add')}</button>
+        </div>
+      </div>
+    </div>
+    <div className="rules-policy-grid">
+      <div className="rules-policy">
+        <span className="form-label">{t('收件规则', 'Inbound rule')}</span>
+        <label className="check-row"><input type="checkbox" checked={state.blockReceiveUnknowAddressEmail} onChange={(e) => setState((current) => ({ ...current, blockReceiveUnknowAddressEmail: e.target.checked }))} />{t('拦截未知地址收件', 'Block unknown-address inbound')}</label>
+      </div>
+      <div className="rules-policy">
+        <span className="form-label">{t('子域名匹配', 'Subdomain matching')}</span>
+        <PopoverSelect className="settings-popover-select compact-settings-select" ariaLabel={t('子域名匹配', 'Subdomain matching')} value={state.subdomainMode} options={[{ value: 'follow_env', label: t('跟随环境变量', 'Follow environment') }, { value: 'force_enable', label: t('强制开启', 'Force on') }, { value: 'force_disable', label: t('强制关闭', 'Force off') }]} onChange={(value) => setState((current) => ({ ...current, subdomainMode: value as AccountSettingsState['subdomainMode'] }))} />
+      </div>
+      <div className="rules-policy">
+        <span className="form-label">{t('发信额度', 'Sending quota')}</span>
+        <div className="rules-policy-quota">
+          <div className="rules-quota-cell">
+            <label className="check-row"><input type="checkbox" checked={state.dailyEnabled} onChange={(e) => setState((current) => ({ ...current, dailyEnabled: e.target.checked }))} />{t('日', 'Daily')}</label>
+            <input className="form-input compact-control" type="number" min={0} disabled={!state.dailyEnabled} value={state.dailyLimit} onChange={(e) => setState((current) => ({ ...current, dailyLimit: Number(e.target.value) }))} />
+          </div>
+          <div className="rules-quota-cell">
+            <label className="check-row"><input type="checkbox" checked={state.monthlyEnabled} onChange={(e) => setState((current) => ({ ...current, monthlyEnabled: e.target.checked }))} />{t('月', 'Monthly')}</label>
+            <input className="form-input compact-control" type="number" min={0} disabled={!state.monthlyEnabled} value={state.monthlyLimit} onChange={(e) => setState((current) => ({ ...current, monthlyLimit: Number(e.target.value) }))} />
+          </div>
+        </div>
+      </div>
+      <div className="rules-policy rules-policy-actions">
+        <button type="button" className="btn-primary" onClick={save}><Save size={15} /> {t('保存规则', 'Save rules')}</button>
       </div>
     </div>
   </div>;
@@ -663,7 +795,7 @@ function MailRefreshPreferenceCard({ notify }: { notify: Notify }) {
     window.dispatchEvent(new Event('loven7-mail-refresh-settings'));
     notify('success', t('邮件自动刷新设置已保存', 'Mail auto-refresh settings saved'));
   };
-  return <div className="panel settings-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><RefreshCw className="mr-2 inline h-4 w-4 text-slate-600" />{t('邮件自动刷新', 'Mail auto refresh')}</h3></div></div><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_96px_auto]"><label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />{t('启用', 'Enabled')}</label><input className="form-input compact-control" type="number" min={15} value={seconds} onChange={(e) => setSeconds(Math.max(15, Number(e.target.value) || 60))} /><button type="button" className="btn-primary compact" onClick={save}><Save size={15} /> {t('保存', 'Save')}</button></div></div>;
+  return <div className="panel settings-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><RefreshCw className="mr-2 inline h-4 w-4 text-slate-600" />{t('邮件自动刷新', 'Mail auto refresh')}</h3></div></div><div className="mail-refresh-controls mt-3 grid gap-2 sm:grid-cols-[1fr_96px_auto]"><label className="check-row rounded-xl bg-slate-50 px-3 py-2"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />{t('启用', 'Enabled')}</label><input className="form-input compact-control" type="number" min={15} value={seconds} onChange={(e) => setSeconds(Math.max(15, Number(e.target.value) || 60))} /><button type="button" className="btn-primary compact" onClick={save}><Save size={15} /> {t('保存', 'Save')}</button></div></div>;
 }
 
 function FrontendLoginBaseCard({ notify }: { notify: Notify }) {
@@ -680,7 +812,7 @@ function FrontendLoginBaseCard({ notify }: { notify: Notify }) {
     setValue(normalized);
     notify('success', t('前端登录链接前缀已保存', 'Frontend login link prefix saved'));
   };
-  return <div className="panel settings-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><Link className="mr-2 inline h-4 w-4 text-slate-600" />{t('前端登录链接前缀', 'Frontend login link prefix')}</h3></div></div><div className="mt-3 flex flex-col gap-2 sm:flex-row"><input className="form-input compact-control" value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultBase || 'https://your-webmail.example.com'} /><button type="button" className="btn-primary compact shrink-0" onClick={save}><Save size={15} /> {t('保存', 'Save')}</button></div><p className="mt-2 truncate rounded-xl bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">{normalized ? `${t('示例', 'Example')}: ${normalized}/#JWT=...` : t('未配置', 'Not configured')}</p></div>;
+  return <div className="panel settings-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><Link className="mr-2 inline h-4 w-4 text-slate-600" />{t('前端登录链接前缀', 'Frontend login link prefix')}</h3></div></div><div className="frontend-base-controls mt-3 flex flex-col gap-2 sm:flex-row"><input className="form-input compact-control" value={value} onChange={(e) => setValue(e.target.value)} placeholder={defaultBase || 'https://your-webmail.example.com'} /><button type="button" className="btn-primary compact shrink-0" onClick={save}><Save size={15} /> {t('保存', 'Save')}</button></div><p className="frontend-base-example mt-2 truncate rounded-xl bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">{normalized ? `${t('示例', 'Example')}: ${normalized}/#JWT=...` : t('未配置', 'Not configured')}</p></div>;
 }
 
 function RoleAddressConfigPanel({ request, notify }: { request: Requester; notify: Notify }) {
@@ -721,7 +853,7 @@ function RoleAddressConfigPanel({ request, notify }: { request: Requester; notif
       notify('error', error instanceof Error ? error.message : t('保存失败', 'Save failed'));
     }
   };
-  return <div className="panel settings-card role-address-config-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><ShieldCheck className="mr-2 inline h-4 w-4 text-slate-600" />{t('角色地址额度', 'Role address quotas')}</h3></div><button type="button" className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />}</button></div>{loading ? <LoadingState /> : roles.length === 0 ? <div className="role-address-empty"><EmptyState icon={ShieldCheck} title={t('暂无角色', 'No roles')} /></div> : <div className="mt-3 space-y-1.5">{roles.map((role) => <div key={role.role} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-1.5"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-700">{role.label || role.role}</p><p className="truncate text-[11px] text-slate-400">{role.role}</p></div><input className="form-input compact-control h-8 w-[5.5rem] px-2 py-1 text-right" type="number" min={0} max={999} value={values[role.role] ?? ''} placeholder={t('不限', 'Unlimited')} onChange={(e) => setValues((current) => ({ ...current, [role.role]: e.target.value === '' ? '' : Number(e.target.value) }))} /></div>)}<button type="button" className="btn-primary compact mt-2 w-full" onClick={save}><Save size={15} /> {t('保存额度', 'Save quotas')}</button></div>}</div>;
+  return <div className="panel settings-card role-address-config-card"><div className="settings-card-head"><div><h3 className="font-semibold text-slate-800"><ShieldCheck className="mr-2 inline h-4 w-4 text-slate-600" />{t('角色地址额度', 'Role address quotas')}</h3></div><button type="button" className="icon-btn compact" onClick={load}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />}</button></div>{loading ? <LoadingState /> : roles.length === 0 ? <div className="role-address-empty"><EmptyState icon={ShieldCheck} title={t('暂无角色', 'No roles')} /></div> : <div className="role-quota-list mt-3 space-y-1.5">{roles.map((role) => <div key={role.role} className="role-quota-row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-1.5"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-700">{role.label || role.role}</p><p className="truncate text-[11px] text-slate-400">{role.role}</p></div><input className="form-input compact-control h-8 w-24 px-2 py-1 text-right" type="number" min={0} max={999} value={values[role.role] ?? ''} placeholder={t('不限', 'Unlimited')} onChange={(e) => setValues((current) => ({ ...current, [role.role]: e.target.value === '' ? '' : Number(e.target.value) }))} /></div>)}<button type="button" className="btn-primary compact mt-2 w-full" onClick={save}><Save size={15} /> {t('保存额度', 'Save quotas')}</button></div>}</div>;
 }
 
 function TelegramPanel({ request, notify }: { request: Requester; notify: Notify }) {
@@ -751,7 +883,7 @@ function TelegramPanel({ request, notify }: { request: Requester; notify: Notify
       setLoading(false);
     }
   };
-  return <div className="panel settings-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800"><Bot className="mr-2 inline h-4 w-4 text-slate-600" />{t('Telegram 运维', 'Telegram operations')}</h3></div>{loading && <Loader2 className="h-5 w-5 animate-spin text-slate-600" />}</div><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="btn-secondary compact" onClick={fetchStatus}><RefreshCw size={15} /> {t('状态', 'Status')}</button><button type="button" className="btn-primary compact" onClick={init}><Bot size={15} /> {t('初始化', 'Initialize')}</button></div>{status && <pre className="code-area mt-3 max-h-72">{jsonPretty(status)}</pre>}</div>;
+  return <div className="panel settings-card telegram-ops-card"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-800"><Bot className="mr-2 inline h-4 w-4 text-slate-600" />{t('Telegram 运维', 'Telegram operations')}</h3></div>{loading && <Loader2 className="h-5 w-5 animate-spin text-slate-600" />}</div><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="btn-secondary compact" onClick={fetchStatus}><RefreshCw size={15} /> {t('状态', 'Status')}</button><button type="button" className="btn-primary compact" onClick={init}><Bot size={15} /> {t('初始化', 'Initialize')}</button></div>{status && <pre className="code-area mt-3 max-h-72">{jsonPretty(status)}</pre>}</div>;
 }
 
 export function MaintenanceView({ request, notify }: { request: Requester; notify: Notify }) {
@@ -763,7 +895,68 @@ export function MaintenanceView({ request, notify }: { request: Requester; notif
   const load = useCallback(async () => { try { const [dbRes, workerRes] = await Promise.all([request('/admin/db_version').catch((e) => ({ error: String(e) })), request('/admin/worker/configs').catch((e) => ({ error: String(e) }))]); setDb(dbRes); setWorkerConfig(workerRes); } catch (error) { notify('error', error instanceof Error ? error.message : t('维护信息加载失败', 'Failed to load maintenance info')); } }, [notify, request]);
   useEffect(() => { load(); }, [load]);
   const action = async (path: string, body?: unknown) => { try { await request(path, { method: 'POST', body }); notify('success', t('操作完成', 'Operation completed')); await load(); } catch (error) { notify('error', error instanceof Error ? error.message : t('操作失败', 'Operation failed')); } };
-  return <div className="maintenance-view-shell h-full overflow-y-auto p-4 md:p-8"><div className="space-y-5"><div className="flex items-center justify-between"><div><h2 className="page-title">{t('维护', 'Maintenance')}</h2></div><button type="button" className="btn-secondary" onClick={load}><RefreshCw size={16} /> {t('刷新', 'Refresh')}</button></div><div className="grid gap-5 xl:grid-cols-2"><div className="panel p-5"><h3 className="panel-title"><Database className="mr-2 inline h-5 w-5 text-slate-600" />{t('数据库', 'Database')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(db)}</pre><div className="mt-4 flex flex-wrap gap-3"><button type="button" className="btn-secondary" onClick={() => action('/admin/db_initialize')}><HardDrive size={16} /> {t('初始化', 'Initialize')}</button><button type="button" className="btn-secondary" onClick={() => action('/admin/db_migration')}><Database size={16} /> {t('迁移', 'Migrate')}</button></div></div><div className="panel p-5"><h3 className="panel-title"><Cloud className="mr-2 inline h-5 w-5 text-slate-600" />{t('Worker 配置', 'Worker config')}</h3><pre className="code-area mt-4 max-h-80">{jsonPretty(workerConfig)}</pre></div><div className="panel p-5 xl:col-span-2"><h3 className="panel-title">{t('清理任务', 'Cleanup task')}</h3><div className="maintenance-cleanup-grid mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_auto]"><label className="maintenance-cleanup-field"><span className="form-label">{t('清理范围', 'Cleanup scope')}</span><PopoverSelect className="maintenance-cleanup-select compact-settings-select" ariaLabel={t('清理范围', 'Cleanup scope')} value={cleanType} options={[{ value: 'raw_mails', label: t('收件 raw_mails', 'Inbox raw_mails') }, { value: 'sendbox', label: t('发件 sendbox', 'Sent sendbox') }, { value: 'address', label: t('地址 address', 'Address table') }, { value: 'custom_sql', label: t('自定义 SQL 配置', 'Custom SQL config') }]} onChange={setCleanType} /></label><label className="maintenance-cleanup-field"><span className="form-label">{t('保留天数', 'Retention days')}</span><input className="form-input compact-control" type="number" min={0} value={cleanDays} onChange={(e) => setCleanDays(Number(e.target.value))} /></label><div className="maintenance-cleanup-action"><span className="form-label maintenance-cleanup-action-label">{t('操作', 'Action')}</span><button type="button" className="btn-danger compact maintenance-cleanup-button" onClick={() => action('/admin/cleanup', { cleanType, cleanDays })}><Trash2 size={16} /> {t('执行清理', 'Run cleanup')}</button></div></div><div className="mt-5"><GenericSettingsCard title={t('自动清理配置', 'Auto cleanup config')} endpoint="/admin/auto_cleanup" request={request} notify={notify} /></div></div></div></div></div>;
+  return (
+    <div className="maintenance-view-shell h-full overflow-y-auto">
+      <div className="product-page">
+        <header className="page-head">
+          <div className="page-head-copy">
+            <span className="product-kicker">{t('系统运维', 'System operations')}</span>
+            <h1 className="page-title">{t('维护', 'Maintenance')}</h1>
+            <p className="page-lede">{t('数据库状态、Worker 配置快照与数据清理。', 'Database status, Worker configuration snapshot and data cleanup.')}</p>
+          </div>
+          <div className="page-head-actions">
+            <button type="button" className="product-button product-button-quiet" onClick={load}><RefreshCw size={16} /> {t('刷新状态', 'Refresh')}</button>
+          </div>
+        </header>
+
+        <section className="maintenance-status-section maint-grid" aria-label={t('运行状态', 'Runtime status')}>
+          <article className="paper-card">
+            <div className="maint-pane-head">
+              <Database size={17} />
+              <h3>{t('数据库', 'Database')}</h3>
+              <span className="maint-pane-meta">{t('实时快照', 'Live snapshot')}</span>
+            </div>
+            <pre className="code-area maintenance-code-area">{jsonPretty(db)}</pre>
+            <div className="maint-actions">
+              <button type="button" className="product-button product-button-quiet" onClick={() => action('/admin/db_initialize')}><HardDrive size={16} /> {t('初始化', 'Initialize')}</button>
+              <button type="button" className="product-button product-button-quiet" onClick={() => action('/admin/db_migration')}><Database size={16} /> {t('迁移', 'Migrate')}</button>
+            </div>
+          </article>
+          <article className="paper-card">
+            <div className="maint-pane-head">
+              <Cloud size={17} />
+              <h3>{t('Worker 配置', 'Worker configuration')}</h3>
+              <span className="maint-pane-meta">{t('实时快照', 'Live snapshot')}</span>
+            </div>
+            <pre className="code-area maintenance-code-area">{jsonPretty(workerConfig)}</pre>
+          </article>
+        </section>
+
+        <section className="maint-lower">
+          <article className="paper-card">
+            <header className="card-head">
+              <h2 className="card-title">{t('数据清理', 'Data cleanup')}</h2>
+              <span className="maint-danger-chip">{t('不可撤销', 'Irreversible')}</span>
+            </header>
+            <div className="maintenance-cleanup-grid">
+              <label className="maintenance-cleanup-field">
+                <span className="form-label">{t('清理范围', 'Cleanup scope')}</span>
+                <PopoverSelect className="maintenance-cleanup-select compact-settings-select" ariaLabel={t('清理范围', 'Cleanup scope')} value={cleanType} options={[{ value: 'raw_mails', label: t('收件 raw_mails', 'Inbox raw_mails') }, { value: 'sendbox', label: t('发件 sendbox', 'Sent sendbox') }, { value: 'address', label: t('地址 address', 'Address table') }, { value: 'custom_sql', label: t('自定义 SQL 配置', 'Custom SQL config') }]} onChange={setCleanType} />
+              </label>
+              <label className="maintenance-cleanup-field">
+                <span className="form-label">{t('保留天数', 'Retention days')}</span>
+                <input className="form-input compact-control" type="number" min={0} value={cleanDays} onChange={(e) => setCleanDays(Number(e.target.value))} />
+              </label>
+              <div className="maintenance-cleanup-action">
+                <span className="form-label maintenance-cleanup-action-label">{t('操作', 'Action')}</span>
+                <button type="button" className="btn-danger maintenance-cleanup-button" onClick={() => action('/admin/cleanup', { cleanType, cleanDays })}><Trash2 size={16} /> {t('执行清理', 'Run cleanup')}</button>
+              </div>
+            </div>
+          </article>
+
+          <GenericSettingsCard title={t('自动清理配置', 'Auto cleanup config')} endpoint="/admin/auto_cleanup" request={request} notify={notify} />
+        </section>
+      </div>
+    </div>
+  );
 }
-
-

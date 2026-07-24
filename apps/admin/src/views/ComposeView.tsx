@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, Loader2, Send, Sparkles } from 'lucide-react';
+import { Eye, Loader2, Send } from 'lucide-react';
 import type { Requester } from '../lib/api';
 import { buildMailHtmlDocument } from '../lib/mailParser';
 import { safeJsonParse } from '../lib/format';
@@ -129,7 +129,37 @@ export function ComposeView({ request, notify, seed, clearSeed }: { request: Req
     else setBinding(emptyBinding);
   };
 
-  return <div className="compose-view-shell h-full overflow-y-auto p-3 md:p-5"><div className="mx-auto max-w-5xl panel p-4 md:p-6"><div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('写邮件', 'Compose')}</h2></div><div className="flex gap-2"><button type="button" className="btn-secondary" onClick={() => setPreview(!preview)}><Eye size={16} /> {preview ? t('编辑', 'Edit') : t('预览', 'Preview')}</button></div></div><div className="compose-mode-switch mb-4 grid rounded-2xl bg-slate-50 p-1 sm:grid-cols-2"><button type="button" className={mode === 'standard' ? 'rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm' : 'rounded-xl px-4 py-2 text-sm font-medium text-slate-500'} onClick={() => setMode('standard')}>{t('标准发送', 'Standard')}</button><button type="button" className={mode === 'binding' ? 'rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm' : 'rounded-xl px-4 py-2 text-sm font-medium text-slate-500'} onClick={() => setMode('binding')}><Sparkles className="mr-1 inline h-4 w-4" />Binding</button></div>{mode === 'standard' ? <StandardComposer model={model} setModel={setModel} preview={preview} /> : <BindingComposer binding={binding} setBinding={setBinding} preview={preview} payload={bindingPayload} />}<div className="mt-5 flex justify-end gap-3"><button type="button" className="btn-secondary" onClick={clearDraft}>{t('清空', 'Clear')}</button><button type="button" className="btn-primary" disabled={sending} onClick={send}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />} {t('发送', 'Send')}</button></div></div></div>;
+  return (
+    <div className="compose-view-shell compose-workspace h-full overflow-y-auto">
+      <div className="compose-canvas">
+        <header className="page-head compose-head">
+          <div className="page-head-copy">
+            <span className="product-kicker">{t('邮件工作台', 'Mail desk')}</span>
+            <h1 className="page-title">{t('写邮件', 'Compose')}</h1>
+          </div>
+          <div className="page-head-actions">
+            <div className="compose-mode-switch" role="tablist" aria-label={t('发送方式', 'Send mode')}>
+              <button type="button" role="tab" aria-selected={mode === 'standard'} className={mode === 'standard' ? 'compose-mode-option is-active' : 'compose-mode-option'} onClick={() => setMode('standard')}>{t('标准发送', 'Standard')}</button>
+              <button type="button" role="tab" aria-selected={mode === 'binding'} className={mode === 'binding' ? 'compose-mode-option is-active' : 'compose-mode-option'} onClick={() => setMode('binding')}>Binding</button>
+            </div>
+            <button type="button" className="product-button product-button-quiet" onClick={() => setPreview(!preview)}><Eye size={16} /> {preview ? t('编辑', 'Edit') : t('预览', 'Preview')}</button>
+          </div>
+        </header>
+        <div className="compose-sheet">
+          <div className="compose-sheet-body">
+            {mode === 'standard' ? <StandardComposer model={model} setModel={setModel} preview={preview} /> : <BindingComposer binding={binding} setBinding={setBinding} preview={preview} payload={bindingPayload} />}
+          </div>
+          <footer className="compose-sheet-foot">
+            <span className="compose-foot-hint">{mode === 'standard' ? t('以站内地址向单个收件人发送', 'Send from a site address to one recipient') : t('通过 Resend Binding 通道发送', 'Send through the Resend binding channel')}</span>
+            <div className="compose-foot-actions">
+              <button type="button" className="btn-secondary" onClick={clearDraft}>{t('清空', 'Clear')}</button>
+              <button type="button" className="btn-primary compose-send-btn" disabled={sending} onClick={send}>{sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send size={16} />} {t('发送', 'Send')}</button>
+            </div>
+          </footer>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function StandardComposer({ model, setModel, preview }: { model: ComposePayload; setModel: (model: ComposePayload) => void; preview: boolean }) {
@@ -139,7 +169,6 @@ function StandardComposer({ model, setModel, preview }: { model: ComposePayload;
 
 function BindingComposer({ binding, setBinding, preview, payload }: { binding: BindingDraft; setBinding: (model: BindingDraft) => void; preview: boolean; payload: BindingSendPayload }) {
   const t = (zh: string, en: string) => localeText(zh, en);
-  return <div className="space-y-3"><div className="grid gap-3 md:grid-cols-2"><div><label className="form-label">From</label><input className="form-input" value={binding.from} onChange={(e) => setBinding({ ...binding, from: e.target.value })} placeholder="sender@example.com" /></div><div><label className="form-label">{t('To（多个用逗号分隔）', 'To (comma separated)')}</label><input className="form-input" value={binding.to} onChange={(e) => setBinding({ ...binding, to: e.target.value })} placeholder="a@example.com,b@example.com" /></div><div><label className="form-label">Cc</label><input className="form-input" value={binding.cc} onChange={(e) => setBinding({ ...binding, cc: e.target.value })} /></div><div><label className="form-label">Bcc</label><input className="form-input" value={binding.bcc} onChange={(e) => setBinding({ ...binding, bcc: e.target.value })} /></div><div><label className="form-label">Reply-To</label><input className="form-input" value={binding.replyTo} onChange={(e) => setBinding({ ...binding, replyTo: e.target.value })} /></div><div><label className="form-label">Subject</label><input className="form-input" value={binding.subject} onChange={(e) => setBinding({ ...binding, subject: e.target.value })} /></div></div><div className="grid gap-3 xl:grid-cols-2"><div><label className="form-label">{t('HTML 正文', 'HTML body')}</label>{preview && binding.html ? <iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" className="mail-frame" srcDoc={buildMailHtmlDocument(binding.html)} /> : <textarea className="form-textarea min-h-52" value={binding.html} onChange={(e) => setBinding({ ...binding, html: e.target.value })} />}</div><div><label className="form-label">{t('纯文本正文', 'Plain text body')}</label><textarea className="form-textarea min-h-52" value={binding.text} onChange={(e) => setBinding({ ...binding, text: e.target.value })} /></div></div><div><label className="form-label">Headers JSON</label><textarea className="code-area h-28" value={binding.headersJson} onChange={(e) => setBinding({ ...binding, headersJson: e.target.value })} /></div><details className="rounded-2xl border border-slate-100 bg-slate-50 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-600">{t('数据预览', 'Data preview')}</summary><pre className="mt-3 max-h-64 overflow-auto text-xs text-slate-500">{JSON.stringify(payload, null, 2)}</pre></details></div>;
+  return <div className="space-y-3"><div className="grid gap-3 md:grid-cols-2"><div><label className="form-label">From</label><input className="form-input" value={binding.from} onChange={(e) => setBinding({ ...binding, from: e.target.value })} placeholder="sender@example.com" /></div><div><label className="form-label">{t('To（多个用逗号分隔）', 'To (comma separated)')}</label><input className="form-input" value={binding.to} onChange={(e) => setBinding({ ...binding, to: e.target.value })} placeholder="a@example.com,b@example.com" /></div><div><label className="form-label">Cc</label><input className="form-input" value={binding.cc} onChange={(e) => setBinding({ ...binding, cc: e.target.value })} /></div><div><label className="form-label">Bcc</label><input className="form-input" value={binding.bcc} onChange={(e) => setBinding({ ...binding, bcc: e.target.value })} /></div><div><label className="form-label">Reply-To</label><input className="form-input" value={binding.replyTo} onChange={(e) => setBinding({ ...binding, replyTo: e.target.value })} /></div><div><label className="form-label">Subject</label><input className="form-input" value={binding.subject} onChange={(e) => setBinding({ ...binding, subject: e.target.value })} /></div></div><div className="grid gap-3 xl:grid-cols-2"><div><label className="form-label">{t('HTML 正文', 'HTML body')}</label>{preview && binding.html ? <iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" className="mail-frame" srcDoc={buildMailHtmlDocument(binding.html)} /> : <textarea className="form-textarea min-h-52" value={binding.html} onChange={(e) => setBinding({ ...binding, html: e.target.value })} />}</div><div><label className="form-label">{t('纯文本正文', 'Plain text body')}</label><textarea className="form-textarea min-h-52" value={binding.text} onChange={(e) => setBinding({ ...binding, text: e.target.value })} /></div></div><div><label className="form-label">Headers JSON</label><textarea className="code-area h-28" value={binding.headersJson} onChange={(e) => setBinding({ ...binding, headersJson: e.target.value })} /></div><details className="compose-data-preview"><summary>{t('数据预览', 'Data preview')}</summary><pre>{JSON.stringify(payload, null, 2)}</pre></details></div>;
 }
-
 

@@ -678,6 +678,81 @@ async function collect(ws, name) {
   return info;
 }
 
+async function inspectWorkspace(ws, name, {
+  rootSelector,
+  structuralSelectors = [],
+  controlSelector = '',
+  transparentActionSelector = '',
+}) {
+  const spec = JSON.stringify({ rootSelector, structuralSelectors, controlSelector, transparentActionSelector });
+  const raw = await evaluate(ws, `JSON.stringify((() => {
+    const spec = ${spec};
+    const visible = (element) => Boolean(element && element.getClientRects().length && getComputedStyle(element).display !== 'none');
+    const styleOf = (element, selector) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return {
+        selector,
+        borderRadius: style.borderRadius,
+        radius: Number.parseFloat(style.borderRadius) || 0,
+        backgroundColor: style.backgroundColor,
+        boxShadow: style.boxShadow,
+        borderWidth: style.borderWidth,
+        padding: style.padding,
+        rect: { left: rect.left, right: rect.right, width: rect.width, height: rect.height },
+      };
+    };
+    const root = document.querySelector(spec.rootSelector);
+    const structures = spec.structuralSelectors.flatMap((selector) =>
+      [...document.querySelectorAll(selector)].filter(visible).map((element) => styleOf(element, selector))
+    );
+    const controls = spec.controlSelector
+      ? [...document.querySelectorAll(spec.controlSelector)].filter(visible).map((element) => styleOf(element, spec.controlSelector))
+      : [];
+    const transparentActions = spec.transparentActionSelector
+      ? [...document.querySelectorAll(spec.transparentActionSelector)].filter(visible).map((element) => styleOf(element, spec.transparentActionSelector))
+      : [];
+    return {
+      name: ${JSON.stringify(name)},
+      root: visible(root) ? styleOf(root, spec.rootSelector) : null,
+      directPanelCount: root ? root.querySelectorAll(':scope > .panel').length : -1,
+      structures,
+      controls,
+      transparentActions,
+      xOverflow: document.documentElement.scrollWidth > innerWidth + 1 || document.body.scrollWidth > innerWidth + 1,
+      viewport: { width: innerWidth, height: innerHeight },
+    };
+  })())`);
+  return JSON.parse(raw);
+}
+
+async function inspectScrollFit(ws, name, selector) {
+  const raw = await evaluate(ws, `JSON.stringify((() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    return {
+      name: ${JSON.stringify(name)},
+      exists: Boolean(element),
+      clientWidth: element?.clientWidth || 0,
+      scrollWidth: element?.scrollWidth || 0,
+    };
+  })())`);
+  return JSON.parse(raw);
+}
+
+function assertWorkspaceLayout(info, label, { fullWidth = false } = {}) {
+  assert(info.root, `${label} workspace root should be visible: ${JSON.stringify(info)}`);
+  assert(info.directPanelCount === 0, `${label} should not restore an outer panel: ${JSON.stringify(info)}`);
+  assert(!info.xOverflow, `${label} has horizontal page overflow: ${JSON.stringify(info)}`);
+  assert(info.root.radius === 0 && info.root.boxShadow === 'none', `${label} root should be flat: ${JSON.stringify(info)}`);
+  assert(info.structures.length > 0, `${label} structural surfaces should render: ${JSON.stringify(info)}`);
+  assert(info.structures.every((item) => item.radius === 0 && item.boxShadow === 'none'), `${label} structural surfaces should stay square and shadowless: ${JSON.stringify(info)}`);
+  assert(info.controls.every((item) => item.radius <= 8), `${label} controls should use restrained radii: ${JSON.stringify(info)}`);
+  assert(info.transparentActions.every((item) => item.backgroundColor === 'rgba(0, 0, 0, 0)'), `${label} row actions should use transparent backgrounds: ${JSON.stringify(info)}`);
+  if (fullWidth) {
+    assert(info.root.rect.left <= 1 && info.root.rect.right >= info.viewport.width - 1, `${label} should fill the mobile canvas: ${JSON.stringify(info)}`);
+  }
+}
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -972,6 +1047,21 @@ async function main() {
   assert(!mobileAddress.xOverflow, 'mobile address has horizontal overflow');
   assert(mobileAddress.senderToggle, 'sender access collapsed toggle missing');
   assert(!mobileAddress.senderPanelMounted, 'sender access panel should be collapsed by default');
+  const mobileAddressLayout = await inspectWorkspace(mobile, 'mobile-address-workspace-layout', {
+    rootSelector: '.address-view-shell.address-workspace',
+    structuralSelectors: [
+      '.address-workspace .workspace-page-header',
+      '.address-workspace .address-toolbar',
+      '.address-workspace .workspace-data-surface',
+      '.address-workspace .mobile-address-card',
+      '.address-workspace .sender-access-shell',
+      '.address-workspace .sender-access-toggle',
+    ],
+    controlSelector: '.address-workspace :is(.btn-primary, .btn-secondary, .toolbar-field, .user-filter-trigger, .popover-select-trigger, .page-btn, .pagination-size-trigger, .mobile-address-more)',
+    transparentActionSelector: '.address-workspace .mobile-address-more',
+  });
+  extraResults.push(mobileAddressLayout);
+  assertWorkspaceLayout(mobileAddressLayout, 'mobile address', { fullWidth: true });
   if (mockServer) {
     await evaluate(mobile, `(() => {
       const input = document.querySelector('.address-search-field input');
@@ -1111,6 +1201,24 @@ async function main() {
     const mobileAddressUsers = await collect(mobile, 'mobile-address-users-open');
     extraResults.push(mobileAddressUsers);
     assert(mobileAddressUsers.userOptions.some((item) => item.includes('alice@example.test') && item.includes('2 个地址')), `user filter should show concrete users and address counts: ${mobileAddressUsers.userOptions.join(' | ')}`);
+    const mobileUserFilterSurface = JSON.parse(await evaluate(mobile, `JSON.stringify((() => {
+      const styleOf = (selector) => {
+        const element = document.querySelector(selector);
+        if (!element) return null;
+        const style = getComputedStyle(element);
+        return { borderRadius: style.borderRadius, radius: Number.parseFloat(style.borderRadius) || 0, backgroundColor: style.backgroundColor, boxShadow: style.boxShadow };
+      };
+      return {
+        name: 'mobile-address-user-filter-surface',
+        menu: styleOf('.address-workspace .user-filter-menu'),
+        option: styleOf('.address-workspace .user-filter-option'),
+        count: styleOf('.address-workspace .user-filter-option-count'),
+      };
+    })())`));
+    extraResults.push(mobileUserFilterSurface);
+    assert(mobileUserFilterSurface.menu?.radius <= 8, `address user filter should not use an oversized rounded popover: ${JSON.stringify(mobileUserFilterSurface)}`);
+    assert(mobileUserFilterSurface.option?.radius <= 4, `address user filter rows should use restrained radii: ${JSON.stringify(mobileUserFilterSurface)}`);
+    assert(mobileUserFilterSurface.count?.radius <= 4, `address user filter counts should not be pills: ${JSON.stringify(mobileUserFilterSurface)}`);
     await clickSelector(mobile, '.user-filter-option', 'alice@example.test');
     const mobileAddressFiltered = await collect(mobile, 'mobile-address-user-filtered');
     extraResults.push(mobileAddressFiltered);
@@ -1122,7 +1230,202 @@ async function main() {
   const dark = await openApp({ width: 390, height: 844, dark: true });
   const mobileDark = await collect(dark, 'mobile-dark');
   assert(!mobileDark.xOverflow, 'mobile dark mode has horizontal overflow');
+  await clickText(dark, '地址');
+  const mobileDarkAddress = await collect(dark, 'mobile-dark-address');
+  extraResults.push(mobileDarkAddress);
+  const mobileDarkAddressLayout = await inspectWorkspace(dark, 'mobile-dark-address-workspace-layout', {
+    rootSelector: '.address-view-shell.address-workspace',
+    structuralSelectors: [
+      '.address-workspace .workspace-page-header',
+      '.address-workspace .address-toolbar',
+      '.address-workspace .workspace-data-surface',
+      '.address-workspace .mobile-address-card',
+      '.address-workspace .sender-access-shell',
+      '.address-workspace .sender-access-toggle',
+    ],
+    controlSelector: '.address-workspace :is(.btn-primary, .btn-secondary, .toolbar-field, .user-filter-trigger, .popover-select-trigger, .page-btn, .pagination-size-trigger, .mobile-address-more)',
+    transparentActionSelector: '.address-workspace .mobile-address-more',
+  });
+  extraResults.push(mobileDarkAddressLayout);
+  assertWorkspaceLayout(mobileDarkAddressLayout, 'mobile dark address', { fullWidth: true });
+  assert(mobileDarkAddressLayout.root.backgroundColor !== 'rgb(255, 255, 255)', `dark address workspace should use a dark surface: ${JSON.stringify(mobileDarkAddressLayout.root)}`);
+  await evaluate(dark, `document.querySelector('.mobile-nav-item[aria-haspopup="menu"]')?.click()`);
+  await sleep(250);
+  await evaluate(dark, `(() => {
+    const button = [...document.querySelectorAll('.mobile-more-item')].find((el) => el.textContent.includes('用户管理'));
+    button?.click();
+  })()`);
+  await sleep(900);
+  const mobileDarkUsers = await collect(dark, 'mobile-dark-users');
+  extraResults.push(mobileDarkUsers);
+  const mobileDarkUsersLayout = await inspectWorkspace(dark, 'mobile-dark-users-workspace-layout', {
+    rootSelector: '.users-view-shell.users-workspace',
+    structuralSelectors: [
+      '.users-workspace .workspace-page-header',
+      '.users-workspace .workspace-data-surface',
+      '.users-workspace .users-toolbar',
+      '.users-workspace .user-mobile-card',
+    ],
+    controlSelector: '.users-workspace :is(.btn-primary, .btn-secondary, .btn-danger, .users-search-input, .page-btn, .pagination-size-trigger)',
+    transparentActionSelector: '.users-workspace .user-mobile-card :is(.btn-secondary, .btn-danger)',
+  });
+  extraResults.push(mobileDarkUsersLayout);
+  assertWorkspaceLayout(mobileDarkUsersLayout, 'mobile dark users', { fullWidth: true });
+  assert(mobileDarkUsersLayout.root.backgroundColor !== 'rgb(255, 255, 255)', `dark users workspace should use a dark surface: ${JSON.stringify(mobileDarkUsersLayout.root)}`);
+  await evaluate(dark, `document.querySelector('.mobile-nav-item[aria-haspopup="menu"]')?.click()`);
+  await sleep(250);
+  await evaluate(dark, `(() => {
+    const button = [...document.querySelectorAll('.mobile-more-item')].find((el) => el.textContent.includes('写邮件'));
+    button?.click();
+  })()`);
+  await sleep(900);
+  const mobileDarkCompose = await collect(dark, 'mobile-dark-compose');
+  extraResults.push(mobileDarkCompose);
+  const mobileDarkComposeLayout = await inspectWorkspace(dark, 'mobile-dark-compose-workspace-layout', {
+    rootSelector: '.compose-view-shell.compose-workspace',
+    structuralSelectors: [
+      '.compose-workspace .workspace-page-header',
+      '.compose-workspace .compose-mode-switch',
+      '.compose-workspace .compose-editor-region',
+      '.compose-workspace .compose-action-bar',
+    ],
+    controlSelector: '.compose-workspace :is(.btn-primary, .btn-secondary, .compose-mode-option, .form-input, .form-textarea, .code-area, .mail-frame)',
+  });
+  extraResults.push(mobileDarkComposeLayout);
+  assertWorkspaceLayout(mobileDarkComposeLayout, 'mobile dark compose', { fullWidth: true });
+  assert(mobileDarkComposeLayout.root.backgroundColor !== 'rgb(255, 255, 255)', `dark compose workspace should use a dark surface: ${JSON.stringify(mobileDarkComposeLayout.root)}`);
   dark.close();
+
+  const mobileAdminPages = await openApp({ width: 390, height: 844 });
+  await evaluate(mobileAdminPages, `(() => {
+    const button = [...document.querySelectorAll('button')].find((el) => el.offsetParent && el.textContent.trim() === '系统设置');
+    button?.click();
+  })()`);
+  await sleep(900);
+  const mobileSettings = await collect(mobileAdminPages, 'mobile-settings');
+  extraResults.push(mobileSettings);
+  assert(!mobileSettings.xOverflow, 'mobile settings has horizontal overflow');
+  await evaluate(mobileAdminPages, `document.querySelector('.mobile-nav-item[aria-haspopup="menu"]')?.click()`);
+  await sleep(250);
+  await evaluate(mobileAdminPages, `(() => {
+    const button = [...document.querySelectorAll('.mobile-more-item')].find((el) => el.textContent.includes('维护'));
+    button?.click();
+  })()`);
+  await sleep(900);
+  const mobileMaintenance = await collect(mobileAdminPages, 'mobile-maintenance');
+  extraResults.push(mobileMaintenance);
+  assert(!mobileMaintenance.xOverflow, 'mobile maintenance has horizontal overflow');
+
+  await evaluate(mobileAdminPages, `document.querySelector('.mobile-nav-item[aria-haspopup="menu"]')?.click()`);
+  await sleep(250);
+  await evaluate(mobileAdminPages, `(() => {
+    const button = [...document.querySelectorAll('.mobile-more-item')].find((el) => el.textContent.includes('用户管理'));
+    button?.click();
+  })()`);
+  await sleep(900);
+  const mobileUsers = await collect(mobileAdminPages, 'mobile-users');
+  extraResults.push(mobileUsers);
+  const mobileUsersLayout = await inspectWorkspace(mobileAdminPages, 'mobile-users-workspace-layout', {
+    rootSelector: '.users-view-shell.users-workspace',
+    structuralSelectors: [
+      '.users-workspace .workspace-page-header',
+      '.users-workspace .workspace-data-surface',
+      '.users-workspace .users-toolbar',
+      '.users-workspace .user-mobile-card',
+    ],
+    controlSelector: '.users-workspace :is(.btn-primary, .btn-secondary, .btn-danger, .users-search-input, .page-btn, .pagination-size-trigger)',
+    transparentActionSelector: '.users-workspace .user-mobile-card :is(.btn-secondary, .btn-danger)',
+  });
+  extraResults.push(mobileUsersLayout);
+  assertWorkspaceLayout(mobileUsersLayout, 'mobile users', { fullWidth: true });
+  await evaluate(mobileAdminPages, `document.querySelector('.users-workspace .user-mobile-card')?.click()`);
+  await sleep(900);
+  const mobileUsersExpanded = await collect(mobileAdminPages, 'mobile-users-expanded');
+  extraResults.push(mobileUsersExpanded);
+  const mobileUsersExpandedLayout = await inspectWorkspace(mobileAdminPages, 'mobile-users-expanded-workspace-layout', {
+    rootSelector: '.users-view-shell.users-workspace',
+    structuralSelectors: [
+      '.users-workspace .user-mobile-card',
+      '.users-workspace .user-inline-motion-inner',
+      '.users-workspace .user-address-inline',
+    ],
+    controlSelector: '.users-workspace :is(.btn-primary, .btn-secondary, .btn-danger, .form-input)',
+    transparentActionSelector: '.users-workspace .user-mobile-card :is(.btn-secondary, .btn-danger)',
+  });
+  extraResults.push(mobileUsersExpandedLayout);
+  assertWorkspaceLayout(mobileUsersExpandedLayout, 'mobile users expanded', { fullWidth: true });
+
+  await evaluate(mobileAdminPages, `document.querySelector('.mobile-nav-item[aria-haspopup="menu"]')?.click()`);
+  await sleep(250);
+  await evaluate(mobileAdminPages, `(() => {
+    const button = [...document.querySelectorAll('.mobile-more-item')].find((el) => el.textContent.includes('写邮件'));
+    button?.click();
+  })()`);
+  await sleep(900);
+  const mobileCompose = await collect(mobileAdminPages, 'mobile-compose');
+  extraResults.push(mobileCompose);
+  const mobileComposeLayout = await inspectWorkspace(mobileAdminPages, 'mobile-compose-workspace-layout', {
+    rootSelector: '.compose-view-shell.compose-workspace',
+    structuralSelectors: [
+      '.compose-workspace .workspace-page-header',
+      '.compose-workspace .compose-mode-switch',
+      '.compose-workspace .compose-editor-region',
+      '.compose-workspace .compose-action-bar',
+    ],
+    controlSelector: '.compose-workspace :is(.btn-primary, .btn-secondary, .compose-mode-option, .form-input, .form-textarea, .code-area, .mail-frame)',
+  });
+  extraResults.push(mobileComposeLayout);
+  assertWorkspaceLayout(mobileComposeLayout, 'mobile compose', { fullWidth: true });
+  await clickSelector(mobileAdminPages, '.compose-mode-option', 'Binding');
+  await sleep(500);
+  const mobileComposeBinding = await collect(mobileAdminPages, 'mobile-compose-binding');
+  extraResults.push(mobileComposeBinding);
+  assert(!mobileComposeBinding.xOverflow, 'mobile Binding composer has horizontal overflow');
+  await evaluate(mobileAdminPages, `document.querySelector('.compose-action-bar')?.scrollIntoView({ block: 'end' })`);
+  await sleep(300);
+  const mobileComposeFooter = await collect(mobileAdminPages, 'mobile-compose-footer');
+  extraResults.push(mobileComposeFooter);
+  assert(!mobileComposeFooter.xOverflow, 'mobile compose footer has horizontal overflow');
+  mobileAdminPages.close();
+
+  const narrowMobile = await openApp({ width: 320, height: 720 });
+  await clickText(narrowMobile, '地址');
+  const narrowAddress = await collect(narrowMobile, 'narrow-mobile-address');
+  extraResults.push(narrowAddress);
+  assert(!narrowAddress.xOverflow, '320px address workspace has horizontal overflow');
+  await evaluate(narrowMobile, `document.querySelector('.mobile-nav-item[aria-haspopup="menu"]')?.click()`);
+  await sleep(250);
+  await evaluate(narrowMobile, `(() => {
+    const button = [...document.querySelectorAll('.mobile-more-item')].find((el) => el.textContent.includes('用户管理'));
+    button?.click();
+  })()`);
+  await sleep(900);
+  const narrowUsers = await collect(narrowMobile, 'narrow-mobile-users');
+  extraResults.push(narrowUsers);
+  assert(!narrowUsers.xOverflow, '320px user workspace has horizontal overflow');
+  const narrowUserActions = JSON.parse(await evaluate(narrowMobile, `JSON.stringify((() => {
+    const buttons = [...document.querySelectorAll('.users-workspace .user-mobile-actions button')];
+    return {
+      name: 'narrow-mobile-user-actions',
+      count: buttons.length,
+      labelsHidden: buttons.every((button) => getComputedStyle(button.querySelector('span')).display === 'none'),
+      named: buttons.every((button) => Boolean(button.getAttribute('aria-label') && button.getAttribute('title'))),
+      clipped: buttons.some((button) => button.scrollWidth > button.clientWidth + 1),
+    };
+  })())`));
+  extraResults.push(narrowUserActions);
+  assert(narrowUserActions.count > 0 && narrowUserActions.labelsHidden && narrowUserActions.named && !narrowUserActions.clipped, `320px user actions should remain compact, named, and unclipped: ${JSON.stringify(narrowUserActions)}`);
+  await evaluate(narrowMobile, `document.querySelector('.mobile-nav-item[aria-haspopup="menu"]')?.click()`);
+  await sleep(250);
+  await evaluate(narrowMobile, `(() => {
+    const button = [...document.querySelectorAll('.mobile-more-item')].find((el) => el.textContent.includes('写邮件'));
+    button?.click();
+  })()`);
+  await sleep(900);
+  const narrowCompose = await collect(narrowMobile, 'narrow-mobile-compose');
+  extraResults.push(narrowCompose);
+  assert(!narrowCompose.xOverflow, '320px compose workspace has horizontal overflow');
+  narrowMobile.close();
 
   const landscape = await openApp({ width: 844, height: 390, mobile: true });
   await clickText(landscape, '收件箱');
@@ -1134,6 +1437,77 @@ async function main() {
     `mobile landscape mail list should fill available width: ${mobileLandscapeInbox.mailListWidth}/${mobileLandscapeInbox.viewport.width}`,
   );
   landscape.close();
+
+  const tablet = await openApp({ width: 1024, height: 768, mobile: false });
+  const tabletDashboard = await collect(tablet, 'tablet-dashboard');
+  extraResults.push(tabletDashboard);
+  assert(!tabletDashboard.xOverflow, 'tablet dashboard has horizontal overflow');
+  await clickText(tablet, '地址管理');
+  const tabletAddress = await collect(tablet, 'tablet-address');
+  extraResults.push(tabletAddress);
+  const tabletAddressLayout = await inspectWorkspace(tablet, 'tablet-address-workspace-layout', {
+    rootSelector: '.address-view-shell.address-workspace',
+    structuralSelectors: [
+      '.address-workspace .workspace-page-header',
+      '.address-workspace .address-toolbar',
+      '.address-workspace .workspace-data-surface',
+      '.address-workspace .data-table',
+      '.address-workspace .sender-access-shell',
+      '.address-workspace .sender-access-toggle',
+    ],
+    controlSelector: '.address-workspace :is(.btn-primary, .btn-secondary, .toolbar-field, .user-filter-trigger, .popover-select-trigger, .page-btn, .pagination-size-trigger, .table-action)',
+    transparentActionSelector: '.address-workspace .table-action',
+  });
+  extraResults.push(tabletAddressLayout);
+  assertWorkspaceLayout(tabletAddressLayout, 'tablet address');
+  const tabletAddressTableFit = await inspectScrollFit(tablet, 'tablet-address-table-fit', '.address-workspace .address-table-wrap');
+  extraResults.push(tabletAddressTableFit);
+  assert(tabletAddressTableFit.exists && tabletAddressTableFit.scrollWidth <= tabletAddressTableFit.clientWidth + 1, `tablet address actions should remain visible without horizontal table scrolling: ${JSON.stringify(tabletAddressTableFit)}`);
+  await clickText(tablet, '用户管理');
+  const tabletUsers = await collect(tablet, 'tablet-users');
+  extraResults.push(tabletUsers);
+  const tabletUsersLayout = await inspectWorkspace(tablet, 'tablet-users-workspace-layout', {
+    rootSelector: '.users-view-shell.users-workspace',
+    structuralSelectors: [
+      '.users-workspace .workspace-page-header',
+      '.users-workspace .workspace-data-surface',
+      '.users-workspace .users-toolbar',
+      '.users-workspace .user-grid-list',
+      '.users-workspace .user-grid-item',
+      '.users-workspace .user-grid-body-row',
+    ],
+    controlSelector: '.users-workspace :is(.btn-primary, .btn-secondary, .users-search-input, .page-btn, .pagination-size-trigger, .table-action)',
+    transparentActionSelector: '.users-workspace .table-action',
+  });
+  extraResults.push(tabletUsersLayout);
+  assertWorkspaceLayout(tabletUsersLayout, 'tablet users');
+  const tabletUsersTableFit = await inspectScrollFit(tablet, 'tablet-users-table-fit', '.users-workspace .user-grid-scroll');
+  extraResults.push(tabletUsersTableFit);
+  assert(tabletUsersTableFit.exists && tabletUsersTableFit.scrollWidth <= tabletUsersTableFit.clientWidth + 1, `tablet user actions should remain visible without horizontal table scrolling: ${JSON.stringify(tabletUsersTableFit)}`);
+  await clickText(tablet, '写邮件');
+  const tabletCompose = await collect(tablet, 'tablet-compose');
+  extraResults.push(tabletCompose);
+  const tabletComposeLayout = await inspectWorkspace(tablet, 'tablet-compose-workspace-layout', {
+    rootSelector: '.compose-view-shell.compose-workspace',
+    structuralSelectors: [
+      '.compose-workspace .workspace-page-header',
+      '.compose-workspace .compose-mode-switch',
+      '.compose-workspace .compose-editor-region',
+      '.compose-workspace .compose-action-bar',
+    ],
+    controlSelector: '.compose-workspace :is(.btn-primary, .btn-secondary, .compose-mode-option, .form-input, .form-textarea, .code-area, .mail-frame)',
+  });
+  extraResults.push(tabletComposeLayout);
+  assertWorkspaceLayout(tabletComposeLayout, 'tablet compose');
+  await clickText(tablet, '系统设置');
+  const tabletSettings = await collect(tablet, 'tablet-settings');
+  extraResults.push(tabletSettings);
+  assert(!tabletSettings.xOverflow, 'tablet settings has horizontal overflow');
+  await clickText(tablet, '维护');
+  const tabletMaintenance = await collect(tablet, 'tablet-maintenance');
+  extraResults.push(tabletMaintenance);
+  assert(!tabletMaintenance.xOverflow, 'tablet maintenance has horizontal overflow');
+  tablet.close();
 
   const compactDesktop = await openApp({ width: 1280, height: 720, mobile: false });
   const compactDesktopLayout = JSON.parse(await evaluate(compactDesktop, `JSON.stringify((() => {
@@ -1187,7 +1561,120 @@ async function main() {
   const desktop = await openApp({ width: 1365, height: 900 });
   const desktopDashboard = await collect(desktop, 'desktop-dashboard');
   assert(!desktopDashboard.xOverflow, 'desktop dashboard has horizontal overflow');
+  const dashboardSurface = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const styleOf = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return null;
+      const style = getComputedStyle(element);
+      return { backgroundColor: style.backgroundColor, borderRadius: style.borderRadius, boxShadow: style.boxShadow };
+    };
+    return {
+      name: 'desktop-dashboard-editorial-layout',
+      root: !!document.querySelector('.admin-dashboard-view-shell'),
+      overview: styleOf('.admin-dashboard-view-shell .dashboard-overview'),
+      commandIcon: styleOf('.admin-dashboard-view-shell .dashboard-command-icon'),
+      staleMetricCards: document.querySelectorAll('.admin-dashboard-view-shell .dashboard-stat-card').length,
+    };
+  })())`));
+  extraResults.push(dashboardSurface);
+  assert(dashboardSurface.root, 'admin dashboard should use its dedicated visual scope');
+  assert(dashboardSurface.overview?.borderRadius === '0px', `dashboard overview should not be a rounded poster: ${JSON.stringify(dashboardSurface)}`);
+  assert(dashboardSurface.overview?.backgroundColor === 'rgba(0, 0, 0, 0)', `dashboard overview should use the page canvas: ${JSON.stringify(dashboardSurface)}`);
+  assert(dashboardSurface.commandIcon?.backgroundColor === 'rgba(0, 0, 0, 0)', `dashboard command icons should have transparent backgrounds: ${JSON.stringify(dashboardSurface)}`);
+  assert(dashboardSurface.staleMetricCards === 0, `dashboard should not restore the old metric-card grid: ${JSON.stringify(dashboardSurface)}`);
+
+  await clickText(desktop, '地址管理');
+  const desktopAddress = await collect(desktop, 'desktop-address');
+  extraResults.push(desktopAddress);
+  const desktopAddressLayout = await inspectWorkspace(desktop, 'desktop-address-workspace-layout', {
+    rootSelector: '.address-view-shell.address-workspace',
+    structuralSelectors: [
+      '.address-workspace .workspace-page-header',
+      '.address-workspace .address-toolbar',
+      '.address-workspace .workspace-data-surface',
+      '.address-workspace .data-table',
+      '.address-workspace .sender-access-shell',
+      '.address-workspace .sender-access-toggle',
+    ],
+    controlSelector: '.address-workspace :is(.btn-primary, .btn-secondary, .toolbar-field, .user-filter-trigger, .popover-select-trigger, .page-btn, .pagination-size-trigger, .table-action)',
+    transparentActionSelector: '.address-workspace .table-action',
+  });
+  extraResults.push(desktopAddressLayout);
+  assertWorkspaceLayout(desktopAddressLayout, 'desktop address');
+
+  await clickText(desktop, '用户管理');
+  const desktopUsers = await collect(desktop, 'desktop-users');
+  extraResults.push(desktopUsers);
+  const desktopUsersLayout = await inspectWorkspace(desktop, 'desktop-users-workspace-layout', {
+    rootSelector: '.users-view-shell.users-workspace',
+    structuralSelectors: [
+      '.users-workspace .workspace-page-header',
+      '.users-workspace .workspace-data-surface',
+      '.users-workspace .users-toolbar',
+      '.users-workspace .user-grid-list',
+      '.users-workspace .user-grid-item',
+      '.users-workspace .user-grid-body-row',
+    ],
+    controlSelector: '.users-workspace :is(.btn-primary, .btn-secondary, .users-search-input, .page-btn, .pagination-size-trigger, .table-action)',
+    transparentActionSelector: '.users-workspace .table-action',
+  });
+  extraResults.push(desktopUsersLayout);
+  assertWorkspaceLayout(desktopUsersLayout, 'desktop users');
+
+  await clickText(desktop, '写邮件');
+  const desktopCompose = await collect(desktop, 'desktop-compose');
+  extraResults.push(desktopCompose);
+  const desktopComposeLayout = await inspectWorkspace(desktop, 'desktop-compose-workspace-layout', {
+    rootSelector: '.compose-view-shell.compose-workspace',
+    structuralSelectors: [
+      '.compose-workspace .workspace-page-header',
+      '.compose-workspace .compose-mode-switch',
+      '.compose-workspace .compose-editor-region',
+      '.compose-workspace .compose-action-bar',
+    ],
+    controlSelector: '.compose-workspace :is(.btn-primary, .btn-secondary, .compose-mode-option, .form-input, .form-textarea, .code-area, .mail-frame)',
+  });
+  extraResults.push(desktopComposeLayout);
+  assertWorkspaceLayout(desktopComposeLayout, 'desktop compose');
+
+  await clickText(desktop, '统计');
+  const desktopStats = await collect(desktop, 'desktop-stats');
+  extraResults.push(desktopStats);
+  assert(!desktopStats.xOverflow, 'desktop statistics has horizontal overflow');
+  const statsLayout = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const analysis = document.querySelector('.admin-stats-view-shell .stats-analysis-lead');
+    const style = analysis ? getComputedStyle(analysis) : null;
+    return {
+      name: 'desktop-statistics-analysis-layout',
+      analysis: style ? { backgroundColor: style.backgroundColor, borderRadius: style.borderRadius, boxShadow: style.boxShadow } : null,
+      staleMetricCards: document.querySelectorAll('.admin-stats-view-shell .dashboard-stat-card').length,
+    };
+  })())`));
+  extraResults.push(statsLayout);
+  assert(statsLayout.analysis?.backgroundColor === 'rgba(0, 0, 0, 0)', `statistics should use a continuous analysis canvas: ${JSON.stringify(statsLayout)}`);
+  assert(statsLayout.analysis?.borderRadius === '0px', `statistics should not use a giant rounded analysis card: ${JSON.stringify(statsLayout)}`);
+  assert(statsLayout.staleMetricCards === 0, `statistics should not render the old large metric cards: ${JSON.stringify(statsLayout)}`);
+
   await clickText(desktop, '系统设置');
+  const desktopSettings = await collect(desktop, 'desktop-settings');
+  extraResults.push(desktopSettings);
+  assert(!desktopSettings.xOverflow, 'desktop settings has horizontal overflow');
+  const settingsSurface = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const card = document.querySelector('.settings-view-shell .settings-card');
+    if (!card) return null;
+    const style = getComputedStyle(card);
+    return {
+      name: 'desktop-settings-tool-surface',
+      backgroundColor: style.backgroundColor,
+      borderRadius: style.borderRadius,
+      boxShadow: style.boxShadow,
+      sectionCount: document.querySelectorAll('.settings-layout-section').length,
+    };
+  })())`));
+  extraResults.push(settingsSurface);
+  assert(settingsSurface?.sectionCount === 4, `settings should expose four clear configuration groups: ${JSON.stringify(settingsSurface)}`);
+  assert(Number.parseFloat(settingsSurface?.borderRadius || '99') <= 8, `settings tool surfaces should use restrained radii: ${JSON.stringify(settingsSurface)}`);
+  assert(settingsSurface?.boxShadow === 'none', `settings tool surfaces should not use decorative elevation: ${JSON.stringify(settingsSurface)}`);
   await evaluate(desktop, `(() => {
     const card = [...document.querySelectorAll('.settings-card')].find((el) => el.innerText.includes('用户设置'));
     card?.querySelector('button')?.click();
@@ -1206,6 +1693,27 @@ async function main() {
   await evaluate(desktop, `document.querySelector('.modal-card [aria-label="关闭"]')?.click()`);
   await sleep(500);
   await clickText(desktop, '维护');
+  const desktopMaintenance = await collect(desktop, 'desktop-maintenance');
+  extraResults.push(desktopMaintenance);
+  assert(!desktopMaintenance.xOverflow, 'desktop maintenance has horizontal overflow');
+  const maintenanceSurface = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const section = document.querySelector('.maintenance-view-shell .maintenance-status-section');
+    const code = document.querySelector('.maintenance-view-shell .maintenance-code-area');
+    if (!section) return null;
+    const style = getComputedStyle(section);
+    const codeStyle = code ? getComputedStyle(code) : null;
+    return {
+      name: 'desktop-maintenance-tool-layout',
+      backgroundColor: style.backgroundColor,
+      borderRadius: style.borderRadius,
+      boxShadow: style.boxShadow,
+      codeRadius: codeStyle?.borderRadius || null,
+    };
+  })())`));
+  extraResults.push(maintenanceSurface);
+  assert(maintenanceSurface?.backgroundColor === 'rgba(0, 0, 0, 0)', `maintenance sections should stay transparent: ${JSON.stringify(maintenanceSurface)}`);
+  assert(maintenanceSurface?.borderRadius === '0px', `maintenance sections should not use oversized rounded cards: ${JSON.stringify(maintenanceSurface)}`);
+  assert(Number.parseFloat(maintenanceSurface?.codeRadius || '99') <= 8, `maintenance code tools should use restrained radii: ${JSON.stringify(maintenanceSurface)}`);
   const maintenanceLayout = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
     const select = document.querySelector('.maintenance-cleanup-grid .popover-select-trigger');
     const input = document.querySelector('.maintenance-cleanup-grid .form-input');

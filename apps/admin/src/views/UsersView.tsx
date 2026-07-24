@@ -322,15 +322,15 @@ export function UsersView({ request, notify, ask, globalQuery, cacheScope, onFil
             <p className="truncate text-sm font-semibold text-slate-800">{user.user_email}</p>
             <p className="mt-1 text-[11px] text-slate-400">#{user.id} · {user.role_text || t('默认', 'Default')}</p>
           </div>
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">{locale === 'en-US' ? `${user.address_count ?? 0} addresses` : `${user.address_count ?? 0} 个地址`}</span>
+          <span className="user-mobile-count">{locale === 'en-US' ? `${user.address_count ?? 0} addresses` : `${user.address_count ?? 0} 个地址`}</span>
         </div>
         <div className="mt-2 text-[11px] text-slate-400">{formatDateTime(user.updated_at || user.created_at)}</div>
-        <div className="mt-3 grid grid-cols-3 gap-1.5">
-          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); toggleUser(user); }}><Link2 size={14} /> {t('地址', 'Addresses')}</button>
-          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }}><Filter size={14} /> {t('筛选', 'Filter')}</button>
-          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }}><Shield size={14} /> {t('角色', 'Role')}</button>
-          <button type="button" className="btn-secondary compact" onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }}><Lock size={14} /> {t('密码', 'Password')}</button>
-          <button type="button" className="btn-danger compact col-span-2" onClick={(event) => { event.stopPropagation(); deleteUser(user); }}><Trash2 size={14} /> {t('删除', 'Delete')}</button>
+        <div className="user-mobile-actions">
+          <button type="button" className="btn-secondary compact" aria-label={t('查看地址', 'View addresses')} title={t('查看地址', 'View addresses')} onClick={(event) => { event.stopPropagation(); toggleUser(user); }}><Link2 size={14} /><span>{t('地址', 'Addresses')}</span></button>
+          <button type="button" className="btn-secondary compact" aria-label={t('在地址管理筛选', 'Filter in address management')} title={t('在地址管理筛选', 'Filter in address management')} onClick={(event) => { event.stopPropagation(); jumpToAddressManagement(user); }}><Filter size={14} /><span>{t('筛选', 'Filter')}</span></button>
+          <button type="button" className="btn-secondary compact" aria-label={t('修改角色', 'Change role')} title={t('修改角色', 'Change role')} onClick={(event) => { event.stopPropagation(); setRoleTarget(user); }}><Shield size={14} /><span>{t('角色', 'Role')}</span></button>
+          <button type="button" className="btn-secondary compact" aria-label={t('重置密码', 'Reset password')} title={t('重置密码', 'Reset password')} onClick={(event) => { event.stopPropagation(); setResetTarget(user); setPassword(''); }}><Lock size={14} /><span>{t('密码', 'Password')}</span></button>
+          <button type="button" className="btn-danger compact" aria-label={t('删除用户', 'Delete user')} title={t('删除用户', 'Delete user')} onClick={(event) => { event.stopPropagation(); deleteUser(user); }}><Trash2 size={14} /><span>{t('删除', 'Delete')}</span></button>
         </div>
       </article>
       {renderInline && <UserInlineMotion className="user-inline-mobile-motion" open={expanded && !closing} closing={closing} contentKey={contentKey} onClosed={() => finishClosingUser(user.id)}><MemoUserAddressInline user={user} data={addressEntry.data} loading={addressEntry.loading} onBind={(value) => bindUserAddress(user, value)} onManage={() => jumpToAddressManagement(user)} onClose={closeExpandedUser} /></UserInlineMotion>}
@@ -362,11 +362,23 @@ export function UsersView({ request, notify, ask, globalQuery, cacheScope, onFil
     </div>;
   };
 
-  return <div className="users-view-shell h-full space-y-4 overflow-y-auto p-3 md:p-4 xl:p-6">
-    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><h2 className="text-2xl font-bold text-slate-800">{t('用户管理', 'User management')}</h2></div><button type="button" className="btn-primary" onClick={() => setCreateOpen(true)}><Plus size={16} /> {t('新建用户', 'New user')}</button></div>
-    <div className="panel overflow-hidden"><div className="flex flex-col gap-3 border-b border-slate-100 p-3 md:flex-row"><input className="form-input compact-control" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder={t('搜索用户邮箱', 'Search user email')} /><button type="button" className="btn-secondary compact" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && users.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button></div>{loading && users.length === 0 ? <LoadingState /> : users.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={UserRoundCog} title={t('暂无用户', 'No users')} /></div> : <>
-      {isDesktopUsers ? <div className="user-grid-scroll"><div className="user-grid-list" role="table" aria-label={t('用户列表', 'User list')}><div className="user-grid-row user-grid-header" role="row"><div>ID</div><div>{t('邮箱', 'Email')}</div><div>{t('角色', 'Role')}</div><div>{t('地址数', 'Addresses')}</div><div>{t('更新时间', 'Updated')}</div><div className="text-right">{t('操作', 'Actions')}</div></div>{users.map(renderDesktopUser)}</div></div> : <div className="space-y-2 p-3">{users.map(renderMobileUser)}</div>}
-    </>}<Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} /></div>
+  return <div className="users-view-shell users-workspace h-full overflow-y-auto">
+    <div className="product-page product-page-wide">
+      <header className="page-head">
+        <div className="page-head-copy">
+          <span className="product-kicker">{t('成员目录', 'Member directory')}</span>
+          <h1 className="page-title">{t('用户管理', 'User management')}</h1>
+          <p className="page-lede">{t('注册用户、地址绑定与角色权限。', 'Registered users, address bindings and role permissions.')}</p>
+        </div>
+        <div className="page-head-actions">
+          <button type="button" className="product-button product-button-primary" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> {t('新建用户', 'New user')}</button>
+        </div>
+      </header>
+      <section className="paper-card data-card users-workspace-surface">
+        <div className="users-toolbar"><input className="form-input compact-control users-search-input" value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder={t('搜索用户邮箱', 'Search user email')} /><button type="button" className="btn-secondary compact users-refresh" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && users.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button></div>{loading && users.length === 0 ? <LoadingState /> : users.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={UserRoundCog} title={t('暂无用户', 'No users')} /></div> : <>
+          {isDesktopUsers ? <div className="user-grid-scroll"><div className="user-grid-list" role="table" aria-label={t('用户列表', 'User list')}><div className="user-grid-row user-grid-header" role="row"><div>ID</div><div>{t('邮箱', 'Email')}</div><div>{t('角色', 'Role')}</div><div>{t('地址数', 'Addresses')}</div><div>{t('更新时间', 'Updated')}</div><div className="text-right">{t('操作', 'Actions')}</div></div>{users.map(renderDesktopUser)}</div></div> : <div className="users-mobile-list">{users.map(renderMobileUser)}</div>}
+        </>}<Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} /></section>
+    </div>
     {createOpen && <Modal title={t('新建用户', 'New user')} onClose={() => setCreateOpen(false)}><div className="space-y-4"><input className="form-input" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder={t('用户邮箱', 'User email')} /><input className="form-input" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder={t('用户密码', 'User password')} /><button type="button" className="btn-primary w-full" disabled={actionBusy === 'create'} onClick={createUser}>{actionBusy === 'create' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />} {actionBusy === 'create' ? t('创建中...', 'Creating...') : t('创建', 'Create')}</button></div></Modal>}
     {roleTarget && <Modal title={t(`修改角色：${roleTarget.user_email}`, `Change role: ${roleTarget.user_email}`)} onClose={() => setRoleTarget(null)}><div className="space-y-3"><button type="button" className="btn-secondary w-full justify-start" disabled={Boolean(actionBusy)} onClick={() => void updateUserRole(roleTarget, '')}>{actionBusy === `role:${roleTarget.id}:default` ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t('默认角色', 'Default role')}</button>{roles.map((role) => <button type="button" key={role.role} className="btn-secondary w-full justify-start" disabled={Boolean(actionBusy)} onClick={() => void updateUserRole(roleTarget, role.role)}>{actionBusy === `role:${roleTarget.id}:${role.role}` ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{role.label || role.role}</button>)}</div></Modal>}
     {resetTarget && <Modal title={t(`重置密码：${resetTarget.user_email}`, `Reset password: ${resetTarget.user_email}`)} onClose={() => setResetTarget(null)}><div className="space-y-4"><input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('新密码', 'New password')} /><button type="button" className="btn-primary w-full" disabled={actionBusy === `reset:${resetTarget.id}`} onClick={() => void resetUserPassword()}>{actionBusy === `reset:${resetTarget.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />} {actionBusy === `reset:${resetTarget.id}` ? t('保存中...', 'Saving...') : t('保存', 'Save')}</button></div></Modal>}

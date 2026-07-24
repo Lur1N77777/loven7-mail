@@ -1,0 +1,1845 @@
+/* ============================================================================
+   Product pages — dashboard, statistics, settings, maintenance
+   ----------------------------------------------------------------------------
+   Layout language: a warm paper canvas, white cards with soft warm shadows,
+   ink typography, and sealing-wax accents for presence and emphasis.
+   Tokens come from theme.css (--admin-*). Overrides use a `body` prefix plus
+   !important where legacy layers in index.css also used !important.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Shared shell + page scaffold
+   ------------------------------------------------------------------------- */
+
+body :is(
+  .admin-dashboard-view-shell,
+  .admin-stats-view-shell,
+  .settings-view-shell,
+  .maintenance-view-shell
+) {
+  background: var(--admin-bg) !important;
+  color: var(--admin-text) !important;
+  font-size: 14px;
+  letter-spacing: 0 !important;
+}
+
+.product-page {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+  padding: clamp(18px, 2.6vw, 34px) clamp(16px, 2.8vw, 36px) clamp(30px, 4vw, 52px);
+}
+
+.product-page-wide {
+  max-width: 1400px;
+}
+
+/* data card — a paper card that hosts full-bleed tables and toolbars */
+body .data-card {
+  padding: 0 !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+body :is(
+  .admin-dashboard-view-shell,
+  .admin-stats-view-shell,
+  .settings-view-shell,
+  .maintenance-view-shell,
+  .compose-view-shell,
+  .address-view-shell,
+  .users-view-shell
+) :is(h1, h2, h3, p, dl, dd, dt, ul, li) {
+  margin: 0;
+  letter-spacing: 0 !important;
+}
+
+/* page head */
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+  padding: 2px 4px 6px;
+}
+
+.page-head-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+body .product-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--admin-muted) !important;
+  font-size: 12px !important;
+  font-weight: 540 !important;
+  line-height: 1.35 !important;
+}
+
+body .product-kicker::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--admin-accent);
+}
+
+body :is(
+  .admin-dashboard-view-shell,
+  .admin-stats-view-shell,
+  .settings-view-shell,
+  .maintenance-view-shell,
+  .compose-view-shell,
+  .address-view-shell,
+  .users-view-shell
+) .page-title {
+  color: var(--admin-text-strong) !important;
+  font-size: clamp(25px, 2.4vw, 31px) !important;
+  font-weight: 680 !important;
+  line-height: 1.14 !important;
+  letter-spacing: -0.01em !important;
+}
+
+body .page-lede {
+  color: var(--admin-muted) !important;
+  font-size: 13px !important;
+  font-weight: 440 !important;
+  line-height: 1.5 !important;
+  max-width: 56ch;
+}
+
+.page-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+/* head action buttons */
+
+body :is(
+  .admin-dashboard-view-shell,
+  .admin-stats-view-shell,
+  .settings-view-shell,
+  .maintenance-view-shell,
+  .compose-view-shell,
+  .address-view-shell,
+  .users-view-shell
+) .product-button {
+  display: inline-flex !important;
+  width: auto !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--admin-radius-control) !important;
+  padding: 0 15px !important;
+  font-size: 13.5px !important;
+  font-weight: 570 !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms ease;
+}
+
+body .product-button-quiet {
+  border: 1px solid var(--admin-divider) !important;
+  background: var(--admin-panel) !important;
+  color: var(--admin-text-soft) !important;
+}
+
+body .product-button-quiet:hover {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+body .product-button-primary {
+  border: 0 !important;
+  background: var(--admin-ink) !important;
+  color: var(--admin-ink-on) !important;
+  font-weight: 600 !important;
+}
+
+body .product-button-primary:hover {
+  background: var(--admin-ink-hover) !important;
+}
+
+body .product-button:active {
+  transform: translateY(0.5px);
+}
+
+/* cards */
+
+.paper-card {
+  min-width: 0;
+  border: 1px solid var(--admin-divider);
+  border-radius: var(--admin-radius-panel);
+  background: var(--admin-panel);
+  box-shadow: var(--admin-shadow-card);
+  padding: clamp(18px, 2vw, 24px);
+}
+
+html.theme-dark body .paper-card,
+body.theme-dark .paper-card {
+  box-shadow: none;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+body .card-title {
+  color: var(--admin-text-strong) !important;
+  font-size: 15px !important;
+  font-weight: 650 !important;
+  line-height: 1.4 !important;
+}
+
+body .card-meta {
+  color: var(--admin-muted) !important;
+  font-size: 12px !important;
+  font-weight: 450 !important;
+  line-height: 1.4 !important;
+  text-align: right;
+  white-space: nowrap;
+}
+
+body .card-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--admin-panel-soft);
+  color: var(--admin-muted);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 540;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Data primitives — figures, composition bars, meters, ledgers
+   ------------------------------------------------------------------------- */
+
+.dash-figure-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+body .dash-figure {
+  color: var(--admin-text-strong) !important;
+  font-size: clamp(38px, 4.6vw, 54px) !important;
+  font-weight: 650 !important;
+  line-height: 1 !important;
+  letter-spacing: -0.015em !important;
+  font-variant-numeric: tabular-nums;
+}
+
+body .dash-figure-unit {
+  color: var(--admin-muted) !important;
+  font-size: 13px !important;
+  font-weight: 470 !important;
+  line-height: 1.4 !important;
+}
+
+/* two-tone composition bar: ink for inbound, wax for outbound */
+
+.tone-bar {
+  display: flex;
+  width: 100%;
+  height: 10px;
+  gap: 3px;
+}
+
+.tone-bar > span {
+  display: block;
+  min-width: 6px;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.tone-bar .tone-ink {
+  background: color-mix(in srgb, var(--admin-text) 86%, var(--admin-bg));
+}
+
+.tone-bar .tone-wax {
+  background: var(--admin-accent);
+}
+
+.tone-mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 3px;
+}
+
+.tone-mark.tone-ink {
+  background: color-mix(in srgb, var(--admin-text) 86%, var(--admin-bg));
+}
+
+.tone-mark.tone-wax {
+  background: var(--admin-accent);
+}
+
+/* split figures under a composition bar */
+
+.dash-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 26px;
+}
+
+.dash-split > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--admin-divider);
+}
+
+body .dash-split-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--admin-text-soft) !important;
+  font-size: 12.5px !important;
+  font-weight: 490 !important;
+}
+
+.dash-split-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+body .dash-split-value {
+  color: var(--admin-text) !important;
+  font-size: 16px !important;
+  font-weight: 630 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+body .dash-split-share {
+  color: var(--admin-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 470 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* activity meters */
+
+.dash-meter {
+  min-width: 0;
+}
+
+.dash-meter-copy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body .dash-meter-label {
+  color: var(--admin-text-soft) !important;
+  font-size: 12.5px !important;
+  font-weight: 490 !important;
+}
+
+body .dash-meter-value {
+  color: var(--admin-text) !important;
+  font-size: 15px !important;
+  font-weight: 630 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-meter-track {
+  height: 7px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--admin-panel-muted);
+}
+
+.dash-meter-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--admin-accent);
+  transition: width 400ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.dash-meter.is-muted .dash-meter-track > span {
+  background: color-mix(in srgb, var(--admin-text) 74%, var(--admin-panel-muted));
+}
+
+body .dash-meter-note {
+  display: block;
+  margin-top: 7px;
+  color: var(--admin-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 450 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ledger rows (label + value lists) */
+
+.dash-list {
+  display: grid;
+  min-width: 0;
+}
+
+.dash-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 50px;
+  border-bottom: 1px solid var(--admin-divider);
+}
+
+.dash-list > div:last-child {
+  border-bottom: 0;
+}
+
+body .dash-list-label {
+  color: var(--admin-text-soft) !important;
+  font-size: 13px !important;
+  font-weight: 480 !important;
+}
+
+body .dash-list-value {
+  color: var(--admin-text) !important;
+  font-size: 15px !important;
+  font-weight: 630 !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Dashboard
+   ------------------------------------------------------------------------- */
+
+.dash-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+  align-items: stretch;
+}
+
+/* traffic card — content fills the card top to bottom, no dead space */
+.dash-card-traffic .dash-figure-row {
+  margin-top: 18px;
+}
+
+.dash-card-traffic .tone-bar {
+  margin-top: 18px;
+}
+
+.dash-card-traffic .dash-split {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin-top: 10px;
+}
+
+.dash-card-traffic .dash-split > div {
+  min-height: 44px;
+  align-items: center;
+  padding-top: 0;
+}
+
+/* activity + scale cards stretch their rows to match the traffic card height */
+.dash-card-activity {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-card-activity .dash-activity-meters {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.dash-card-scale {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-card-scale .dash-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.dash-card-scale .dash-list > div {
+  flex: 1 1 auto;
+  min-height: 44px;
+}
+
+/* quick actions */
+
+.dash-quick {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.dash-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 6px 4px 0;
+}
+
+body .dash-section-head h2 {
+  color: var(--admin-text) !important;
+  font-size: 15px !important;
+  font-weight: 630 !important;
+  line-height: 1.4 !important;
+}
+
+body .dash-section-head small {
+  color: var(--admin-muted) !important;
+  font-size: 12px !important;
+  font-weight: 460 !important;
+}
+
+.dash-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+body .dash-quick-card {
+  display: flex !important;
+  min-width: 0;
+  min-height: 96px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--admin-radius-card) !important;
+  background: var(--admin-panel) !important;
+  color: var(--admin-text-soft) !important;
+  box-shadow: var(--admin-shadow-card) !important;
+  padding: 15px 16px !important;
+  font-size: 13px !important;
+  font-weight: 560 !important;
+  line-height: 1.35 !important;
+  text-align: left;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 180ms ease, transform 150ms ease;
+}
+
+html.theme-dark body .dash-quick-card,
+body.theme-dark .dash-quick-card {
+  box-shadow: none !important;
+}
+
+body .dash-quick-card:hover {
+  border-color: color-mix(in srgb, var(--admin-accent) 34%, transparent) !important;
+  background: color-mix(in srgb, var(--admin-accent) 4%, var(--admin-panel)) !important;
+  color: var(--admin-text) !important;
+  box-shadow: var(--admin-shadow-lift) !important;
+  transform: translateY(-1px);
+}
+
+body .dash-quick-icon {
+  --dashboard-icon-accent: var(--admin-accent);
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: var(--admin-text-soft) !important;
+  background: transparent !important;
+  transition: color 150ms ease;
+}
+
+body .dash-quick-card:hover .dash-quick-icon {
+  color: var(--admin-accent) !important;
+}
+
+/* capabilities */
+
+.dash-caps-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 40px;
+  margin-top: 6px;
+}
+
+.cap-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--admin-divider);
+}
+
+.dash-caps-grid .cap-row:nth-last-child(-n + 2):nth-child(odd),
+.dash-caps-grid .cap-row:last-child {
+  border-bottom: 0;
+}
+
+.cap-row-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+body .cap-row-icon {
+  --dashboard-icon-accent: currentColor;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: var(--admin-muted) !important;
+  background: transparent !important;
+}
+
+body .cap-row-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--admin-text-soft) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+body .cap-state {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 4px 11px;
+  background: var(--admin-panel-soft);
+  color: var(--admin-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 540 !important;
+  line-height: 1.35 !important;
+  white-space: nowrap;
+}
+
+body .cap-state i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--admin-muted-soft);
+}
+
+body .cap-state.is-enabled {
+  background: var(--admin-success-soft);
+  color: var(--admin-success) !important;
+}
+
+body .cap-state.is-enabled i {
+  background: var(--admin-success);
+}
+
+/* ---------------------------------------------------------------------------
+   Statistics
+   ------------------------------------------------------------------------- */
+
+.stats-lead,
+.stats-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(280px, 5fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.stats-card-total .dash-figure-row {
+  margin-top: 20px;
+}
+
+.stats-card-total .tone-bar {
+  margin-top: 24px;
+}
+
+.stats-card-total .dash-split {
+  margin-top: 16px;
+}
+
+.stats-card-activity .dash-activity-meters {
+  display: grid;
+  gap: 22px;
+  margin-top: 20px;
+}
+
+.stats-card-activity .dash-meter-value {
+  font-size: 19px !important;
+}
+
+.stats-card-measures .dash-list {
+  margin-top: 6px;
+}
+
+/* the capability card sits in a narrow column on stats — stack its rows */
+.stats-detail .dash-caps-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.stats-detail .dash-caps-grid .cap-row:nth-last-child(-n + 2):nth-child(odd) {
+  border-bottom: 1px solid var(--admin-divider);
+}
+
+.stats-detail .dash-caps-grid .cap-row:last-child {
+  border-bottom: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Settings
+   ------------------------------------------------------------------------- */
+
+body .settings-view-shell .settings-flow {
+  display: grid;
+  gap: 0;
+}
+
+body .settings-view-shell .settings-layout-section {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 30px;
+  min-width: 0;
+  padding: 26px 0 30px;
+  border-bottom: 0 !important;
+  border-top: 1px solid var(--admin-divider);
+  background: transparent !important;
+}
+
+body .settings-view-shell .settings-layout-section:first-child {
+  border-top: 0;
+  padding-top: 6px;
+}
+
+body .settings-view-shell .settings-section-heading {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+body .settings-view-shell .settings-section-heading > span {
+  color: var(--admin-accent) !important;
+  font-size: 11.5px !important;
+  font-weight: 640 !important;
+  line-height: 1.3 !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em !important;
+}
+
+body .settings-view-shell .settings-section-heading h2 {
+  color: var(--admin-text) !important;
+  font-size: 15.5px !important;
+  font-weight: 630 !important;
+  line-height: 1.35 !important;
+}
+
+body .settings-view-shell .settings-section-content {
+  min-width: 0;
+}
+
+body .settings-view-shell .settings-interface-grid,
+body .settings-view-shell .settings-mail-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.82fr);
+  gap: 14px;
+  align-items: start !important;
+}
+
+body .settings-view-shell .settings-integration-content {
+  display: grid;
+  gap: 14px;
+}
+
+/* settings cards */
+
+body .settings-view-shell .settings-card,
+body .maintenance-view-shell .settings-card {
+  min-width: 0;
+  min-height: 0 !important;
+  grid-column: auto !important;
+  align-self: start !important;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--admin-radius-card) !important;
+  background: var(--admin-panel) !important;
+  box-shadow: var(--admin-shadow-card) !important;
+  padding: 17px 18px !important;
+}
+
+body .settings-view-shell .settings-card {
+  border-radius: var(--admin-radius-control-sm) !important;
+  box-shadow: none !important;
+}
+
+html.theme-dark body :is(.settings-view-shell, .maintenance-view-shell) .settings-card,
+body.theme-dark :is(.settings-view-shell, .maintenance-view-shell) .settings-card {
+  box-shadow: none !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .settings-card-head {
+  min-height: 26px !important;
+  align-items: center !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .settings-card h3 {
+  display: flex;
+  align-items: center;
+  color: var(--admin-text) !important;
+  font-size: 13.5px !important;
+  font-weight: 620 !important;
+  line-height: 1.45 !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .settings-card h3 svg {
+  color: var(--admin-muted) !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .settings-card-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px !important;
+  color: var(--admin-muted) !important;
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .settings-card-meta code {
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 7px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-text-soft) !important;
+  font-size: 10.5px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* controls inside settings + maintenance */
+
+body :is(.settings-view-shell, .maintenance-view-shell) :is(.btn-primary, .btn-secondary, .credential-button) {
+  min-height: 38px !important;
+  height: 38px !important;
+  border-radius: var(--admin-radius-control) !important;
+  padding: 0 14px !important;
+  font-size: 12.5px !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .icon-btn.compact {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--admin-radius-control-sm) !important;
+  background: transparent !important;
+  color: var(--admin-text-soft) !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .icon-btn.compact:hover {
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) :is(.form-input, .form-select, .popover-select-trigger, .compact-control) {
+  min-height: 38px !important;
+  height: 38px !important;
+  border-radius: var(--admin-radius-control) !important;
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .form-textarea {
+  border-radius: var(--admin-radius-control) !important;
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .form-label {
+  margin-bottom: 6px !important;
+  color: var(--admin-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 560 !important;
+  line-height: 1.35 !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell, .compose-view-shell) .check-row {
+  display: inline-flex !important;
+  min-width: 0 !important;
+  min-height: 34px !important;
+  align-items: center !important;
+  gap: 8px !important;
+  border: 0 !important;
+  border-radius: var(--admin-radius-control-sm) !important;
+  background: transparent !important;
+  padding: 0 2px !important;
+  color: var(--admin-text-soft) !important;
+  box-shadow: none !important;
+  font-size: 12.5px !important;
+  font-weight: 490 !important;
+  line-height: 1.4 !important;
+  white-space: nowrap;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell, .compose-view-shell) .check-row:hover {
+  background: transparent !important;
+  color: var(--admin-text) !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell, .compose-view-shell) .check-row input {
+  width: 16px !important;
+  height: 16px !important;
+  flex: 0 0 16px !important;
+  margin: 0 !important;
+  accent-color: var(--admin-accent) !important;
+}
+
+/* interface preference rows */
+
+body .settings-view-shell .interface-preference-card {
+  grid-column: auto !important;
+}
+
+body .settings-view-shell .interface-preference-actions {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 0 !important;
+  margin-top: 8px !important;
+}
+
+/* rows highlight as an inset rounded block; the divider is drawn inside the
+   text measure so the hover surface never gets visually "cut" */
+body .settings-view-shell .interface-preference-action {
+  position: relative;
+  display: grid !important;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  min-height: 50px !important;
+  align-items: center !important;
+  gap: 11px !important;
+  margin: 0 -10px !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: var(--admin-radius-control) !important;
+  background: transparent !important;
+  color: var(--admin-text-soft) !important;
+  box-shadow: none !important;
+}
+
+body .settings-view-shell .interface-preference-action:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 1px;
+  background: var(--admin-divider);
+}
+
+body .settings-view-shell .interface-preference-action:hover {
+  background: var(--admin-panel-soft) !important;
+}
+
+body .settings-view-shell .interface-preference-action:hover::after {
+  background: transparent;
+}
+
+body .settings-view-shell .interface-preference-action > svg {
+  color: var(--admin-muted) !important;
+}
+
+body .settings-view-shell .interface-preference-action > span {
+  min-width: 0;
+  font-size: 12.5px !important;
+  white-space: nowrap;
+}
+
+body .settings-view-shell .interface-preference-action strong {
+  color: var(--admin-text) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+}
+
+body .settings-view-shell .interface-preference-action em {
+  min-width: 0 !important;
+  padding: 3px 9px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: var(--admin-accent-soft) !important;
+  color: var(--admin-accent) !important;
+  font-size: 10.5px !important;
+  font-weight: 580 !important;
+  font-style: normal !important;
+}
+
+body .settings-view-shell .interface-preference-auth {
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, auto) !important;
+}
+
+/* frontend base + refresh cards */
+
+body .settings-view-shell .frontend-base-controls,
+body .settings-view-shell .mail-refresh-controls {
+  margin-top: 13px !important;
+}
+
+body .settings-view-shell .frontend-base-example {
+  margin-top: 11px !important;
+  padding: 9px 0 0 !important;
+  border: 0 !important;
+  border-top: 1px solid var(--admin-divider) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--admin-muted) !important;
+  font-size: 11px !important;
+}
+
+/* role quotas */
+
+body .settings-view-shell .role-quota-list {
+  margin-top: 8px !important;
+}
+
+body .settings-view-shell .role-quota-row {
+  position: relative;
+  min-height: 50px;
+  align-items: center !important;
+  margin: 0 -10px !important;
+  padding: 4px 10px !important;
+  border: 0 !important;
+  border-radius: var(--admin-radius-control) !important;
+  background: transparent !important;
+  transition: background-color var(--motion-standard, 200ms) var(--motion-ease-out, ease);
+}
+
+body .settings-view-shell .role-quota-row:not(:last-of-type)::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 1px;
+  background: var(--admin-divider);
+}
+
+body .settings-view-shell .role-quota-row:hover {
+  background: var(--admin-panel-soft) !important;
+}
+
+body .settings-view-shell .role-quota-row:hover::after {
+  background: transparent;
+}
+
+body .settings-view-shell .role-quota-row p:first-child {
+  color: var(--admin-text) !important;
+  font-size: 12.5px !important;
+  font-weight: 570 !important;
+}
+
+body .settings-view-shell .role-quota-row p + p {
+  color: var(--admin-muted) !important;
+  font-size: 10.5px !important;
+}
+
+body .settings-view-shell .role-address-config-card {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+body .settings-view-shell .role-address-empty {
+  display: flex !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  align-items: center !important;
+}
+
+body .settings-view-shell .role-address-empty > * {
+  width: 100% !important;
+}
+
+/* account rules */
+
+body .settings-view-shell .account-rules-list-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) !important;
+  gap: 13px !important;
+  margin-top: 15px !important;
+}
+
+body .settings-view-shell .account-rules-list-grid .form-textarea {
+  min-height: 116px !important;
+  padding: 10px 12px !important;
+  resize: vertical;
+}
+
+body .settings-view-shell .account-rules-control-grid {
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, 0.8fr) minmax(240px, 1fr) auto !important;
+  gap: 13px !important;
+  margin-top: 16px !important;
+  align-items: end !important;
+}
+
+body .settings-view-shell .account-rule-toggle-group {
+  min-height: 38px;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+body .settings-view-shell .account-rule-toggle.check-row {
+  min-height: 34px !important;
+}
+
+/* endpoint (JSON) cards */
+
+body .settings-view-shell .settings-json-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .settings-endpoint-card {
+  display: block;
+  min-width: 0;
+  min-height: 0 !important;
+  padding: 15px 16px !important;
+  transition: border-color 150ms ease, box-shadow 180ms ease;
+}
+
+body :is(.settings-view-shell, .maintenance-view-shell) .settings-endpoint-card:hover {
+  border-color: color-mix(in srgb, var(--admin-accent) 30%, transparent) !important;
+  box-shadow: var(--admin-shadow-lift) !important;
+}
+
+html.theme-dark body :is(.settings-view-shell, .maintenance-view-shell) .settings-endpoint-card:hover,
+body.theme-dark :is(.settings-view-shell, .maintenance-view-shell) .settings-endpoint-card:hover {
+  box-shadow: none !important;
+}
+
+/* editor modal helpers */
+
+body .settings-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+body .settings-editor-toolbar strong {
+  color: var(--admin-text-soft) !important;
+  font-size: 12.5px !important;
+  font-weight: 570 !important;
+}
+
+body :is(.settings-editor-tabs, .json-visual-mini-tabs) {
+  display: inline-flex;
+  gap: 3px;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--admin-radius-control-sm) !important;
+  background: var(--admin-panel-soft) !important;
+  padding: 3px !important;
+}
+
+body :is(.settings-editor-tabs, .json-visual-mini-tabs) button {
+  min-height: 26px;
+  border: 0 !important;
+  border-radius: calc(var(--admin-radius-control-sm) - 3px) !important;
+  background: transparent !important;
+  color: var(--admin-muted) !important;
+  padding: 0 11px !important;
+  font-size: 11.5px !important;
+  font-weight: 560 !important;
+  transition: background-color 130ms ease, color 130ms ease;
+}
+
+body :is(.settings-editor-tabs, .json-visual-mini-tabs) button.active {
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  box-shadow: 0 1px 3px rgba(50, 38, 26, 0.14) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Maintenance
+   ------------------------------------------------------------------------- */
+
+.maint-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.maint-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(300px, 5fr);
+  gap: 16px;
+  min-width: 0;
+  align-items: start;
+}
+
+.maint-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--admin-muted);
+}
+
+body .maintenance-view-shell .maint-pane-head h3 {
+  color: var(--admin-text) !important;
+  font-size: 13.5px !important;
+  font-weight: 620 !important;
+  line-height: 1.4 !important;
+}
+
+body .maintenance-view-shell .maint-pane-head svg {
+  color: var(--admin-muted) !important;
+}
+
+body .maintenance-view-shell .maint-pane-meta {
+  margin-left: auto;
+  color: var(--admin-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 470 !important;
+  white-space: nowrap;
+}
+
+body .maintenance-view-shell .maintenance-code-area {
+  width: 100%;
+  min-height: 230px !important;
+  max-height: 330px !important;
+  margin: 13px 0 0 !important;
+  overflow: auto !important;
+  padding: 14px 16px !important;
+  border: 0 !important;
+  border-radius: var(--admin-radius-control-sm) !important;
+  background: var(--admin-code-bg) !important;
+  color: var(--admin-code-text) !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+  font-weight: 430 !important;
+  line-height: 1.65 !important;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.maint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 13px;
+}
+
+/* cleanup */
+
+body .maintenance-view-shell .maint-danger-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: var(--admin-danger-soft);
+  color: var(--admin-danger) !important;
+  padding: 3px 10px;
+  font-size: 11px !important;
+  font-weight: 580 !important;
+  white-space: nowrap;
+}
+
+body .maintenance-view-shell .maintenance-cleanup-grid {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 1fr) 150px auto !important;
+  align-items: end !important;
+  gap: 13px !important;
+  min-width: 0;
+  margin-top: 17px !important;
+}
+
+body .maintenance-view-shell .maintenance-cleanup-field,
+body .maintenance-view-shell .maintenance-cleanup-action {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+body .maintenance-view-shell .maintenance-cleanup-grid :is(.form-input, .popover-select-trigger, .maintenance-cleanup-button) {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  border-radius: var(--admin-radius-control) !important;
+  box-shadow: none !important;
+  font-size: 12.5px !important;
+  line-height: 1.2 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+body .maintenance-view-shell .btn-danger.maintenance-cleanup-button,
+html.theme-dark body .maintenance-view-shell .btn-danger.maintenance-cleanup-button {
+  display: inline-flex !important;
+  min-width: 128px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0 !important;
+  background: var(--admin-danger) !important;
+  color: #fff !important;
+  padding: 0 15px !important;
+  font-weight: 590 !important;
+  white-space: nowrap;
+}
+
+body .maintenance-view-shell .btn-danger.maintenance-cleanup-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--admin-danger) 86%, #000) !important;
+  color: #fff !important;
+}
+
+html.theme-dark body .maintenance-view-shell .btn-danger.maintenance-cleanup-button,
+body.theme-dark .maintenance-view-shell .btn-danger.maintenance-cleanup-button {
+  color: #2b1115 !important;
+}
+
+html.theme-dark body .maintenance-view-shell .btn-danger.maintenance-cleanup-button:hover:not(:disabled),
+body.theme-dark .maintenance-view-shell .btn-danger.maintenance-cleanup-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--admin-danger) 88%, #fff) !important;
+  color: #2b1115 !important;
+}
+
+/* account rules — list manager: category rail + chip editor */
+
+.rules-manager {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 15px;
+  min-width: 0;
+}
+
+.rules-nav {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+}
+
+body .settings-view-shell .rules-nav-item {
+  display: flex !important;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0 !important;
+  border-radius: var(--admin-radius-control) !important;
+  background: transparent !important;
+  color: var(--admin-text-soft) !important;
+  padding: 0 12px !important;
+  font-size: 12.5px !important;
+  font-weight: 530 !important;
+  line-height: 1.35 !important;
+  text-align: left;
+}
+
+body .settings-view-shell .rules-nav-item > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .settings-view-shell .rules-nav-item:hover {
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-text) !important;
+}
+
+body .settings-view-shell .rules-nav-item.is-active {
+  background: var(--admin-accent-soft) !important;
+  color: var(--admin-text-strong) !important;
+  font-weight: 610 !important;
+}
+
+body .rules-nav-count {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 26px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--admin-panel-muted);
+  color: var(--admin-muted);
+  padding: 0 7px;
+  font-size: 10.5px;
+  font-weight: 580;
+  font-variant-numeric: tabular-nums;
+}
+
+body .settings-view-shell .rules-nav-item.is-active .rules-nav-count {
+  background: color-mix(in srgb, var(--admin-accent) 18%, var(--admin-panel));
+  color: var(--admin-accent);
+}
+
+.rules-editor {
+  display: flex;
+  min-width: 0;
+  min-height: 252px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--admin-divider);
+  border-radius: var(--admin-radius-card);
+  background: var(--admin-panel-soft);
+}
+
+.rules-editor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--admin-divider);
+}
+
+body .rules-editor-title {
+  color: var(--admin-text) !important;
+  font-size: 12.5px !important;
+  font-weight: 610 !important;
+  line-height: 1.4 !important;
+}
+
+body .rules-editor-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--admin-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 440 !important;
+  line-height: 1.4 !important;
+}
+
+.rules-chip-area {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 7px;
+  overflow: auto;
+  max-height: 264px;
+  padding: 13px 14px;
+}
+
+body .rule-chip {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 28px;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--admin-divider);
+  border-radius: 8px;
+  background: var(--admin-panel);
+  color: var(--admin-text-soft);
+  padding: 0 4px 0 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.3;
+  animation: ruleChipIn 200ms var(--motion-ease-out, ease) both;
+}
+
+@keyframes ruleChipIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+body .rule-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .settings-view-shell .rule-chip-remove {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  align-items: center;
+  justify-content: center;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--admin-muted-soft) !important;
+  padding: 0 !important;
+}
+
+body .settings-view-shell .rule-chip-remove:hover {
+  background: var(--admin-danger-soft) !important;
+  color: var(--admin-danger) !important;
+}
+
+body .rules-empty {
+  margin: auto;
+  padding: 18px;
+  color: var(--admin-muted) !important;
+  font-size: 12px !important;
+  font-weight: 440 !important;
+  text-align: center;
+}
+
+.rules-input-row {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--admin-divider);
+  background: color-mix(in srgb, var(--admin-panel) 55%, var(--admin-panel-soft));
+  padding: 10px 12px;
+}
+
+body .settings-view-shell .rules-input-row .form-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 36px !important;
+  height: 36px !important;
+  background: var(--admin-panel) !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px !important;
+}
+
+body .settings-view-shell .rules-input-row .btn-secondary {
+  flex: 0 0 auto;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 0 13px !important;
+  font-size: 12px !important;
+}
+
+/* policies under the manager */
+
+.rules-policy-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(230px, 1.3fr) auto;
+  gap: 13px;
+  align-items: end;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--admin-divider);
+  min-width: 0;
+}
+
+.rules-policy {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  align-content: end;
+}
+
+.rules-policy-quota {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rules-quota-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+body .settings-view-shell .rules-quota-cell .check-row {
+  flex: 0 0 auto;
+  min-height: 38px !important;
+}
+
+body .settings-view-shell .rules-quota-cell .form-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto !important;
+}
+
+body .settings-view-shell .rules-policy .check-row {
+  min-height: 38px !important;
+}
+
+.rules-policy-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* page entrance — a soft staggered rise, desktop only */
+
+@keyframes productPageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (min-width: 901px) {
+  .mobile-page-current :is(.product-page, .compose-canvas) > * {
+    animation: productPageIn 340ms var(--motion-ease-out, cubic-bezier(0.2, 0.65, 0.3, 1)) backwards;
+  }
+
+  .mobile-page-current :is(.product-page, .compose-canvas) > :nth-child(2) {
+    animation-delay: 50ms;
+  }
+
+  .mobile-page-current :is(.product-page, .compose-canvas) > :nth-child(3) {
+    animation-delay: 95ms;
+  }
+
+  .mobile-page-current :is(.product-page, .compose-canvas) > :nth-child(4) {
+    animation-delay: 135ms;
+  }
+
+  .mobile-page-current :is(.product-page, .compose-canvas) > :nth-child(n + 5) {
+    animation-delay: 170ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-page-current :is(.product-page, .compose-canvas) > *,
+  body .rule-chip {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  .dash-quick-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dash-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-card-traffic {
+    grid-column: 1 / -1;
+  }
+
+  .dash-card-traffic .dash-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 26px;
+  }
+
+  .rules-manager {
+    grid-template-columns: 188px minmax(0, 1fr);
+  }
+
+  .rules-policy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rules-policy-actions {
+    grid-column: -2 / -1;
+  }
+
+  body .settings-view-shell .settings-layout-section {
+    grid-template-columns: 168px minmax(0, 1fr);
+    gap: 22px;
+  }
+
+  body .settings-view-shell .settings-interface-grid,
+  body .settings-view-shell .settings-mail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body .settings-view-shell .account-rules-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .dash-metrics,
+  .stats-lead,
+  .stats-detail,
+  .maint-grid,
+  .maint-lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body .settings-view-shell .settings-layout-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 22px 0 26px;
+  }
+
+  body .settings-view-shell .settings-section-heading {
+    position: static;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 767px) {
+  .product-page {
+    gap: 13px;
+  }
+
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 13px;
+  }
+
+  .page-head-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  body :is(
+    .admin-dashboard-view-shell,
+    .admin-stats-view-shell,
+    .settings-view-shell,
+    .maintenance-view-shell,
+    .compose-view-shell
+  ) .product-button {
+    min-height: 38px !important;
+    height: 38px !important;
+  }
+
+  .paper-card {
+    padding: 16px;
+  }
+
+  .dash-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .dash-quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  body .dash-quick-card {
+    min-height: 84px;
+  }
+
+  .dash-caps-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .dash-caps-grid .cap-row:nth-last-child(-n + 2):nth-child(odd) {
+    border-bottom: 1px solid var(--admin-divider);
+  }
+
+  .dash-caps-grid .cap-row:last-child {
+    border-bottom: 0;
+  }
+
+  body .settings-view-shell .settings-json-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .rules-manager {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .rules-nav {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .rules-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  body .settings-view-shell .rules-nav-item {
+    min-height: 36px;
+    padding: 0 11px !important;
+  }
+
+  .rules-policy-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rules-policy-actions {
+    grid-column: auto;
+    justify-content: stretch;
+  }
+
+  .rules-policy-actions > button {
+    flex: 1;
+  }
+
+  body .settings-view-shell .account-rules-control-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body .maintenance-view-shell .maintenance-cleanup-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body .maintenance-view-shell .maintenance-code-area {
+    min-height: 180px !important;
+    max-height: 260px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body :is(
+    .admin-dashboard-view-shell,
+    .admin-stats-view-shell,
+    .settings-view-shell,
+    .maintenance-view-shell
+  ) :is(.product-button, .dash-quick-card, .tone-bar > span, .dash-meter-track > span) {
+    transition: none !important;
+  }
+}

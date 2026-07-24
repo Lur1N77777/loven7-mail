@@ -1,0 +1,970 @@
+/* ============================================================================
+   Data workspaces — address management, user management, and compose.
+   Address/users follow the dashboard language: a paper canvas, one data card
+   hosting toolbar + full-bleed table + pagination. Tokens come from theme.css.
+   ========================================================================== */
+
+:where(.address-workspace, .users-workspace, .compose-workspace) {
+  --workspace-canvas: var(--admin-bg, #f6f5f3);
+  --workspace-surface: var(--admin-panel, #fff);
+  --workspace-surface-soft: var(--admin-panel-soft, #f4f3f0);
+  --workspace-surface-hover: var(--admin-panel-hover, #f0efec);
+  --workspace-ink: var(--admin-text, #2a2723);
+  --workspace-ink-soft: var(--admin-text-soft, #5a564f);
+  --workspace-muted: var(--admin-muted, #8a857d);
+  --workspace-line: var(--admin-border, rgba(45, 40, 34, 0.13));
+  --workspace-line-soft: var(--admin-divider, rgba(45, 40, 34, 0.08));
+  --workspace-accent: var(--admin-accent, #b14a33);
+  --workspace-accent-hover: var(--admin-accent-hover, #993d28);
+  --workspace-danger: var(--admin-danger, #c24457);
+  /* Workspaces use a tighter control radius than product cards. This keeps
+     table actions compact while the dashboard retains its softer cards. */
+  --workspace-radius: var(--admin-radius-control-sm, 8px);
+  --workspace-radius-sm: var(--admin-radius-control-sm, 8px);
+  min-width: 0;
+  background: var(--admin-bg) !important;
+  color: var(--workspace-ink) !important;
+  font-family: var(--admin-ui-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif) !important;
+  font-size: 14px;
+  letter-spacing: 0 !important;
+}
+
+:where(.address-workspace, .users-workspace, .compose-workspace) :where(h1, h2, h3, p, button, input, textarea, select, summary, table, th, td) {
+  letter-spacing: 0 !important;
+}
+
+/* Compact workspace actions stay below the softer product-card radius. */
+body :is(.address-workspace, .users-workspace, .compose-workspace) :is(.btn-primary, .btn-secondary, .btn-danger) {
+  border-radius: var(--workspace-radius-sm) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Shared data-card internals: toolbar, table, pagination
+   ------------------------------------------------------------------------- */
+
+.address-filter-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--workspace-muted);
+  font-size: 12px;
+  font-weight: 460;
+  line-height: 1.45;
+}
+
+body .address-filter-status .filter-inline-clear {
+  border: 0 !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--workspace-accent) 45%, transparent) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--workspace-accent) !important;
+  padding: 0 1px !important;
+  font-size: 12px !important;
+  font-weight: 560 !important;
+}
+
+body :is(.address-workspace, .users-workspace) :is(.address-toolbar, .users-toolbar) {
+  border: 0 !important;
+  border-bottom: 1px solid var(--workspace-line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body .address-workspace .address-toolbar {
+  display: grid !important;
+  grid-template-columns: minmax(190px, 232px) minmax(260px, 1fr) minmax(112px, 138px) auto auto !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+}
+
+body .users-workspace .users-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px !important;
+}
+
+/* toolbar controls share the global input language: white field, hairline, wax focus */
+body .address-view-shell.address-workspace .address-toolbar :is(.toolbar-field, .user-filter-trigger, .toolbar-action),
+body .address-view-shell.address-workspace .address-toolbar .address-sort-select .popover-select-trigger,
+body .users-workspace .users-search-input,
+body .users-workspace .users-refresh {
+  min-height: 38px !important;
+  height: 38px !important;
+  border: 1px solid var(--workspace-line-soft) !important;
+  border-radius: var(--workspace-radius) !important;
+  background: var(--workspace-surface) !important;
+  color: var(--workspace-ink-soft) !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+body .address-workspace .address-toolbar .address-sort-select {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body .address-view-shell.address-workspace .address-toolbar :is(.toolbar-field, .user-filter-trigger, .toolbar-action):hover,
+body .address-view-shell.address-workspace .address-toolbar .address-sort-select .popover-select-trigger:hover,
+body .users-workspace .users-refresh:hover {
+  border-color: var(--workspace-line) !important;
+  background: var(--workspace-surface-hover) !important;
+  color: var(--workspace-ink) !important;
+}
+
+body .address-workspace .toolbar-field.address-search-field {
+  min-width: 0 !important;
+  gap: 9px !important;
+  overflow: hidden !important;
+  padding: 0 12px !important;
+}
+
+body .address-workspace .toolbar-field.address-search-field input {
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--workspace-ink) !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  font-size: 13.5px !important;
+  font-weight: 450 !important;
+}
+
+body .address-view-shell.address-workspace .toolbar-field.address-search-field:focus-within,
+body .users-workspace .users-search-input:focus {
+  border-color: color-mix(in srgb, var(--workspace-accent) 55%, transparent) !important;
+  background: var(--workspace-surface) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--workspace-accent) 13%, transparent) !important;
+}
+
+body .users-workspace .users-search-input {
+  min-width: 220px;
+  max-width: 560px;
+  flex: 1;
+  padding: 0 12px !important;
+  font-weight: 450 !important;
+}
+
+body .address-workspace .address-search-clear,
+body .address-workspace .user-filter-clear {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--workspace-muted) !important;
+  box-shadow: none !important;
+}
+
+.address-workspace .user-filter-label {
+  color: var(--workspace-ink) !important;
+  font-size: 13px !important;
+  font-weight: 560 !important;
+}
+
+.address-workspace .user-filter-count {
+  color: var(--workspace-muted) !important;
+  font-size: 11px !important;
+  font-weight: 450 !important;
+}
+
+/* tables — full bleed inside the card */
+
+.address-workspace .address-table-wrap,
+.users-workspace .user-grid-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  border: 0;
+  background: transparent;
+}
+
+body .address-workspace .data-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+}
+
+body :is(.address-workspace, .users-workspace) :is(.data-table th, .user-grid-header) {
+  border: 0 !important;
+  border-bottom: 1px solid var(--workspace-line-soft) !important;
+  background: var(--workspace-surface-soft) !important;
+  color: var(--workspace-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+}
+
+body .address-workspace .data-table th {
+  height: 42px;
+  padding: 0 14px !important;
+}
+
+body .address-workspace .data-table td {
+  height: 58px;
+  padding: 9px 14px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--workspace-line-soft) !important;
+  background: transparent !important;
+  color: var(--workspace-ink-soft) !important;
+  font-size: 13px !important;
+  font-weight: 450 !important;
+  transition: background-color 120ms ease;
+}
+
+body .address-workspace .data-table tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+body .address-workspace .data-table :where(th, td):first-child {
+  padding-left: 20px !important;
+}
+
+body .address-workspace .data-table :where(th, td):last-child {
+  min-width: 164px;
+  padding-right: 20px !important;
+  border-left: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body .address-workspace .data-table th:last-child {
+  background: var(--workspace-surface-soft) !important;
+}
+
+body .address-workspace .data-table tr:hover td {
+  background: var(--workspace-surface-hover) !important;
+  color: var(--workspace-ink) !important;
+}
+
+.address-workspace .address-strong {
+  color: var(--workspace-ink) !important;
+  font-weight: 580 !important;
+}
+
+.address-workspace .address-desktop-actions {
+  gap: 2px !important;
+}
+
+body :is(.address-workspace, .users-workspace) .table-action {
+  display: inline-flex !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  align-items: center;
+  justify-content: center;
+  border: 0 !important;
+  border-radius: var(--workspace-radius-sm) !important;
+  background: transparent !important;
+  color: var(--workspace-muted) !important;
+  box-shadow: none !important;
+}
+
+body :is(.address-workspace, .users-workspace) .table-action:hover:not(:disabled),
+body :is(.address-workspace, .users-workspace) .table-action.active {
+  background: var(--workspace-surface-hover) !important;
+  color: var(--workspace-ink) !important;
+}
+
+body :is(.address-workspace, .users-workspace) .table-action.danger {
+  background: transparent !important;
+  color: var(--workspace-danger) !important;
+}
+
+body :is(.address-workspace, .users-workspace) .pagination-bar {
+  min-height: 48px;
+  border-top: 1px solid var(--workspace-line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--workspace-muted) !important;
+  padding-right: 16px !important;
+  padding-left: 16px !important;
+  box-shadow: none !important;
+  margin-top: auto;
+}
+
+body .address-workspace .pagination-bar :is(.pagination-size-trigger, .page-btn.compact),
+body .users-workspace .pagination-bar :is(.pagination-size-trigger, .page-btn.compact) {
+  min-height: 30px !important;
+  height: 30px !important;
+  border: 1px solid var(--workspace-line-soft) !important;
+  border-radius: var(--workspace-radius-sm) !important;
+  background: transparent !important;
+  color: var(--workspace-ink-soft) !important;
+  box-shadow: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Address extras — sender access card, mobile cards
+   ------------------------------------------------------------------------- */
+
+body .address-workspace .sender-access-shell {
+  border-top: 1px solid var(--admin-divider) !important;
+  border-bottom: 1px solid var(--admin-divider) !important;
+  border-right: 0 !important;
+  border-left: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body .address-workspace .sender-access-toggle {
+  min-height: 54px;
+  padding: 0 20px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--workspace-ink) !important;
+  box-shadow: none !important;
+  font-weight: 570 !important;
+  transition: background-color 140ms ease;
+}
+
+body .address-workspace .sender-access-toggle:hover {
+  background: var(--workspace-surface-hover) !important;
+}
+
+body .address-workspace .sender-access-panel {
+  margin: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid var(--workspace-line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body .address-workspace :where(.status-pill, .mobile-address-more, .mobile-bulk-fab) {
+  border-radius: var(--workspace-radius-sm) !important;
+}
+
+body .address-workspace .mobile-address-more {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--workspace-muted) !important;
+  box-shadow: none !important;
+}
+
+body .address-workspace .mobile-address-more:hover,
+body .address-workspace .mobile-address-more.active {
+  background: var(--workspace-surface-hover) !important;
+  color: var(--workspace-ink) !important;
+}
+
+.address-mobile-list {
+  padding: 0 16px;
+}
+
+body .address-workspace .mobile-address-card {
+  margin: 0 !important;
+  padding: 14px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--workspace-line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Users extras — grid rows, inline addresses, mobile cards
+   ------------------------------------------------------------------------- */
+
+body .users-workspace .user-grid-list {
+  width: 100%;
+  min-width: 920px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.users-workspace .user-grid-row {
+  grid-template-columns: 76px minmax(220px, 2fr) minmax(110px, 0.8fr) minmax(86px, 0.52fr) minmax(168px, 1fr) 190px;
+  gap: 16px;
+}
+
+body .users-workspace .user-grid-header {
+  min-height: 42px;
+  padding: 0 20px !important;
+}
+
+body .users-workspace .user-grid-item {
+  border: 0 !important;
+  border-bottom: 1px solid var(--workspace-line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body .users-workspace .user-grid-item:last-child {
+  border-bottom: 0 !important;
+}
+
+body .users-workspace .user-grid-body-row {
+  min-height: 58px;
+  padding: 0 20px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--workspace-ink-soft) !important;
+  font-size: 13px !important;
+  font-weight: 450 !important;
+  box-shadow: none !important;
+  transition: background-color 120ms ease;
+}
+
+body .users-workspace .user-grid-body-row:hover,
+body .users-workspace .user-grid-body-row:focus-visible,
+body .users-workspace .user-grid-item.is-expanded > .user-grid-body-row {
+  background: var(--workspace-surface-hover) !important;
+  color: var(--workspace-ink) !important;
+  box-shadow: none !important;
+}
+
+body .users-workspace .user-grid-item.is-expanded > .user-grid-body-row {
+  box-shadow: inset 2px 0 0 var(--workspace-accent) !important;
+}
+
+body .users-workspace :is(.user-address-inline, .user-inline-motion-inner) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--workspace-surface-soft) !important;
+  box-shadow: none !important;
+}
+
+body .users-workspace .user-address-inline {
+  margin: 0 !important;
+  padding: 16px 20px 18px !important;
+  border-bottom: 1px solid var(--workspace-line-soft) !important;
+}
+
+body .users-workspace .user-address-inline .form-input {
+  min-height: 38px !important;
+  height: 38px !important;
+  border: 1px solid var(--workspace-line-soft) !important;
+  border-radius: var(--workspace-radius) !important;
+  background: var(--workspace-surface) !important;
+  padding: 0 11px !important;
+  box-shadow: none !important;
+  font-size: 13px !important;
+}
+
+.users-mobile-list {
+  padding: 0 16px;
+}
+
+body .users-workspace .user-mobile-card {
+  margin: 0 !important;
+  padding: 15px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--workspace-line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.users-workspace .user-mobile-count {
+  flex: 0 0 auto;
+  color: var(--workspace-muted);
+  font-size: 11px;
+  font-weight: 520;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+body .users-workspace .user-mobile-card :where(.btn-secondary, .btn-danger) {
+  min-height: 34px !important;
+  height: 34px !important;
+  border-radius: var(--workspace-radius-sm) !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+}
+
+.users-workspace .user-mobile-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--workspace-line-soft);
+}
+
+body .users-workspace .user-mobile-card .user-mobile-actions :is(.btn-secondary, .btn-danger) {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  gap: 4px !important;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  padding: 0 2px !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+  white-space: nowrap;
+}
+
+body .users-workspace .user-mobile-card .user-mobile-actions :is(.btn-secondary, .btn-danger):hover {
+  background: var(--workspace-surface-hover) !important;
+}
+
+/* user filter dropdown menu (portal-less, inside toolbar) */
+
+body .address-workspace .user-filter-menu {
+  border: 1px solid var(--workspace-line-soft) !important;
+  border-radius: var(--workspace-radius-sm) !important;
+  background: var(--workspace-surface) !important;
+  padding: 4px !important;
+  box-shadow: var(--admin-menu-shadow) !important;
+}
+
+body .address-workspace .user-filter-option {
+  border-radius: 4px !important;
+  background: transparent !important;
+  color: var(--workspace-ink-soft) !important;
+}
+
+body .address-workspace .user-filter-option:hover,
+body .address-workspace .user-filter-option.active {
+  background: var(--workspace-surface-hover) !important;
+  color: var(--workspace-ink) !important;
+}
+
+body .address-workspace .user-filter-option-count {
+  border: 0 !important;
+  border-radius: 4px !important;
+  background: var(--workspace-surface-soft) !important;
+  color: var(--workspace-muted) !important;
+  box-shadow: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Compose — a letter sheet resting on the paper canvas
+   ------------------------------------------------------------------------- */
+
+body .compose-workspace {
+  background: var(--admin-bg) !important;
+}
+
+.compose-canvas {
+  width: 100%;
+  max-width: 1060px;
+  min-width: 0;
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+  padding: clamp(18px, 2.6vw, 34px) clamp(16px, 2.8vw, 36px) clamp(30px, 4vw, 56px);
+}
+
+body .compose-workspace .compose-mode-switch {
+  display: inline-flex !important;
+  min-width: 0;
+  gap: 3px !important;
+  margin: 0 !important;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: 0 !important;
+  background: var(--admin-panel-soft) !important;
+  padding: 3px !important;
+  box-shadow: none !important;
+}
+
+body .compose-workspace .compose-mode-switch .compose-mode-option {
+  position: relative;
+  width: auto !important;
+  min-width: 0;
+  min-height: 32px !important;
+  border: 0 !important;
+  border-radius: calc(var(--workspace-radius) - 3px) !important;
+  background: transparent !important;
+  color: var(--admin-muted) !important;
+  padding: 0 15px !important;
+  box-shadow: none !important;
+  font-size: 12.5px !important;
+  font-weight: 560 !important;
+}
+
+body .compose-workspace .compose-mode-switch .compose-mode-option:hover {
+  color: var(--admin-text) !important;
+}
+
+body .compose-workspace .compose-mode-switch .compose-mode-option.is-active {
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  box-shadow: 0 1px 3px rgba(50, 44, 36, 0.14) !important;
+}
+
+.compose-sheet {
+  min-width: 0;
+  border: 1px solid var(--admin-divider);
+  border-radius: var(--admin-radius-panel);
+  background: var(--admin-panel);
+  box-shadow: var(--admin-shadow-card);
+  overflow: hidden;
+}
+
+html.theme-dark body .compose-sheet,
+body.theme-dark .compose-sheet {
+  box-shadow: none;
+}
+
+.compose-sheet-body {
+  min-width: 0;
+  padding: clamp(22px, 3vw, 32px) clamp(18px, 3.2vw, 38px) clamp(20px, 2.6vw, 28px);
+}
+
+body .compose-workspace .form-label {
+  margin-bottom: 7px !important;
+  color: var(--admin-text-soft) !important;
+  font-size: 12px !important;
+  font-weight: 570 !important;
+  line-height: 1.4 !important;
+}
+
+body .compose-workspace :is(.form-input, .form-textarea) {
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--workspace-radius) !important;
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  box-shadow: none !important;
+  font-size: 14px !important;
+  font-weight: 440 !important;
+}
+
+body .compose-workspace .form-input {
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 0 13px !important;
+}
+
+body .compose-workspace .form-textarea {
+  padding: 12px 13px !important;
+  line-height: 1.7 !important;
+}
+
+body .compose-workspace .form-textarea.min-h-72 {
+  min-height: 300px !important;
+}
+
+body .compose-workspace :where(.form-input, .form-textarea, .code-area):focus {
+  border-color: color-mix(in srgb, var(--admin-accent) 55%, transparent) !important;
+  background: var(--admin-panel) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent) 13%, transparent) !important;
+}
+
+body .compose-workspace .mail-frame {
+  width: 100%;
+  min-height: 300px;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--workspace-radius) !important;
+  background: #ffffff !important;
+}
+
+body .compose-workspace .code-area {
+  border-radius: var(--workspace-radius) !important;
+  font-size: 12.5px !important;
+}
+
+body .compose-workspace .compose-data-preview {
+  padding: 13px 15px;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--workspace-radius) !important;
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-text-soft) !important;
+  box-shadow: none !important;
+}
+
+body .compose-workspace .compose-data-preview summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 570;
+}
+
+body .compose-workspace .compose-data-preview pre {
+  max-height: 256px;
+  margin: 12px 0 0;
+  overflow: auto;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.compose-sheet-foot {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--admin-divider);
+  background: var(--admin-panel-soft);
+  padding: 14px clamp(18px, 3.2vw, 38px);
+}
+
+body .compose-foot-hint {
+  min-width: 0;
+  color: var(--admin-muted) !important;
+  font-size: 12px !important;
+  font-weight: 450 !important;
+  line-height: 1.45 !important;
+}
+
+.compose-foot-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 9px;
+}
+
+body .compose-workspace .compose-foot-actions :where(.btn-primary, .btn-secondary) {
+  min-height: 40px !important;
+  height: 40px !important;
+  border-radius: var(--workspace-radius) !important;
+  padding: 0 16px !important;
+  font-size: 13.5px !important;
+}
+
+html.theme-dark body .compose-workspace .compose-foot-actions .btn-secondary,
+body.theme-dark .compose-workspace .compose-foot-actions .btn-secondary {
+  background: var(--admin-panel-muted) !important;
+  color: var(--admin-text-soft) !important;
+}
+
+html.theme-dark body .compose-workspace .compose-foot-actions .btn-secondary:hover:not(:disabled),
+body.theme-dark .compose-workspace .compose-foot-actions .btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--admin-panel-muted) 72%, var(--admin-text-soft)) !important;
+  color: var(--admin-text) !important;
+}
+
+body .compose-workspace .compose-send-btn {
+  min-width: 108px;
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive
+   ------------------------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  body .address-workspace .address-toolbar {
+    grid-template-columns: minmax(170px, 210px) minmax(210px, 1fr) 112px auto auto !important;
+  }
+
+  .users-workspace .user-grid-row {
+    grid-template-columns: 68px minmax(200px, 1.8fr) 100px 76px 150px 174px;
+    gap: 12px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  body .address-workspace .data-table {
+    min-width: 100% !important;
+    table-layout: fixed !important;
+  }
+
+  body .address-workspace .data-table :is(th, td):not(:last-child) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  body .address-workspace .data-table :where(th, td) {
+    padding-right: 10px !important;
+    padding-left: 10px !important;
+  }
+
+  body .address-workspace .data-table :where(th, td):first-child {
+    padding-left: 16px !important;
+  }
+
+  body .address-workspace .data-table :where(th, td):last-child {
+    width: 146px !important;
+    min-width: 146px !important;
+    padding-right: 16px !important;
+  }
+
+  body .address-workspace .data-table :where(th, td):nth-child(4) {
+    display: none;
+  }
+
+  body .users-workspace .user-grid-list {
+    min-width: 100% !important;
+  }
+
+  .users-workspace .user-grid-row {
+    grid-template-columns: 52px minmax(150px, 1fr) 72px 58px 142px 164px !important;
+    gap: 8px !important;
+  }
+
+  body .users-workspace .user-grid-body-row > div:last-child {
+    gap: 2px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  body .address-workspace .address-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) 36px !important;
+    gap: 8px !important;
+    padding: 10px 14px 12px !important;
+  }
+
+  body .address-workspace .address-toolbar :where(.toolbar-field, .user-filter-trigger, .toolbar-action),
+  body .address-workspace .address-toolbar .address-sort-select .popover-select-trigger {
+    min-height: 36px !important;
+    height: 36px !important;
+    border-radius: var(--workspace-radius) !important;
+  }
+
+  body .address-workspace .address-toolbar .user-filter-dropdown {
+    grid-column: 1 / 4;
+  }
+
+  body .address-workspace .address-toolbar .address-search-field {
+    grid-column: 1 / 4 !important;
+  }
+
+  body .address-workspace .address-toolbar .address-sort-select {
+    grid-column: 1 / 2 !important;
+  }
+
+  body .address-workspace .address-toolbar .sort-order-action {
+    grid-column: 2 / 3 !important;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+
+  body .address-workspace .address-toolbar .address-toolbar-refresh {
+    grid-column: 3 / 4 !important;
+    width: 36px !important;
+    min-width: 36px !important;
+    padding: 0 !important;
+  }
+
+  body .address-workspace .address-toolbar .address-toolbar-refresh span {
+    display: none !important;
+  }
+
+  body .address-workspace .sender-access-toggle {
+    min-height: 50px;
+    padding: 0 16px !important;
+  }
+
+  body .users-workspace .users-toolbar {
+    padding: 10px 14px 12px !important;
+  }
+
+  body .users-workspace .users-search-input {
+    min-width: 0;
+    max-width: none;
+  }
+
+  body :is(.address-workspace, .users-workspace) .pagination-bar {
+    padding-right: 14px !important;
+    padding-left: 14px !important;
+  }
+
+  .compose-canvas {
+    gap: 12px;
+  }
+
+  .compose-sheet-body {
+    padding: 18px 16px 16px;
+  }
+
+  .compose-sheet-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 11px;
+    padding: 13px 16px 15px;
+  }
+
+  .compose-foot-actions {
+    justify-content: stretch;
+  }
+
+  .compose-foot-actions > button {
+    flex: 1;
+  }
+
+  body .compose-workspace .compose-mode-switch {
+    width: 100%;
+  }
+
+  body .compose-workspace .compose-mode-switch .compose-mode-option {
+    flex: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  body .address-workspace .address-page-actions {
+    width: 100%;
+  }
+
+  body .address-workspace .address-page-actions > button {
+    flex: 1;
+  }
+
+  body .users-workspace .users-toolbar {
+    align-items: stretch;
+  }
+
+  body .users-workspace .users-refresh {
+    width: 38px !important;
+    min-width: 38px !important;
+    padding: 0 !important;
+    font-size: 0 !important;
+    gap: 0 !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .users-workspace .user-mobile-actions button span {
+    display: none;
+  }
+
+  body .users-workspace .user-mobile-actions :is(.btn-secondary, .btn-danger) {
+    gap: 0 !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.address-workspace, .users-workspace, .compose-workspace) *,
+  :where(.address-workspace, .users-workspace, .compose-workspace) *::before,
+  :where(.address-workspace, .users-workspace, .compose-workspace) *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* outrank legacy V76 sort-select lock in index.css */
+body .address-view-shell .address-toolbar .popover-select.address-sort-select .popover-select-trigger {
+  min-height: 38px !important;
+  height: 38px !important;
+  border-radius: var(--workspace-radius) !important;
+}
+
+@media (max-width: 767px) {
+  body .address-view-shell .address-toolbar .popover-select.address-sort-select .popover-select-trigger {
+    min-height: 36px !important;
+    height: 36px !important;
+  }
+}

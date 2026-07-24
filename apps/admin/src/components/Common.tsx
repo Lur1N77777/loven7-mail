@@ -108,10 +108,10 @@ export function NoticeToast({ notice }: { notice: Notice }) {
   if (!notice) return null;
   return (
     <div className={cls(
-      'fixed right-5 top-5 z-[80] flex max-w-md items-center gap-3 rounded-2xl border px-4 py-3 text-sm shadow-xl backdrop-blur-md',
-      notice.type === 'success' && 'border-slate-200 bg-white/95 text-slate-800',
-      notice.type === 'error' && 'border-rose-200 bg-rose-50/95 text-rose-800',
-      notice.type === 'info' && 'border-slate-200 bg-white/95 text-slate-800',
+      'notice-toast fixed right-5 top-5 z-[80] flex max-w-md items-center gap-3 rounded-2xl border px-4 py-3 text-sm shadow-xl backdrop-blur-md',
+      notice.type === 'success' && 'notice-success border-slate-200 bg-white/95 text-slate-800',
+      notice.type === 'error' && 'notice-error border-rose-200 bg-rose-50/95 text-rose-800',
+      notice.type === 'info' && 'notice-info border-slate-200 bg-white/95 text-slate-800',
     )}>
       {notice.type === 'success' ? <Check size={18} /> : notice.type === 'error' ? <AlertCircle size={18} /> : <Bell size={18} />}
       <span>{notice.message}</span>

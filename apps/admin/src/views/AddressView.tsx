@@ -1770,16 +1770,18 @@ export function AddressView({
   const credentialLoginUrl = credential ? buildAddressLoginUrl(credential.jwt, frontendBase()) : '';
 
   return (
-    <div className="address-view-shell h-full space-y-4 overflow-y-auto p-3 md:p-4 xl:p-6" onScrollCapture={() => { closeMobileActionMenu(); closeDesktopActionMenu(); }}>
-      <div className="address-page-head flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div className="address-page-title">
-          <h2 className="text-2xl font-bold text-slate-800">{t("地址管理", "Address management")}</h2>
-          {!isAccountScoped && effectiveUserFilter && <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="filter-inline-clear text-slate-400 hover:text-slate-900">{t('清除', 'Clear')}</button></div>}
+    <div className="address-view-shell address-workspace h-full overflow-y-auto" onScrollCapture={() => { closeMobileActionMenu(); closeDesktopActionMenu(); }}>
+      <div className="product-page product-page-wide">
+      <header className="page-head">
+        <div className="page-head-copy address-page-title">
+          <span className="product-kicker">{t('邮箱资产', 'Mailbox assets')}</span>
+          <h1 className="page-title">{t("地址管理", "Address management")}</h1>
+          {!isAccountScoped && effectiveUserFilter && <div className="address-filter-status">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="filter-inline-clear">{t('清除', 'Clear')}</button></div>}
         </div>
-        <div className="address-page-actions flex flex-wrap gap-2"><button type="button" className="btn-primary" onClick={() => { setNewAddress((current) => ({ ...current, domain: current.domain || defaultDomain })); setCreateOpen(true); }}><Plus size={16} /> <span>{t("新建地址", "New address")}</span></button><button type="button" className="btn-secondary" onClick={openShareManager}><Share2 size={16} /> <span>{t("共享链接管理", "Share links")}</span></button><button type="button" className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button></div>
-      </div>
+        <div className="page-head-actions address-page-actions"><button type="button" className="product-button product-button-primary" onClick={() => { setNewAddress((current) => ({ ...current, domain: current.domain || defaultDomain })); setCreateOpen(true); }}><Plus className="h-4 w-4" /> <span>{t("新建地址", "New address")}</span></button><button type="button" className="product-button product-button-quiet" onClick={openShareManager}><Share2 className="h-4 w-4" /> <span>{t("共享链接管理", "Share links")}</span></button></div>
+      </header>
 
-      <div className={cls('panel overflow-hidden', desktopActionMenuId !== null && 'address-panel-menu-open')}>
+      <section className={cls('paper-card data-card address-workspace-surface', desktopActionMenuId !== null && 'address-panel-menu-open')}>
         <div className="address-toolbar">
           {isAccountScoped ? (
             <div className="toolbar-field user-filter-trigger">
@@ -1944,7 +1946,7 @@ export function AddressView({
         )}
         {loading && data.length === 0 ? <LoadingState /> : data.length === 0 ? <div className="p-4 md:p-6"><EmptyState title={t("暂无地址", "No addresses")} /></div> : (
           <>
-          <div className="space-y-2 p-3 md:hidden">
+          <div className="address-mobile-list md:hidden">
             {data.map(renderMobileAddressCard)}
           </div>
           <div className="address-table-wrap hidden overflow-auto md:block">
@@ -1974,9 +1976,9 @@ export function AddressView({
           </>
         )}
         <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} count={count} />
-      </div>
+      </section>
 
-      {!isAccountScoped && <div className="panel sender-access-shell overflow-hidden">
+      {!isAccountScoped && <section className="paper-card data-card sender-access-shell overflow-hidden">
         <button type="button" className="sender-access-toggle" onClick={() => setSenderPanelOpen((open) => !open)} aria-expanded={senderPanelOpen}>
           <span className="flex min-w-0 items-center gap-2">
             <ShieldCheck size={17} className="text-slate-600" />
@@ -1987,7 +1989,7 @@ export function AddressView({
           <ChevronDown size={16} className={cls('shrink-0 text-slate-400 transition', senderPanelOpen && 'rotate-180')} />
         </button>
         {senderPanelOpen && <SenderAccessPanel request={request} notify={notify} ask={ask} cacheScope={cacheScope} embedded />}
-      </div>}
+      </section>}
 
       {desktopActionMenu && typeof document !== 'undefined' && createPortal(
         <div
@@ -2250,6 +2252,7 @@ export function AddressView({
           }}>{addressActionBusy === `reset:${resetTarget.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />} {addressActionBusy === `reset:${resetTarget.id}` ? t('保存中...', 'Saving...') : t('保存', 'Save')}</button>
         </div>
       </Modal>}
+      </div>
     </div>
   );
 }

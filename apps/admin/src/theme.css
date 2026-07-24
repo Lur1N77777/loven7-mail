@@ -1,0 +1,917 @@
+/* ============================================================================
+   Loven7-Mail admin theme — "Paper, Ink & Sealing Wax"
+   ----------------------------------------------------------------------------
+   Loaded last on purpose: every earlier layer already funnels its colors into
+   the --admin-* custom properties, so redefining them here recolors the whole
+   app (sidebar, mail workspace, tables, product pages) in one place.
+
+   Light = warm linen paper + ink text.  Dark = warm charcoal + soft parchment
+   text.  One accent — sealing-wax red — reserved for presence: active nav,
+   selection, unread marks, focus and data emphasis. Primary actions are ink
+   (paper-colored in dark mode); danger stays rose so it never collides with
+   the accent.
+   ========================================================================== */
+
+:root {
+  /* surfaces — clean paper white with only a whisper of warmth */
+  --admin-bg: #f6f5f3;
+  --admin-panel: #ffffff;
+  --admin-panel-soft: #f4f3f0;
+  --admin-panel-muted: #e9e7e3;
+  --admin-panel-hover: #f0efec;
+  --admin-border: rgba(45, 40, 34, 0.13);
+  --admin-divider: rgba(45, 40, 34, 0.08);
+
+  /* ink — near-neutral warm black text scale */
+  --admin-text-strong: #1b1916;
+  --admin-text: #2a2723;
+  --admin-text-soft: #5a564f;
+  --admin-muted: #8a857d;
+  --admin-muted-soft: #b5b1a9;
+
+  /* primary action: ink */
+  --admin-ink: #24211d;
+  --admin-ink-hover: #38342e;
+  --admin-ink-on: #faf9f7;
+
+  /* accent: sealing wax (terracotta vermilion) */
+  --admin-accent: #b14a33;
+  --admin-accent-hover: #993d28;
+  --admin-accent-soft: rgba(177, 74, 51, 0.1);
+  --admin-accent-strong: #9c3c26;
+
+  /* statuses */
+  --admin-success: #3d7c5b;
+  --admin-success-soft: rgba(61, 124, 91, 0.12);
+  --admin-warning: #a2731f;
+  --admin-warning-soft: rgba(162, 115, 31, 0.12);
+  --admin-danger: #c24457;
+  --admin-danger-soft: rgba(194, 68, 87, 0.11);
+
+  /* code surfaces stay ink-dark in both themes */
+  --admin-code-bg: #24211d;
+  --admin-code-text: #eae7e0;
+
+  /* legacy handles: everything that used to be "blue" becomes wax */
+  --admin-blue: var(--admin-accent);
+  --admin-blue-hover: var(--admin-accent-hover);
+  --admin-blue-soft: var(--admin-accent-soft);
+
+  /* elevation — warm, airy */
+  --admin-shadow-card: 0 1px 2px rgba(61, 46, 32, 0.04), 0 10px 30px rgba(61, 46, 32, 0.06);
+  --admin-shadow-lift: 0 2px 6px rgba(61, 46, 32, 0.06), 0 18px 44px rgba(61, 46, 32, 0.1);
+  --admin-menu-shadow: 0 18px 44px rgba(50, 38, 26, 0.14), 0 2px 8px rgba(50, 38, 26, 0.06);
+
+  /* selection */
+  --admin-selected-bg: color-mix(in srgb, var(--admin-accent) 9%, var(--admin-panel));
+  --admin-selected-bg-strong: color-mix(in srgb, var(--admin-accent) 14%, var(--admin-panel));
+  --admin-selected-text: var(--admin-text);
+
+  /* radius scale */
+  --admin-radius-hero: 22px;
+  --admin-radius-modal: 18px;
+  --admin-radius-panel: 18px;
+  --admin-radius-card: 14px;
+  --admin-radius-control: 10px;
+  --admin-radius-control-sm: 8px;
+  --admin-radius-pill: 999px;
+
+  /* re-point the generic color tokens used by scattered legacy rules */
+  --color-bg: var(--admin-bg);
+  --color-surface: var(--admin-panel);
+  --color-surface-raised: var(--admin-panel);
+  --color-surface-soft: var(--admin-panel-soft);
+  --color-surface-muted: var(--admin-panel-muted);
+  --color-surface-sunken: var(--admin-panel-hover);
+  --color-border: var(--admin-border);
+  --color-border-strong: var(--admin-border);
+  --color-divider: var(--admin-divider);
+  --color-text: var(--admin-text);
+  --color-text-soft: var(--admin-text-soft);
+  --color-muted: var(--admin-muted);
+  --color-disabled: var(--admin-muted-soft);
+  --color-primary: var(--admin-accent);
+  --color-primary-hover: var(--admin-accent-hover);
+  --color-primary-active: var(--admin-accent-strong);
+  --color-primary-soft: var(--admin-accent-soft);
+  --color-primary-ring: rgba(176, 74, 50, 0.24);
+  --color-primary-on: #ffffff;
+  --color-primary-button: var(--admin-ink);
+  --color-primary-button-hover: var(--admin-ink-hover);
+  --color-primary-button-text: var(--admin-ink-on);
+  --color-accent: var(--admin-accent);
+  --color-accent-hover: var(--admin-accent-hover);
+  --color-accent-soft: var(--admin-accent-soft);
+  --color-rose: var(--admin-danger);
+  --color-rose-strong: #a83448;
+  --color-rose-soft: var(--admin-danger-soft);
+  --color-rose-faint: rgba(194, 68, 87, 0.07);
+  --color-danger: var(--admin-danger);
+  --color-danger-strong: #a83448;
+  --color-danger-soft: var(--admin-danger-soft);
+  --color-success: var(--admin-success);
+  --color-success-soft: var(--admin-success-soft);
+  --color-warning: var(--admin-warning);
+  --color-warning-soft: var(--admin-warning-soft);
+  --color-accent-pink: var(--admin-panel-muted);
+  --color-accent-pink-strong: var(--admin-accent);
+  --color-accent-pink-soft: var(--admin-accent-soft);
+  --color-accent-lavender: var(--admin-accent-soft);
+  --color-accent-lavender-strong: var(--admin-accent);
+}
+
+html.theme-dark,
+body.theme-dark,
+.theme-dark {
+  /* surfaces — clean graphite with a faint warm undertone, clear layering */
+  --admin-bg: #121110;
+  --admin-panel: #1c1a18;
+  --admin-panel-soft: #262421;
+  --admin-panel-muted: #33302c;
+  --admin-panel-hover: #242220;
+  --admin-border: rgba(236, 233, 227, 0.13);
+  --admin-divider: rgba(236, 233, 227, 0.08);
+
+  --admin-text-strong: #f7f5f1;
+  --admin-text: #eceae5;
+  --admin-text-soft: #b6b2a9;
+  --admin-muted: #8b867d;
+  --admin-muted-soft: #605c55;
+
+  /* primary action inverts to paper */
+  --admin-ink: #f1efea;
+  --admin-ink-hover: #faf8f4;
+  --admin-ink-on: #1f1d1a;
+
+  /* wax warms up and brightens for dark canvases */
+  --admin-accent: #e57c55;
+  --admin-accent-hover: #ec8e69;
+  --admin-accent-soft: rgba(229, 124, 85, 0.16);
+  --admin-accent-strong: #f29d79;
+
+  --admin-success: #7cb495;
+  --admin-success-soft: rgba(124, 180, 149, 0.16);
+  --admin-warning: #cda45f;
+  --admin-warning-soft: rgba(205, 164, 95, 0.16);
+  --admin-danger: #e5808f;
+  --admin-danger-soft: rgba(229, 128, 143, 0.16);
+
+  --admin-code-bg: #100f0e;
+  --admin-code-text: #e3e0d9;
+
+  --admin-blue: var(--admin-accent);
+  --admin-blue-hover: var(--admin-accent-hover);
+  --admin-blue-soft: var(--admin-accent-soft);
+
+  --admin-shadow-card: inset 0 1px 0 rgba(249, 244, 235, 0.045);
+  --admin-shadow-lift: inset 0 1px 0 rgba(249, 244, 235, 0.05), 0 14px 40px rgba(0, 0, 0, 0.36);
+  --admin-menu-shadow: 0 18px 44px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.32);
+
+  --admin-selected-bg: color-mix(in srgb, var(--admin-accent) 14%, var(--admin-panel));
+  --admin-selected-bg-strong: color-mix(in srgb, var(--admin-accent) 20%, var(--admin-panel));
+  --admin-selected-text: var(--admin-text-strong);
+
+  --color-bg: var(--admin-bg);
+  --color-surface: var(--admin-panel);
+  --color-surface-raised: var(--admin-panel);
+  --color-surface-soft: var(--admin-panel-soft);
+  --color-surface-muted: var(--admin-panel-muted);
+  --color-surface-sunken: var(--admin-panel-hover);
+  --color-border: var(--admin-border);
+  --color-border-strong: var(--admin-border);
+  --color-divider: var(--admin-divider);
+  --color-text: var(--admin-text);
+  --color-text-soft: var(--admin-text-soft);
+  --color-muted: var(--admin-muted);
+  --color-disabled: var(--admin-muted-soft);
+  --color-primary: var(--admin-accent);
+  --color-primary-hover: var(--admin-accent-hover);
+  --color-primary-active: var(--admin-accent-strong);
+  --color-primary-soft: var(--admin-accent-soft);
+  --color-primary-ring: rgba(224, 120, 80, 0.26);
+  --color-primary-on: #251f18;
+  --color-primary-button: var(--admin-ink);
+  --color-primary-button-hover: var(--admin-ink-hover);
+  --color-primary-button-text: var(--admin-ink-on);
+  --color-accent: var(--admin-accent);
+  --color-accent-hover: var(--admin-accent-hover);
+  --color-accent-soft: var(--admin-accent-soft);
+  --color-rose: var(--admin-danger);
+  --color-rose-strong: #eb95a3;
+  --color-rose-soft: var(--admin-danger-soft);
+  --color-rose-faint: rgba(225, 123, 140, 0.1);
+  --color-danger: var(--admin-danger);
+  --color-danger-strong: #eb95a3;
+  --color-danger-soft: var(--admin-danger-soft);
+  --color-success: var(--admin-success);
+  --color-success-soft: var(--admin-success-soft);
+  --color-warning: var(--admin-warning);
+  --color-warning-soft: var(--admin-warning-soft);
+  --color-accent-pink: var(--admin-panel-muted);
+  --color-accent-pink-strong: var(--admin-accent);
+  --color-accent-pink-soft: var(--admin-accent-soft);
+  --color-accent-lavender: var(--admin-accent-soft);
+  --color-accent-lavender-strong: var(--admin-accent);
+}
+
+@media (max-width: 767px) {
+  :root {
+    --admin-radius-hero: 18px;
+    --admin-radius-modal: 16px;
+    --admin-radius-panel: 16px;
+    --admin-radius-card: 12px;
+    --admin-radius-control: 10px;
+    --admin-radius-control-sm: 8px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Base canvas
+   ------------------------------------------------------------------------- */
+
+html,
+body,
+#root {
+  background: var(--admin-bg) !important;
+  color: var(--admin-text) !important;
+}
+
+body ::selection {
+  background: color-mix(in srgb, var(--admin-accent) 22%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   Buttons — ink primary, quiet secondary, rose danger
+   ------------------------------------------------------------------------- */
+
+body .btn-primary,
+body .sidebar-compose-btn,
+body .mail-tool-btn.primary,
+body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-primary,
+body #root .btn-primary {
+  border: 0 !important;
+  background: var(--admin-ink) !important;
+  color: var(--admin-ink-on) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  box-shadow: none !important;
+}
+
+body .btn-primary:hover:not(:disabled),
+body .sidebar-compose-btn:hover:not(:disabled),
+body .mail-tool-btn.primary:hover:not(:disabled),
+body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-primary:hover:not(:disabled),
+body #root .btn-primary:hover:not(:disabled) {
+  background: var(--admin-ink-hover) !important;
+  color: var(--admin-ink-on) !important;
+}
+
+body .btn-primary:active:not(:disabled),
+body .sidebar-compose-btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+body .btn-secondary,
+body .dashboard-hero-ghost,
+body .page-btn,
+body .toolbar-action,
+body .sidebar-mini-btn,
+body .credential-button,
+body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-secondary {
+  border: 1px solid var(--admin-divider) !important;
+  background: var(--admin-panel) !important;
+  color: var(--admin-text-soft) !important;
+  font-weight: 540 !important;
+  box-shadow: none !important;
+}
+
+body .btn-secondary:hover:not(:disabled),
+body .dashboard-hero-ghost:hover:not(:disabled),
+body .page-btn:hover:not(:disabled),
+body .toolbar-action:hover:not(:disabled),
+body .sidebar-mini-btn:hover:not(:disabled),
+body .credential-button:hover:not(:disabled),
+body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-secondary:hover:not(:disabled) {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+/* dark mode: quiet surfaces must stand off the card they sit on */
+html.theme-dark body :is(.btn-secondary, .product-button-quiet, .credential-button, .sidebar-mini-btn, .page-btn, .toolbar-action),
+body.theme-dark :is(.btn-secondary, .product-button-quiet, .credential-button, .sidebar-mini-btn, .page-btn, .toolbar-action),
+html.theme-dark body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-secondary {
+  border-color: transparent !important;
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-text-soft) !important;
+}
+
+html.theme-dark body :is(.btn-secondary, .product-button-quiet, .credential-button, .sidebar-mini-btn, .page-btn, .toolbar-action):hover:not(:disabled),
+body.theme-dark :is(.btn-secondary, .product-button-quiet, .credential-button, .sidebar-mini-btn, .page-btn, .toolbar-action):hover:not(:disabled),
+html.theme-dark body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-secondary:hover:not(:disabled) {
+  border-color: transparent !important;
+  background: var(--admin-panel-muted) !important;
+  color: var(--admin-text) !important;
+}
+
+body .table-action,
+body .icon-btn,
+body .detail-action {
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--admin-muted) !important;
+  box-shadow: none !important;
+}
+
+body .table-action:hover:not(:disabled),
+body .icon-btn:hover:not(:disabled),
+body .detail-action:hover:not(:disabled) {
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+body .btn-danger,
+body .table-action.danger,
+body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-danger {
+  border: 0 !important;
+  background: var(--admin-danger-soft) !important;
+  color: var(--admin-danger) !important;
+  font-weight: 580 !important;
+  box-shadow: none !important;
+}
+
+body .btn-danger:hover:not(:disabled),
+body .table-action.danger:hover:not(:disabled),
+body :is(.dashboard-view-shell, .stats-view-shell, .address-view-shell, .users-view-shell, .compose-view-shell, .settings-view-shell, .maintenance-view-shell, .modal-card) .btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--admin-danger) 18%, transparent) !important;
+  color: var(--admin-danger) !important;
+}
+
+body :is(button, [role="button"], a.sidebar-mini-btn):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--admin-accent) 55%, transparent) !important;
+  outline-offset: 2px !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Form controls — paper fields, wax focus
+   ------------------------------------------------------------------------- */
+
+body .form-input,
+body .form-select,
+body .form-textarea,
+body .address-filter-input,
+body .address-search-field input,
+body .popover-select-trigger {
+  border: 1px solid var(--admin-divider) !important;
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  box-shadow: none !important;
+}
+
+body .form-input::placeholder,
+body .form-textarea::placeholder,
+body .address-filter-input::placeholder,
+body .address-search-field input::placeholder {
+  color: var(--admin-muted-soft) !important;
+}
+
+body .form-input:focus,
+body .form-select:focus,
+body .form-textarea:focus,
+body .address-filter-input:focus,
+body .address-search-field input:focus,
+body .popover-select-trigger.is-open,
+body .popover-select-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--admin-accent) 55%, transparent) !important;
+  background: var(--admin-panel) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent) 13%, transparent) !important;
+  outline: none !important;
+}
+
+body :is(.popover-select-trigger.is-open, .mail-filter-select.active, .pagination-size-trigger.active, .user-filter-trigger.is-open) {
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent) 13%, transparent) !important;
+  border-color: color-mix(in srgb, var(--admin-accent) 55%, transparent) !important;
+}
+
+body .check-row input,
+body .row-check,
+body input[type="checkbox"],
+body input[type="radio"] {
+  accent-color: var(--admin-accent) !important;
+}
+
+body .code-area {
+  border: 1px solid transparent !important;
+  background: var(--admin-code-bg) !important;
+  color: var(--admin-code-text) !important;
+  box-shadow: none !important;
+}
+
+body .code-area:focus {
+  border-color: color-mix(in srgb, var(--admin-accent) 45%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-accent) 12%, transparent) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Menus, popovers, modal, toast
+   ------------------------------------------------------------------------- */
+
+body :is(
+  .popover-select-menu,
+  .mail-filter-menu,
+  .pagination-size-menu,
+  .user-filter-menu,
+  .address-desktop-action-menu,
+  .mobile-address-action-menu,
+  .mobile-detail-action-menu,
+  .mobile-more-menu,
+  .admin-avatar-popover
+) {
+  border: 1px solid var(--admin-divider) !important;
+  background: color-mix(in srgb, var(--admin-panel) 97%, transparent) !important;
+  box-shadow: var(--admin-menu-shadow) !important;
+}
+
+body .modal-card {
+  border: 1px solid var(--admin-divider) !important;
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  box-shadow: var(--admin-shadow-lift) !important;
+}
+
+body .modal-card > div:first-child {
+  border-bottom-color: var(--admin-divider) !important;
+}
+
+body .notice-toast {
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--admin-radius-card) !important;
+  background: color-mix(in srgb, var(--admin-panel) 96%, transparent) !important;
+  color: var(--admin-text) !important;
+  box-shadow: var(--admin-menu-shadow) !important;
+}
+
+body .notice-toast.notice-error {
+  border-color: color-mix(in srgb, var(--admin-danger) 30%, transparent) !important;
+  color: var(--admin-danger) !important;
+}
+
+body .notice-toast.notice-success svg {
+  color: var(--admin-success);
+}
+
+/* ---------------------------------------------------------------------------
+   Sidebar — wax presence for the active destination
+   (the #root variants outrank legacy html.theme-dark body.theme-dark rules)
+   ------------------------------------------------------------------------- */
+
+body .sidebar-reference-shell .sidebar-nav-item,
+body #root .sidebar-reference-shell .sidebar-nav-item {
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--admin-text-soft) !important;
+  font-weight: 520 !important;
+}
+
+body .sidebar-reference-shell .sidebar-nav-item:hover:not(.sidebar-nav-active),
+body #root .sidebar-reference-shell .sidebar-nav-item:hover:not(.sidebar-nav-active) {
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+body .sidebar-reference-shell .sidebar-nav-active,
+body #root .sidebar-reference-shell .sidebar-nav-active,
+html.theme-dark body #root .sidebar-reference-shell .sidebar-nav-active,
+body.theme-dark #root .sidebar-reference-shell .sidebar-nav-active {
+  background: var(--admin-accent-soft) !important;
+  color: var(--admin-text-strong) !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+body .sidebar-reference-shell .sidebar-nav-icon,
+body #root .sidebar-reference-shell .sidebar-nav-icon {
+  color: var(--admin-muted) !important;
+}
+
+body .sidebar-reference-shell .sidebar-nav-active .sidebar-nav-icon,
+body #root .sidebar-reference-shell .sidebar-nav-active .sidebar-nav-icon,
+html.theme-dark body #root .sidebar-reference-shell .sidebar-nav-active .sidebar-nav-icon,
+body.theme-dark #root .sidebar-reference-shell .sidebar-nav-active .sidebar-nav-icon {
+  color: var(--admin-accent) !important;
+}
+
+body .sidebar-reference-shell .sidebar-badge,
+body #root .sidebar-reference-shell .sidebar-badge,
+html.theme-dark body #root .sidebar-reference-shell .sidebar-badge {
+  background: var(--admin-panel-muted) !important;
+  color: var(--admin-text-soft) !important;
+  font-weight: 560 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+body .sidebar-reference-shell .sidebar-nav-active .sidebar-badge,
+body #root .sidebar-reference-shell .sidebar-nav-active .sidebar-badge,
+html.theme-dark body #root .sidebar-reference-shell .sidebar-nav-active .sidebar-badge {
+  background: color-mix(in srgb, var(--admin-accent) 16%, var(--admin-panel)) !important;
+  color: var(--admin-accent) !important;
+}
+
+body #root .sidebar-reference-shell .sidebar-compose-btn,
+html.theme-dark body #root .sidebar-reference-shell .sidebar-compose-btn,
+body.theme-dark #root .sidebar-reference-shell .sidebar-compose-btn {
+  border: 0 !important;
+  background: var(--admin-ink) !important;
+  color: var(--admin-ink-on) !important;
+  box-shadow: none !important;
+}
+
+body #root .sidebar-reference-shell .sidebar-compose-btn:hover:not(:disabled),
+html.theme-dark body #root .sidebar-reference-shell .sidebar-compose-btn:hover:not(:disabled),
+body.theme-dark #root .sidebar-reference-shell .sidebar-compose-btn:hover:not(:disabled) {
+  background: var(--admin-ink-hover) !important;
+  color: var(--admin-ink-on) !important;
+}
+
+body #root .sidebar-reference-shell .sidebar-mini-btn,
+html.theme-dark body #root .sidebar-reference-shell .sidebar-mini-btn {
+  border: 1px solid var(--admin-divider) !important;
+  background: var(--admin-panel) !important;
+  color: var(--admin-text-soft) !important;
+}
+
+body #root .sidebar-reference-shell .sidebar-mini-btn:hover,
+html.theme-dark body #root .sidebar-reference-shell .sidebar-mini-btn:hover {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+body .logo-heart {
+  background: var(--admin-accent) !important;
+}
+
+body .theme-segmented-control,
+body #root .theme-segmented-control {
+  border: 1px solid var(--admin-divider) !important;
+  background: var(--admin-panel-soft) !important;
+}
+
+body .theme-segmented-option,
+body #root .theme-segmented-option {
+  color: var(--admin-muted) !important;
+  font-weight: 540 !important;
+}
+
+body .theme-segmented-option.active,
+body #root .theme-segmented-option.active,
+html.theme-dark body #root .theme-segmented-option.active {
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  box-shadow: 0 1px 3px rgba(50, 38, 26, 0.12) !important;
+}
+
+body .locale-mode-toggle,
+body #root .locale-mode-toggle,
+html.theme-dark body #root .locale-mode-toggle {
+  border: 1px solid var(--admin-divider) !important;
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-text-soft) !important;
+}
+
+body .locale-mode-toggle:hover,
+body #root .locale-mode-toggle:hover,
+html.theme-dark body #root .locale-mode-toggle:hover {
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Mobile chrome
+   ------------------------------------------------------------------------- */
+
+body .mobile-nav {
+  border-top: 1px solid var(--admin-divider) !important;
+  background: color-mix(in srgb, var(--admin-panel) 92%, transparent) !important;
+  box-shadow: 0 -12px 32px rgba(50, 38, 26, 0.07) !important;
+}
+
+html.theme-dark body .mobile-nav,
+body.theme-dark .mobile-nav {
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.4) !important;
+}
+
+body .mobile-nav-item {
+  color: var(--admin-muted) !important;
+}
+
+body .mobile-nav-item.active {
+  background: var(--admin-accent-soft) !important;
+  color: var(--admin-accent) !important;
+}
+
+body .mobile-nav .mobile-nav-progress-pill {
+  background: var(--admin-accent-soft) !important;
+}
+
+body .mobile-more-item {
+  color: var(--admin-text-soft) !important;
+}
+
+body .mobile-more-item.active {
+  background: var(--admin-accent-soft) !important;
+  color: var(--admin-accent) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Shared semantic details
+   ------------------------------------------------------------------------- */
+
+body .status-pill {
+  background: var(--admin-panel-muted) !important;
+  color: var(--admin-text-soft) !important;
+  border: 0 !important;
+}
+
+body .status-pill.enabled {
+  background: var(--admin-success-soft) !important;
+  color: var(--admin-success) !important;
+}
+
+body .mail-workspace .mail-unread-dot,
+body .mobile-mail-shell .mail-unread-dot {
+  background: var(--admin-accent) !important;
+}
+
+body .mail-filter-selected-dot {
+  background: var(--admin-accent) !important;
+  opacity: 0.85 !important;
+}
+
+body .popover-select-option-count {
+  background: var(--admin-selected-bg-strong) !important;
+  color: var(--admin-accent) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+body .data-table th {
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-muted) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+}
+
+body .data-table td {
+  border-color: var(--admin-divider) !important;
+  color: var(--admin-text-soft) !important;
+}
+
+body .data-table tr:hover td {
+  background: var(--admin-panel-hover) !important;
+}
+
+body .pagination-bar {
+  border-color: var(--admin-divider) !important;
+  color: var(--admin-muted) !important;
+}
+
+body .pagination-floating {
+  border: 1px solid var(--admin-divider) !important;
+  background: color-mix(in srgb, var(--admin-panel) 92%, transparent) !important;
+  box-shadow: var(--admin-menu-shadow) !important;
+}
+
+/* Loading + empty states inherit the paper palette */
+body .admin-loading-state {
+  color: var(--admin-muted) !important;
+}
+
+body .admin-loading-state .admin-loading-spinner {
+  color: var(--admin-accent) !important;
+}
+
+body .view-fallback {
+  color: var(--admin-muted) !important;
+}
+
+/* Numeric alignment for every stat-looking figure */
+body :is(.dash-figure, .dash-split-value, .dash-meter-value, .dash-list-value, .sidebar-badge, .data-table td, .stat-strong) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion — one shared rhythm for the whole console
+   ------------------------------------------------------------------------- */
+
+:root {
+  --motion-quick: 130ms;
+  --motion-standard: 200ms;
+  --motion-ease-out: cubic-bezier(0.2, 0.65, 0.3, 1);
+  --motion-ease-press: cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+
+body :is(
+  .btn-primary, .btn-secondary, .btn-danger, .product-button,
+  .sidebar-nav-item, .sidebar-mini-btn, .sidebar-compose-btn, .credential-button,
+  .theme-segmented-option, .locale-mode-toggle, .mobile-nav-item,
+  .table-action, .icon-btn, .page-btn, .toolbar-action,
+  .interface-preference-action, .rules-nav-item, .rule-chip-remove,
+  .dash-quick-card, .settings-endpoint-card, .compose-mode-option
+) {
+  transition:
+    background-color var(--motion-standard) var(--motion-ease-out),
+    border-color var(--motion-standard) var(--motion-ease-out),
+    color var(--motion-standard) var(--motion-ease-out),
+    box-shadow var(--motion-standard) var(--motion-ease-out),
+    transform var(--motion-quick) var(--motion-ease-press) !important;
+}
+
+body :is(
+  .btn-primary, .btn-secondary, .btn-danger, .product-button,
+  .sidebar-mini-btn, .sidebar-compose-btn, .credential-button,
+  .theme-segmented-option, .table-action, .icon-btn, .page-btn,
+  .rules-nav-item, .compose-mode-option
+):active:not(:disabled) {
+  transform: scale(0.975) !important;
+}
+
+body .dash-quick-card:active {
+  transform: translateY(0) scale(0.985) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body :is(
+    .btn-primary, .btn-secondary, .btn-danger, .product-button,
+    .sidebar-nav-item, .sidebar-mini-btn, .sidebar-compose-btn, .credential-button,
+    .theme-segmented-option, .locale-mode-toggle, .mobile-nav-item,
+    .table-action, .icon-btn, .page-btn, .toolbar-action,
+    .interface-preference-action, .rules-nav-item, .rule-chip-remove,
+    .dash-quick-card, .settings-endpoint-card, .compose-mode-option
+  ) {
+    transition: none !important;
+  }
+
+  body :is(.btn-primary, .btn-secondary, .btn-danger, .product-button):active:not(:disabled),
+  body .dash-quick-card:active {
+    transform: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Sidebar footer — breathing room: an icon utility row, then grouped controls
+   ------------------------------------------------------------------------- */
+
+/* a hairline between the sidebar and the working canvas keeps the layers legible */
+body .sidebar-reference-shell {
+  border-right: 1px solid var(--admin-divider) !important;
+}
+
+body .sidebar-reference-shell .sidebar-reference-footer,
+body #root .sidebar-reference-shell .sidebar-reference-footer {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  margin-top: 10px !important;
+  padding-top: 14px !important;
+  border-top: 1px solid var(--admin-divider) !important;
+}
+
+body .sidebar-reference-shell .sidebar-reference-tools,
+body #root .sidebar-reference-shell .sidebar-reference-tools {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+body .sidebar-reference-shell .sidebar-reference-tools :is(.sidebar-mini-btn, .credential-button),
+body #root .sidebar-reference-shell .sidebar-reference-tools :is(.sidebar-mini-btn, .credential-button) {
+  display: inline-flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  border: 0 !important;
+  border-radius: var(--admin-radius-control) !important;
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-muted) !important;
+  padding: 0 !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+body .sidebar-reference-shell .sidebar-reference-tools :is(.sidebar-mini-btn, .credential-button):hover,
+body #root .sidebar-reference-shell .sidebar-reference-tools :is(.sidebar-mini-btn, .credential-button):hover {
+  border: 0 !important;
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
+}
+
+body .sidebar-reference-shell .sidebar-reference-tools :is(.sidebar-mini-btn, .credential-button) svg,
+body .sidebar-reference-shell .sidebar-reference-tools .credential-button-logo {
+  flex: 0 0 auto;
+  width: 17px !important;
+  height: 17px !important;
+}
+
+/* utility labels collapse to icons; the title/aria-label still names them */
+body .sidebar-reference-shell .sidebar-reference-tools :is(.sidebar-mini-btn, .credential-button) :is(span, .credential-button-label) {
+  display: none !important;
+}
+
+body .sidebar-reference-shell .theme-segmented-control,
+body #root .sidebar-reference-shell .theme-segmented-control {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 3px !important;
+  gap: 3px !important;
+}
+
+body .sidebar-reference-shell .theme-segmented-option {
+  min-width: 0 !important;
+  min-height: 30px !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+}
+
+body .sidebar-reference-shell .theme-segmented-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .sidebar-reference-shell .sidebar-locale-toggle.locale-mode-toggle,
+body #root .sidebar-reference-shell .sidebar-locale-toggle.locale-mode-toggle {
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 36px !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 11px !important;
+  margin: 0 !important;
+}
+
+body .sidebar-reference-shell .sidebar-locale-toggle.locale-mode-toggle > span {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--admin-muted) !important;
+  font-size: 11.5px !important;
+  font-weight: 480 !important;
+}
+
+body .sidebar-reference-shell .sidebar-locale-toggle.locale-mode-toggle > strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--admin-text) !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+}
+
+body .sidebar-reference-shell .sidebar-locale-toggle.locale-mode-toggle > em {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--admin-accent-soft) !important;
+  color: var(--admin-accent) !important;
+  padding: 2px 8px !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  font-style: normal !important;
+}
+
+body .sidebar-reference-shell .sidebar-compose-btn,
+body #root .sidebar-reference-shell .sidebar-compose-btn {
+  width: 100% !important;
+  min-height: 40px !important;
+  border-radius: var(--admin-radius-control) !important;
+  font-size: 13.5px !important;
+}
+
+body .sidebar-reference-shell .sidebar-compose-btn span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* keep every control inside buttons from wrapping when English labels grow */
+body :is(.product-button, .btn-primary, .btn-secondary, .btn-danger, .cap-state, .card-chip, .rules-nav-count) {
+  white-space: nowrap !important;
+}

@@ -2927,7 +2927,7 @@ a { color: var(--color-primary); }
 body.theme-dark {
   color-scheme: dark;
   --color-bg: #1D1D1F;
-  --color-surface: #242426;
+  --color-surface: var(--admin-panel-muted, #342d27);
   --color-surface-raised: #29292B;
   --color-surface-soft: #2F2F31;
   --color-surface-muted: #37373A;
@@ -3397,7 +3397,7 @@ aside .brand-wordmark {
 .theme-dark,
 body.theme-dark {
   --color-bg: #1D1D1E;
-  --color-surface: #242426;
+  --color-surface: var(--admin-panel-muted, #342d27);
   --color-surface-raised: #272729;
   --color-surface-soft: #2B2B2E;
   --color-surface-muted: #343438;
@@ -3425,7 +3425,7 @@ body.theme-dark {
   box-shadow: none !important;
 }
 .theme-dark .dashboard-hero {
-  background: #242426 !important;
+  background: var(--admin-panel-muted, #342d27) !important;
   border-color: rgba(255,255,255,.07) !important;
 }
 .dashboard-hero-title {
@@ -13536,10 +13536,10 @@ body,
 @media (min-width: 1024px) {
   html.theme-dark,
   body.theme-dark {
-    --color-bg: #050505;
-    --color-surface: #050505;
-    --color-surface-soft: #181818;
-    --color-surface-raised: #181818;
+    --color-bg: var(--admin-bg, #16120f);
+    --color-surface: var(--admin-bg, #16120f);
+    --color-surface-soft: var(--admin-panel-soft, #282220);
+    --color-surface-raised: var(--admin-panel-soft, #282220);
     --color-text: #f5f5f5;
     --color-text-soft: #a1a1aa;
     --color-muted: #8a8a8f;
@@ -13549,14 +13549,14 @@ body,
 
   .theme-dark .mobile-mail-shell,
   .theme-dark .mail-workspace {
-    --mail-ref-bg: #050505;
-    --mail-ref-card: #181818;
-    --mail-ref-hover: #202020;
+    --mail-ref-bg: var(--admin-bg, #16120f);
+    --mail-ref-card: var(--admin-panel-soft, #282220);
+    --mail-ref-hover: var(--admin-panel-hover, #2d2621);
     --mail-ref-text: #f5f5f5;
     --mail-ref-strong: #ffffff;
     --mail-ref-muted: #a1a1aa;
     --mail-ref-subtle: #8a8a8f;
-    --mail-ref-accent: #0a84ff;
+    --mail-ref-accent: var(--admin-accent, #e07850);
     --mail-ref-list-shadow: none;
     --mail-ref-list-hover-shadow: none;
     --mail-ref-detail-shadow: none;
@@ -13571,7 +13571,7 @@ body,
   .theme-dark .mail-list-viewport,
   .theme-dark .mail-detail-pane,
   .theme-dark .mail-detail-scroll {
-    background: #050505 !important;
+    background: var(--admin-bg, #16120f) !important;
     color: var(--mail-ref-text) !important;
   }
 
@@ -13581,16 +13581,16 @@ body,
 
   .theme-dark .mail-address-search-row .address-filter-input {
     background: #1a1a1a !important;
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
     box-shadow: none !important;
   }
 
   .theme-dark .mail-address-search-row .address-filter-input::placeholder {
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   .theme-dark .address-filter-wrap::before {
-    border-color: #a1a1aa !important;
+    border-color: var(--admin-muted, #897e70) !important;
   }
 
   .theme-dark .address-filter-wrap::after {
@@ -13600,7 +13600,7 @@ body,
   .theme-dark .mail-list-item,
   .theme-dark .mail-row-idle {
     background: transparent !important;
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
     box-shadow: none !important;
   }
 
@@ -13619,7 +13619,7 @@ body,
   .theme-dark .mail-row-unread .mail-sender,
   .theme-dark .mail-subject,
   .theme-dark .mail-row-unread .mail-subject {
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   .theme-dark .mail-list-item p {
@@ -13627,19 +13627,19 @@ body,
   }
 
   .theme-dark .mail-time {
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   .theme-dark .mail-row-unread .mail-time {
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   .theme-dark .mail-unread-dot {
-    background: #0a84ff !important;
+    background: var(--admin-accent, #e07850) !important;
   }
 
   .theme-dark .mail-star-toggle {
-    color: #5f6368 !important;
+    color: var(--admin-muted-soft, #60564b) !important;
     background: transparent !important;
   }
 
@@ -13653,8 +13653,8 @@ body,
   .theme-dark .mail-detail-body,
   .theme-dark .mail-frame,
   .theme-dark .mail-text {
-    background: #181818 !important;
-    color: #f5f5f5 !important;
+    background: var(--admin-panel-soft, #282220) !important;
+    color: var(--admin-text, #ece5da) !important;
     border-color: transparent !important;
     box-shadow: none !important;
     color-scheme: dark !important;
@@ -13664,7 +13664,7 @@ body,
   .theme-dark .mail-detail-card .mail-detail-subject,
   .theme-dark .mail-detail-card h1.mail-detail-subject,
   .theme-dark .mail-detail-sender-main span:first-child {
-    color: #ffffff !important;
+    color: var(--admin-text-strong, #f8f3ea) !important;
   }
 
   .theme-dark .mail-detail-sender-main span:last-child,
@@ -13674,18 +13674,18 @@ body,
   .theme-dark .mail-detail-icon-action,
   .theme-dark .mail-detail-sender-row .detail-action,
   .theme-dark .plain-copy-address {
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   .theme-dark .mail-detail-close {
     background: #2a2a2a !important;
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   .theme-dark .mail-detail-icon-action:hover:not(:disabled),
   .theme-dark .mail-detail-sender-row .detail-action:hover {
     background: #242424 !important;
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   .theme-dark .mail-text {
@@ -13697,7 +13697,7 @@ body,
   }
 
   .theme-dark .mail-frame {
-    background: #181818 !important;
+    background: var(--admin-panel-soft, #282220) !important;
   }
 
   html.theme-dark body.theme-dark .mobile-mail-shell .mail-detail-card,
@@ -13708,15 +13708,15 @@ body,
   html.theme-dark body.theme-dark .mail-workspace .mail-detail-body,
   html.theme-dark body.theme-dark .mail-workspace iframe.mail-frame,
   html.theme-dark body.theme-dark .mail-workspace .mail-text {
-    background: #181818 !important;
-    background-color: #181818 !important;
-    color: #f5f5f5 !important;
+    background: var(--admin-panel-soft, #282220) !important;
+    background-color: var(--admin-panel-soft, #282220) !important;
+    color: var(--admin-text, #ece5da) !important;
     box-shadow: none !important;
     border-color: transparent !important;
   }
 
   html.theme-dark body.theme-dark .mail-workspace {
-    --mail-ref-hover: #121212;
+    --mail-ref-hover: var(--admin-panel-hover, #2d2621);
   }
 
   html.theme-dark body.theme-dark .mail-workspace .mail-list-item,
@@ -13734,29 +13734,29 @@ body,
 
   html.theme-dark body.theme-dark .mail-workspace .mail-row-selected,
   html.theme-dark body.theme-dark .mail-workspace .mail-row-unread.mail-row-selected {
-    background: #181818 !important;
+    background: var(--admin-panel-soft, #282220) !important;
     box-shadow: none !important;
   }
 
   html.theme-dark body.theme-dark .mail-workspace .mail-row-idle:hover {
-    background: #121212 !important;
+    background: var(--admin-panel-hover, #2d2621) !important;
     box-shadow: none !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-compose-btn {
-    background: #0a84ff !important;
+    background: var(--admin-ink, #29221a) !important;
     border-color: transparent !important;
-    color: #ffffff !important;
+    color: var(--admin-text-strong, #f8f3ea) !important;
     box-shadow: none !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-compose-btn:hover {
-    background: #1a8fff !important;
-    color: #ffffff !important;
+    background: var(--admin-ink-hover, #3b3227) !important;
+    color: var(--admin-text-strong, #f8f3ea) !important;
   }
 
   html.theme-dark body.theme-dark aside > .p-4 {
-    background: #050505 !important;
+    background: var(--admin-bg, #16120f) !important;
     border-color: transparent !important;
     box-shadow: none !important;
   }
@@ -13775,7 +13775,7 @@ body,
 
   html.theme-dark body.theme-dark .admin-profile-row:hover,
   html.theme-dark body.theme-dark .admin-profile-row.is-open {
-    background: #101010 !important;
+    background: var(--admin-panel, #1f1a16) !important;
   }
 
   html.theme-dark body.theme-dark .admin-profile-avatar {
@@ -13784,7 +13784,7 @@ body,
   }
 
   html.theme-dark body.theme-dark .admin-profile-name {
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .admin-profile-status,
@@ -13802,9 +13802,9 @@ body,
 
   html.theme-dark body.theme-dark .sidebar-mini-btn:hover,
   html.theme-dark body.theme-dark .credential-button:hover {
-    background: #121212 !important;
+    background: var(--admin-panel-hover, #2d2621) !important;
     border-color: #2a2a2a !important;
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .theme-segmented-control,
@@ -13816,13 +13816,13 @@ body,
 
   html.theme-dark body.theme-dark .theme-segmented-option {
     background: transparent !important;
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
     box-shadow: none !important;
   }
 
   html.theme-dark body.theme-dark .theme-segmented-option.active {
-    background: #181818 !important;
-    color: #f5f5f5 !important;
+    background: var(--admin-panel-soft, #282220) !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .locale-mode-toggle span,
@@ -13831,7 +13831,7 @@ body,
   }
 
   html.theme-dark body.theme-dark .locale-mode-toggle strong {
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 }
 
@@ -14153,7 +14153,7 @@ body,
 
   .theme-dark .mail-list-recipient-inline {
     background: transparent !important;
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
     border-color: transparent !important;
     box-shadow: none !important;
   }
@@ -14164,7 +14164,7 @@ body,
 
   .theme-dark .mail-list-recipient-inline:hover {
     background: transparent !important;
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   .theme-dark .mail-copy-toast {
@@ -14526,9 +14526,9 @@ body,
     gap: 8px !important;
     border: 0 !important;
     border-radius: 999px !important;
-    background: #0a84ff !important;
+    background: var(--admin-ink, #29221a) !important;
     padding: 0 14px !important;
-    color: #ffffff !important;
+    color: var(--admin-text-strong, #f8f3ea) !important;
     box-shadow: none !important;
     font-family: var(--mail-ui-font, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif) !important;
     font-size: 14px !important;
@@ -14538,8 +14538,8 @@ body,
   }
 
   .sidebar-reference-shell .sidebar-compose-btn:hover {
-    background: #168bff !important;
-    color: #ffffff !important;
+    background: var(--admin-ink-hover, #3b3227) !important;
+    color: var(--admin-text-strong, #f8f3ea) !important;
     box-shadow: none !important;
   }
 }
@@ -14547,56 +14547,56 @@ body,
 @media (min-width: 768px) {
   html.theme-dark body.theme-dark .sidebar-reference-shell,
   .theme-dark .sidebar-reference-shell {
-    border-color: #202020 !important;
-    background: #050505 !important;
-    color: #f5f5f5 !important;
+    border-color: var(--admin-panel-hover, #2d2621) !important;
+    background: var(--admin-bg, #16120f) !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-panel,
   .theme-dark .sidebar-reference-panel {
-    border-color: #202020 !important;
-    background: #050505 !important;
+    border-color: var(--admin-panel-hover, #2d2621) !important;
+    background: var(--admin-bg, #16120f) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-profile-name,
   .theme-dark .sidebar-profile-name {
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-profile-status,
   html.theme-dark body.theme-dark .sidebar-profile-chevron,
   .theme-dark .sidebar-profile-status,
   .theme-dark .sidebar-profile-chevron {
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-shell .sidebar-nav-item,
   .theme-dark .sidebar-reference-shell .sidebar-nav-item {
     background: transparent !important;
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-shell .sidebar-nav-item:hover:not(.sidebar-nav-active),
   .theme-dark .sidebar-reference-shell .sidebar-nav-item:hover:not(.sidebar-nav-active) {
-    background: #121212 !important;
+    background: var(--admin-panel-hover, #2d2621) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-shell .sidebar-nav-active,
   .theme-dark .sidebar-reference-shell .sidebar-nav-active {
-    background: #181818 !important;
-    color: #ffffff !important;
+    background: var(--admin-panel-soft, #282220) !important;
+    color: var(--admin-text-strong, #f8f3ea) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-shell .sidebar-nav-icon,
   .theme-dark .sidebar-reference-shell .sidebar-nav-icon {
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-shell .sidebar-nav-active .sidebar-nav-icon,
   .theme-dark .sidebar-reference-shell .sidebar-nav-active .sidebar-nav-icon,
   html.theme-dark body.theme-dark .sidebar-reference-shell .sidebar-badge,
   .theme-dark .sidebar-reference-shell .sidebar-badge {
-    color: #f5f5f5 !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-tools .sidebar-mini-btn,
@@ -14604,15 +14604,15 @@ body,
   .theme-dark .sidebar-reference-tools .sidebar-mini-btn,
   .theme-dark .sidebar-reference-tools .credential-button {
     background: transparent !important;
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-reference-tools .sidebar-mini-btn:hover,
   html.theme-dark body.theme-dark .sidebar-reference-tools .credential-button:hover,
   .theme-dark .sidebar-reference-tools .sidebar-mini-btn:hover,
   .theme-dark .sidebar-reference-tools .credential-button:hover {
-    background: #121212 !important;
-    color: #f5f5f5 !important;
+    background: var(--admin-panel-hover, #2d2621) !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-theme-control.theme-segmented-control,
@@ -14622,24 +14622,24 @@ body,
 
   html.theme-dark body.theme-dark .sidebar-theme-control .theme-segmented-option,
   .theme-dark .sidebar-theme-control .theme-segmented-option {
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-theme-control .theme-segmented-option.active,
   .theme-dark .sidebar-theme-control .theme-segmented-option.active {
-    background: #181818 !important;
-    color: #f5f5f5 !important;
+    background: var(--admin-panel-soft, #282220) !important;
+    color: var(--admin-text, #ece5da) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-locale-toggle.locale-mode-toggle,
   .theme-dark .sidebar-locale-toggle.locale-mode-toggle {
     background: transparent !important;
-    color: #a1a1aa !important;
+    color: var(--admin-muted, #897e70) !important;
   }
 
   html.theme-dark body.theme-dark .sidebar-locale-toggle.locale-mode-toggle:hover,
   .theme-dark .sidebar-locale-toggle.locale-mode-toggle:hover {
-    background: #121212 !important;
+    background: var(--admin-panel-hover, #2d2621) !important;
   }
 }
 
@@ -14760,17 +14760,17 @@ select {
 :root {
   --admin-ui-font: var(--apple-cn-font-ui);
   --admin-ui-display: var(--apple-cn-font-display);
-  --admin-bg: #f4f4f5;
+  --admin-bg: #f4f1ec;
   --admin-panel: #ffffff;
-  --admin-panel-soft: #f7f7f8;
-  --admin-panel-hover: #eeeeef;
+  --admin-panel-soft: #f5f2ec;
+  --admin-panel-hover: #efebe4;
   --admin-border: rgba(20, 20, 23, .075);
   --admin-divider: rgba(20, 20, 23, .055);
   --admin-text: #15161a;
   --admin-text-soft: #4f535b;
   --admin-muted: #858992;
-  --admin-blue: #0a84ff;
-  --admin-blue-hover: #168bff;
+  --admin-blue: var(--admin-accent, #e07850);
+  --admin-blue-hover: var(--admin-accent-hover, #e98a64);
   --admin-danger: #d84d64;
   --admin-shadow-card: 0 1px 2px rgba(18, 18, 21, .035), 0 10px 28px rgba(18, 18, 21, .055);
   --admin-shadow-lift: 0 2px 5px rgba(18, 18, 21, .05), 0 16px 36px rgba(18, 18, 21, .08);
@@ -14780,17 +14780,17 @@ select {
 html.theme-dark,
 body.theme-dark,
 .theme-dark {
-  --admin-bg: #050505;
-  --admin-panel: #101010;
-  --admin-panel-soft: #181818;
-  --admin-panel-hover: #202020;
+  --admin-bg: #16120f;
+  --admin-panel: #1f1a16;
+  --admin-panel-soft: #282220;
+  --admin-panel-hover: #2d2621;
   --admin-border: rgba(255, 255, 255, .075);
   --admin-divider: rgba(255, 255, 255, .055);
-  --admin-text: #f5f5f5;
-  --admin-text-soft: #d0d0d4;
-  --admin-muted: #92929a;
-  --admin-blue: #0a84ff;
-  --admin-blue-hover: #2994ff;
+  --admin-text: #ece5da;
+  --admin-text-soft: #b6ac9f;
+  --admin-muted: #897e70;
+  --admin-blue: var(--admin-accent, #e07850);
+  --admin-blue-hover: var(--admin-accent-hover, #e98a64);
   --admin-danger: #f07b8d;
   --admin-shadow-card: none;
   --admin-shadow-lift: none;
@@ -15121,7 +15121,7 @@ body.theme-dark,
   .maintenance-view-shell
 ) :where(.form-input:focus, .form-select:focus, .form-textarea:focus, .code-area:focus, .address-filter-input:focus, .address-search-field input:focus) {
   background: var(--admin-panel) !important;
-  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, .32) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--admin-accent, #b04a32) 30%, transparent) !important;
 }
 
 :where(
@@ -15367,7 +15367,7 @@ body.theme-dark,
 }
 
 .theme-dark .modal-card {
-  background: #101010 !important;
+  background: var(--admin-panel, #1f1a16) !important;
   color: var(--admin-text) !important;
   box-shadow: none !important;
 }
@@ -15511,7 +15511,7 @@ body.theme-dark,
   .maintenance-view-shell
 ) :is(.form-input:focus, .form-select:focus, .form-textarea:focus, .code-area:focus, .address-filter-input:focus, .address-search-field input:focus, .popover-select-trigger.is-open) {
   background: var(--admin-panel) !important;
-  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, .28) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--admin-accent, #b04a32) 30%, transparent) !important;
 }
 
 :is(.address-view-shell, .users-view-shell) :is(.address-toolbar, .user-filter-trigger, .toolbar-field, .address-sort-select, .share-bulk-bar, .address-bulk-bar) {
@@ -16014,11 +16014,11 @@ html.theme-dark body.theme-dark :is(.dashboard-view-shell, .stats-view-shell) :i
 
 /* --- Admin color unification layer: one neutral palette plus blue primary action. --- */
 :root {
-  --admin-bg: #f4f4f5;
+  --admin-bg: #f4f1ec;
   --admin-panel: #ffffff;
-  --admin-panel-soft: #f7f7f8;
-  --admin-panel-muted: #ededee;
-  --admin-panel-hover: #eeeeef;
+  --admin-panel-soft: #f5f2ec;
+  --admin-panel-muted: #ebe6de;
+  --admin-panel-hover: #efebe4;
   --admin-border: rgba(20, 20, 23, .075);
   --admin-divider: rgba(20, 20, 23, .055);
   --admin-text-strong: #08090b;
@@ -16026,9 +16026,9 @@ html.theme-dark body.theme-dark :is(.dashboard-view-shell, .stats-view-shell) :i
   --admin-text-soft: #4f535b;
   --admin-muted: #858992;
   --admin-muted-soft: #b5bac2;
-  --admin-blue: #0a84ff;
-  --admin-blue-hover: #168bff;
-  --admin-blue-soft: rgba(10, 132, 255, .10);
+  --admin-blue: var(--admin-accent, #e07850);
+  --admin-blue-hover: var(--admin-accent-hover, #e98a64);
+  --admin-blue-soft: var(--admin-accent-soft, rgba(176, 74, 50, 0.1));
   --admin-danger: #d84d64;
   --admin-danger-soft: rgba(216, 77, 100, .12);
 
@@ -16049,7 +16049,7 @@ html.theme-dark body.theme-dark :is(.dashboard-view-shell, .stats-view-shell) :i
   --color-primary-hover: var(--admin-blue-hover);
   --color-primary-active: var(--admin-blue-hover);
   --color-primary-soft: var(--admin-blue-soft);
-  --color-primary-ring: rgba(10, 132, 255, .22);
+  --color-primary-ring: color-mix(in srgb, var(--admin-accent, #b04a32) 30%, transparent);
   --color-primary-on: #ffffff;
   --color-primary-button: var(--admin-blue);
   --color-primary-button-hover: var(--admin-blue-hover);
@@ -16078,21 +16078,21 @@ html.theme-dark body.theme-dark :is(.dashboard-view-shell, .stats-view-shell) :i
 
 body.theme-dark,
 .theme-dark {
-  --admin-bg: #050505;
-  --admin-panel: #101010;
-  --admin-panel-soft: #181818;
-  --admin-panel-muted: #242426;
-  --admin-panel-hover: #202020;
+  --admin-bg: #16120f;
+  --admin-panel: #1f1a16;
+  --admin-panel-soft: #282220;
+  --admin-panel-muted: #342d27;
+  --admin-panel-hover: #2d2621;
   --admin-border: rgba(255, 255, 255, .075);
   --admin-divider: rgba(255, 255, 255, .055);
-  --admin-text-strong: #ffffff;
-  --admin-text: #f5f5f5;
-  --admin-text-soft: #d0d0d4;
-  --admin-muted: #92929a;
-  --admin-muted-soft: #6f6f76;
-  --admin-blue: #0a84ff;
-  --admin-blue-hover: #2994ff;
-  --admin-blue-soft: rgba(10, 132, 255, .16);
+  --admin-text-strong: #f8f3ea;
+  --admin-text: #ece5da;
+  --admin-text-soft: #b6ac9f;
+  --admin-muted: #897e70;
+  --admin-muted-soft: #60564b;
+  --admin-blue: var(--admin-accent, #e07850);
+  --admin-blue-hover: var(--admin-accent-hover, #e98a64);
+  --admin-blue-soft: var(--admin-accent-soft, rgba(224, 120, 80, 0.16));
   --admin-danger: #f07b8d;
   --admin-danger-soft: rgba(240, 123, 141, .16);
 
@@ -16113,7 +16113,7 @@ body.theme-dark,
   --color-primary-hover: var(--admin-blue-hover);
   --color-primary-active: var(--admin-blue-hover);
   --color-primary-soft: var(--admin-blue-soft);
-  --color-primary-ring: rgba(10, 132, 255, .24);
+  --color-primary-ring: color-mix(in srgb, var(--admin-accent, #b04a32) 30%, transparent);
   --color-primary-on: #ffffff;
   --color-primary-button: var(--admin-blue);
   --color-primary-button-hover: var(--admin-blue-hover);
@@ -16233,7 +16233,7 @@ body,
 
 :where(.form-input:focus, .form-select:focus, .form-textarea:focus, .code-area:focus, .address-filter-input:focus, .address-search-field input:focus, .popover-select-trigger.is-open) {
   background: var(--admin-panel) !important;
-  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, .28) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--admin-accent, #b04a32) 30%, transparent) !important;
 }
 
 .sidebar-reference-shell .sidebar-nav-item {
@@ -17493,7 +17493,7 @@ body .mobile-mail-shell .mail-list-recipient-text {
 
   body.theme-dark .mobile-mail-detail .mail-detail-card-mobile,
   html.theme-dark body .mobile-mail-detail .mail-detail-card-mobile {
-    background: #181818 !important;
+    background: var(--admin-panel-soft, #282220) !important;
     color: var(--admin-text) !important;
     box-shadow: none !important;
   }
@@ -17504,7 +17504,7 @@ body .mobile-mail-shell .mail-list-recipient-text {
   html.theme-dark body .mobile-mail-detail .mail-detail-body,
   html.theme-dark body .mobile-mail-detail .mail-frame,
   html.theme-dark body .mobile-mail-detail .mail-text {
-    background: #181818 !important;
+    background: var(--admin-panel-soft, #282220) !important;
     color: var(--admin-text) !important;
   }
 
@@ -17514,7 +17514,7 @@ body .mobile-mail-shell .mail-list-recipient-text {
   html.theme-dark body .mobile-mail-detail .mail-detail-brand-avatar,
   html.theme-dark body .mobile-mail-detail .brand-avatar,
   html.theme-dark body .mobile-mail-detail .brand-avatar-fallback {
-    background: #101010 !important;
+    background: var(--admin-panel, #1f1a16) !important;
     box-shadow: none !important;
   }
 
@@ -17696,7 +17696,7 @@ body .mobile-mail-shell .mail-list-recipient-text {
 
   body.theme-dark .mobile-nav,
   html.theme-dark body .mobile-nav {
-    --mobile-nav-selected-bg: #242426;
+    --mobile-nav-selected-bg: var(--admin-panel-muted, #342d27);
     --mobile-nav-selected-shadow: inset 0 0 0 1px rgba(255, 255, 255, .055);
     background: color-mix(in srgb, var(--admin-panel) 88%, transparent) !important;
     box-shadow: 0 14px 34px rgba(0, 0, 0, .34) !important;
@@ -18319,7 +18319,7 @@ body .mobile-mail-shell .mail-list-recipient-text {
 
   body .address-view-shell .toolbar-field.address-search-field:focus-within {
     background: var(--admin-panel) !important;
-    box-shadow: inset 0 0 0 1px rgba(10, 132, 255, .24) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--admin-accent, #b04a32) 30%, transparent) !important;
   }
 
   body .address-view-shell .toolbar-field.address-search-field .toolbar-icon {
@@ -18837,7 +18837,7 @@ html.theme-dark body .mobile-mail-detail iframe.mail-frame,
 body.theme-dark iframe.mail-frame,
 html.theme-dark body iframe.mail-frame {
   background: #ffffff !important;
-  background-color: #ffffff !important;
+  background-color: var(--admin-text-strong, #f8f3ea) !important;
   color-scheme: light !important;
 }
 
@@ -19403,7 +19403,7 @@ body.theme-transitioning :is(
 .address-view-shell .toolbar-field.address-search-field:focus-within {
   background: var(--admin-panel) !important;
   background-color: var(--admin-panel) !important;
-  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, .28) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--admin-accent, #b04a32) 30%, transparent) !important;
 }
 
 @media (max-width: 767px) {

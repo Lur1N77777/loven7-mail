@@ -20,8 +20,8 @@ export default defineConfig(({ mode }) => {
           name: 'Loven7-Mail Admin',
           short_name: 'Loven7-Mail',
           description: 'Cloudflare Temp Email 管理员 PWA 前端',
-          theme_color: '#f7f7f8',
-          background_color: '#f7f7f8',
+          theme_color: '#f6f5f3',
+          background_color: '#f6f5f3',
           display: 'standalone',
           start_url: '/',
           icons: [
