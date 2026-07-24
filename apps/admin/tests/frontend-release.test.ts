@@ -75,6 +75,14 @@ test('admin compose sends the attempt UUID through Idempotency-Key and settles i
   assert.equal([...source.matchAll(/outboundRequests\.failed\(attempt,\s*error\)/g)].length, 2);
 });
 
+test('admin smoke exposes Chrome startup failures while waiting for IPv4 CDP', () => {
+  const source = readFileSync(new URL('../scripts/smoke-local.mjs', import.meta.url), 'utf8');
+  assert.match(source, /--remote-debugging-address=127\.0\.0\.1/);
+  assert.match(source, /stdio:\s*\['ignore',\s*'pipe',\s*'pipe'\]/);
+  assert.match(source, /watchedProcess\.exitCode !== null\s*\|\|\s*watchedProcess\.signalCode !== null/);
+  assert.match(source, /waitForHttp\([^;]+chromeProcess[^;]+Chrome/s);
+});
+
 test('admin persistent cache keys are isolated by API and account', () => {
   const first = buildCacheScope('https://api-a.example', 'user:1');
   const otherApi = buildCacheScope('https://api-b.example', 'user:1');

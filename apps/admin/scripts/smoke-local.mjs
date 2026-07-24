@@ -225,10 +225,13 @@ function startMockApi(port = mockApiPort) {
   });
 }
 
-async function waitForHttp(url, timeoutMs = 20_000) {
+async function waitForHttp(url, timeoutMs = 20_000, watchedProcess, processName = 'process') {
   const started = Date.now();
   let lastError;
   while (Date.now() - started < timeoutMs) {
+    if (watchedProcess && (watchedProcess.exitCode !== null || watchedProcess.signalCode !== null)) {
+      throw new Error(`${processName} exited before ${url} became ready (code ${watchedProcess.exitCode}, signal ${watchedProcess.signalCode || 'none'})`);
+    }
     try {
       const res = await fetch(url, { cache: 'no-store' });
       if (res.ok || res.status < 500) return;
@@ -273,8 +276,9 @@ function spawnPreviewIfNeeded() {
 
 function spawnChrome() {
   const chrome = findChrome();
-  return spawn(chrome, [
+  const child = spawn(chrome, [
     '--headless=new',
+    '--remote-debugging-address=127.0.0.1',
     `--remote-debugging-port=${cdpPort}`,
     `--user-data-dir=${tempProfile}`,
     '--disable-gpu',
@@ -286,7 +290,10 @@ function spawnChrome() {
     '--ignore-certificate-errors',
     '--no-first-run',
     'about:blank',
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  child.stdout.on('data', (chunk) => process.stdout.write(`[chrome] ${chunk}`));
+  child.stderr.on('data', (chunk) => process.stderr.write(`[chrome] ${chunk}`));
+  return child;
 }
 
 function killProcessTree(child) {
@@ -769,7 +776,7 @@ async function main() {
     secondaryApiBase = `http://127.0.0.1:${mockApiPort + 1}`;
   }
   chromeProcess = spawnChrome();
-  await waitForHttp(`http://127.0.0.1:${cdpPort}/json/version`);
+  await waitForHttp(`http://127.0.0.1:${cdpPort}/json/version`, 20_000, chromeProcess, 'Chrome');
   const extraResults = [];
 
   if (process.env.SMOKE_LEGACY_AUTH === '1') {
