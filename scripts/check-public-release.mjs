@@ -252,15 +252,21 @@ if (existsSync(readmePath)) {
     errors.push("README interface preview must appear before the project and deployment details.");
   }
 
-  const mobilePreviewTag = readme.match(/<img\b[^>]*mobile-address-actions-preview\.png[^>]*>/)?.[0];
-  if (!existsSync(resolve(repoRoot, "docs/screenshots/mobile-address-actions-preview.png"))) {
-    errors.push("README mobile address preview asset is missing.");
-  }
-  const mobilePreviewWidth = mobilePreviewTag?.match(/\bwidth="(\d+)"/)?.[1];
-  if (!mobilePreviewWidth) {
-    errors.push("README mobile address preview must declare a compact display width.");
-  } else if (Number(mobilePreviewWidth) > 760) {
-    errors.push("README mobile address preview must stay within the GitHub content width.");
+  for (const mobileScreenshot of ["mobile-address-list.png", "mobile-address-actions.png"]) {
+    const mobileScreenshotPath = `docs/screenshots/${mobileScreenshot}`;
+    const mobileScreenshotTag = readme.match(new RegExp(`<img\\b[^>]*${mobileScreenshot.replace(".", "\\.")}[^>]*>`))?.[0];
+    if (!existsSync(resolve(repoRoot, mobileScreenshotPath))) {
+      errors.push(`README mobile screenshot asset is missing: ${mobileScreenshotPath}`);
+    }
+    if (!readme.includes(`<a href="${mobileScreenshotPath}">`)) {
+      errors.push(`README mobile screenshot must link to its full-size asset: ${mobileScreenshotPath}`);
+    }
+    const mobileScreenshotHeight = mobileScreenshotTag?.match(/\bheight="(\d+)"/)?.[1];
+    if (!mobileScreenshotHeight) {
+      errors.push(`README mobile screenshot must declare a compact display height: ${mobileScreenshot}`);
+    } else if (Number(mobileScreenshotHeight) > 420) {
+      errors.push(`README mobile screenshot display height is too large: ${mobileScreenshot}`);
+    }
   }
 }
 

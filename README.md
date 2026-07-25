@@ -57,8 +57,9 @@
     </td>
     <td width="50%" valign="top">
       <strong>移动端地址管理</strong><br />
-      <sub>响应式列表、底部导航和地址快捷操作，采用紧凑画廊避免竖图撑高页面。</sub><br /><br />
-      <img src="docs/screenshots/mobile-address-actions-preview.png" alt="Admin 移动端地址管理与快捷操作" width="440" />
+      <sub>完整保留地址列表、底部导航和快捷操作菜单；点击截图可查看原图。</sub><br /><br />
+      <a href="docs/screenshots/mobile-address-list.png"><img src="docs/screenshots/mobile-address-list.png" alt="Admin 移动端地址列表完整截图" height="360" /></a>
+      <a href="docs/screenshots/mobile-address-actions.png"><img src="docs/screenshots/mobile-address-actions.png" alt="Admin 移动端快捷操作完整截图" height="360" /></a>
     </td>
   </tr>
 </table>
