@@ -343,6 +343,7 @@ async function run() {
     rows: document.querySelectorAll('.mail-row').length,
     hasRawMime: /Content-Type:|MIME-Version:/.test(document.body.innerText),
     htmlText: document.querySelector('.mail-html-view')?.srcdoc || '',
+    hasRemoteImageButton: [...document.querySelectorAll('button')].some((button) => /显示远程图片|Show remote images/.test(button.textContent || '')),
     hasLoadingText: document.body.innerText.includes('正在优化') || document.body.innerText.includes('Loading images'),
     emptyHuge: false
   })`));
@@ -350,6 +351,8 @@ async function run() {
   assert(inboxMetrics.rows >= 2, '登录后应显示邮件列表');
   assert(!inboxMetrics.hasRawMime, '邮件正文不应暴露 MIME 头');
   assert(inboxMetrics.htmlText.includes('HTML rendered cleanly'), `HTML 邮件应渲染在阅读区: ${inboxMetrics.htmlText}`);
+  assert(inboxMetrics.htmlText.includes('/api/image?url='), `远程邮件图片应自动改写为同源代理地址: ${inboxMetrics.htmlText}`);
+  assert(!inboxMetrics.hasRemoteImageButton, '远程邮件图片应自动通过代理加载，不应再要求手动允许');
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
   await click(login, '.webmail-locale-toggle');
   const localeMenu = JSON.parse(await evaluate(login, `JSON.stringify((() => {

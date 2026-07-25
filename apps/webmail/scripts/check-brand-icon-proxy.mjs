@@ -111,6 +111,42 @@ try {
         assert.equal(status, 429, `${label}: local fallback bucket protects an unbound deployment`);
       }
 
+      // A declared site icon must win over guessed conventional paths. Sites such as
+      // Notion return 404 for /favicon.ico but publish a valid icon in their HTML.
+      {
+        globalThis.fetch = async (input, init = {}) => {
+          const url = input instanceof URL ? input : new URL(typeof input === 'string' ? input : input.url);
+          if (init.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+          if (url.hostname === 'cloudflare-dns.com') return dnsResponse();
+          if (url.hostname === 'notion.so' && url.pathname === '/') {
+            return new Response('<link rel="icon" href="/front-static/favicon.ico">', {
+              status: 200,
+              headers: { 'content-type': 'text/html' },
+            });
+          }
+          if (url.hostname === 'notion.so' && url.pathname === '/front-static/favicon.ico') {
+            return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } });
+          }
+          if (url.hostname === 'notion.so' || url.hostname === 'www.notion.so') {
+            return new Promise((resolve, reject) => {
+              if (init.signal?.aborted) {
+                reject(new DOMException('aborted', 'AbortError'));
+                return;
+              }
+              init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+            });
+          }
+          return new Response(null, { status: 404 });
+        };
+        const response = await handler({
+          request: new Request('https://mail.example.test/api/brand-icon?domain=notion.so', {
+            headers: { 'cf-connecting-ip': label === 'webmail' ? '198.51.100.61' : '198.51.100.62' },
+          }),
+          env: { ASSET_PROXY_DEADLINE_MS: 50 },
+        });
+        assert.equal(response.status, 200, `${label}: HTML-declared Notion icon loads before guessed paths time out`);
+      }
+
       // DNS validation is a security boundary. An empty resolution must fail
       // closed without trying the target through a different resolver view.
       {

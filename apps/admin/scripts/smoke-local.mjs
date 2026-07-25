@@ -60,7 +60,7 @@ const mockRawMails = [
       'Content-Type: text/html; charset=utf-8',
       'Content-Transfer-Encoding: quoted-printable',
       '',
-      '<div><h2>Your verification code is <b>123456</b>.</h2><p>HTML body rendered cleanly.</p></div>',
+      '<div><h2>Your verification code is <b>123456</b>.</h2><p>HTML body rendered cleanly.</p><img src="https://static.example.test/logo.png" alt="Remote logo"></div>',
       '',
       '--smoke-boundary--',
     ].join('\r\n'),
@@ -1037,6 +1037,8 @@ async function main() {
     assert(mailFrameText.includes('Your verification code is 123456'), `mail detail iframe should render decoded multipart body: ${mailFrameText || mobileMailDetail.bodySample}`);
     assert(!/Content-Transfer-Encoding|--smoke-boundary|Content-Type: multipart/i.test(mobileMailDetail.bodySample), `mail detail should not show raw MIME source: ${mobileMailDetail.bodySample}`);
     assert(!/Content-Transfer-Encoding|--smoke-boundary|Content-Type: multipart/i.test(mailFrameText), `mail detail iframe should not show raw MIME source: ${mailFrameText}`);
+    const mailFrameSrcdoc = await evaluate(mobile, `document.querySelector('.mail-frame')?.getAttribute('srcdoc') || ''`);
+    assert(mailFrameSrcdoc.includes('/api/image?url='), `admin remote mail image should use the same-origin proxy: ${mailFrameSrcdoc}`);
     const mailFrameRect = JSON.parse(await evaluate(mobile, `JSON.stringify((() => {
       const rect = document.querySelector('.mail-frame')?.getBoundingClientRect();
       return rect ? { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } : null;

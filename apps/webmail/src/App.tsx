@@ -4,7 +4,6 @@ import { changeAddressPassword, createSession, deleteMail, fetchMailPage, fetchM
 import { subscribeAuthenticationFailures } from "./authFailure";
 import { buildSessionCacheKey, clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
 import { clearMailboxCache, readMailboxCache, writeMailboxCache } from "./cache";
-import { clearImageMemoryCache, resolveMailImageAssets } from "./imageMemoryCache";
 import { buildMailFrameSrcDoc, getMailBodyText, mergeMails, parseMailBatch } from "./mailParser";
 import { reconcileServerMailRange } from "./mailSync";
 import { BrandAvatar } from "./brandIdentity";
@@ -431,9 +430,6 @@ const UI_COPY = {
     htmlFormat: "HTML 格式",
     textFormat: "显示文本格式",
     sourceFormat: "显示源码格式",
-    optimizingImages: "加载中…",
-    loadRemoteImages: "显示远程图片",
-    remoteImagesBlocked: "远程图片已阻止，以保护隐私",
     changePassword: "修改密码",
     changePasswordTitle: "修改邮箱密码",
     newPasswordPlaceholder: "输入至少 6 位新密码",
@@ -534,9 +530,6 @@ const UI_COPY = {
     htmlFormat: "HTML",
     textFormat: "Text",
     sourceFormat: "Source",
-    optimizingImages: "Loading…",
-    loadRemoteImages: "Show remote images",
-    remoteImagesBlocked: "Remote images are blocked to protect your privacy",
     changePassword: "Change password",
     changePasswordTitle: "Change mailbox password",
     newPasswordPlaceholder: "Enter a new password (6+ characters)",
@@ -573,10 +566,10 @@ const UI_COPY = {
   },
 } as const;
 
-function MailHtmlView({ html, allowExternalImages }: { html: string; allowExternalImages: boolean }) {
+function MailHtmlView({ html }: { html: string }) {
   const srcDoc = useMemo(
-    () => buildMailFrameSrcDoc(html, { allowExternalImages }),
-    [allowExternalImages, html],
+    () => buildMailFrameSrcDoc(html),
+    [html],
   );
   return (
     <iframe
@@ -698,8 +691,6 @@ export default function App() {
   const [deletingMailId, setDeletingMailId] = useState<number | null>(null);
   const [exitingMailIds, setExitingMailIds] = useState<Set<string>>(new Set());
   const [mailViewMode, setMailViewMode] = useState<MailViewMode>("html");
-  const [resolvedHtml, setResolvedHtml] = useState<{ cacheKey: string; mailId: number; html: string } | null>(null);
-  const [remoteImagesAllowedFor, setRemoteImagesAllowedFor] = useState("");
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [newMailboxPassword, setNewMailboxPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -822,11 +813,8 @@ export default function App() {
   }, [beginRun]);
 
   const resetMailboxState = useCallback(() => {
-    clearImageMemoryCache();
     Object.values(deleteExitTimersRef.current).forEach((timer) => window.clearTimeout(timer));
     deleteExitTimersRef.current = {};
-    setResolvedHtml(null);
-    setRemoteImagesAllowedFor("");
     setMails([]);
     mailsRef.current = [];
     setSelectedId(null);
@@ -1372,20 +1360,8 @@ export default function App() {
       if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
       Object.values(deleteExitTimersRef.current).forEach((timer) => window.clearTimeout(timer));
       deleteExitTimersRef.current = {};
-      clearImageMemoryCache();
     };
   }, [activateShareMailbox, assertRunActive, attachRunSession, beginRun, cancelRun, fetchSessionSettings, hydrateAndSync, isRunActive, loadLocalMailReadState, loginWithJwt, setActiveSession]);
-
-  useEffect(() => {
-    const clear = () => clearImageMemoryCache();
-    window.addEventListener("pagehide", clear);
-    window.addEventListener("beforeunload", clear);
-    return () => {
-      window.removeEventListener("pagehide", clear);
-      window.removeEventListener("beforeunload", clear);
-      clear();
-    };
-  }, []);
 
   const refresh = useCallback(async (options: { silent?: boolean } = {}) => {
     if (!session || loading === "sync" || isRefreshingRef.current) return;
@@ -1617,37 +1593,7 @@ export default function App() {
     }
   }, [bodyText, copy.bodyCopied, copy.copyFailed, showToast]);
   const activeViewMode: MailViewMode = selectedMail?.html ? mailViewMode : mailViewMode === "source" ? "source" : "text";
-  const selectedImagePermissionKey = session && selectedMail ? `${session.cacheKey}:${selectedMail.id}` : "";
-  const allowRemoteImages = Boolean(selectedImagePermissionKey && remoteImagesAllowedFor === selectedImagePermissionKey);
-  const selectedResolvedHtml = selectedMail?.html
-    ? (allowRemoteImages
-      ? (resolvedHtml?.cacheKey === session?.cacheKey && resolvedHtml?.mailId === selectedMail.id ? resolvedHtml.html : "")
-      : selectedMail.html)
-    : "";
-
-  useEffect(() => {
-    let cancelled = false;
-    const cacheKey = session?.cacheKey || "";
-    if (!selectedMail?.html || activeViewMode !== "html" || !allowRemoteImages) {
-      setResolvedHtml(null);
-      return;
-    }
-
-    const mailId = selectedMail.id;
-    const fallbackHtml = selectedMail.html || "";
-    setResolvedHtml((current) => (current?.cacheKey === cacheKey && current?.mailId === mailId ? current : null));
-    resolveMailImageAssets(fallbackHtml)
-      .then((html) => {
-        if (!cancelled && sessionRef.current?.cacheKey === cacheKey) setResolvedHtml({ cacheKey, mailId, html });
-      })
-      .catch(() => {
-        if (!cancelled && sessionRef.current?.cacheKey === cacheKey) setResolvedHtml({ cacheKey, mailId, html: fallbackHtml });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeViewMode, allowRemoteImages, selectedMail?.html, selectedMail?.id, session?.cacheKey]);
+  const selectedResolvedHtml = selectedMail?.html || "";
 
   if (!session && (loading === "boot" || loading === "login")) {
     return (
@@ -1915,16 +1861,6 @@ export default function App() {
                     {copy.copyCode}
                   </button>
                 ) : null}
-                {selectedMail.html && !allowRemoteImages ? (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    title={copy.remoteImagesBlocked}
-                    onClick={() => setRemoteImagesAllowedFor(selectedImagePermissionKey)}
-                  >
-                    {copy.loadRemoteImages}
-                  </button>
-                ) : null}
                 <button type="button" className="ghost-button" onClick={() => void copyBodyText()}>{copy.copyBody}</button>
                 {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button type="button" className="danger-button" disabled={deletingMailId === selectedMail.id || (session ? isMailExiting(session, selectedMail.id) : false)} onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
               </div>
@@ -1962,13 +1898,7 @@ export default function App() {
 
             <div className={`mail-body-shell mode-${activeViewMode}`}>
               {activeViewMode === "html" && selectedMail.html ? (
-                selectedResolvedHtml ? (
-                  <MailHtmlView html={selectedResolvedHtml} allowExternalImages={allowRemoteImages} />
-                ) : (
-                  <div className="mail-image-loading" aria-label={copy.optimizingImages}>
-                    <div className="spinner compact-spinner" />
-                  </div>
-                )
+                <MailHtmlView html={selectedResolvedHtml} />
               ) : (
                 <pre className={`plain-body ${activeViewMode === "source" ? "source-body" : ""}`}>{activeViewMode === "source" ? selectedMail.raw || copy.noSource : bodyText || copy.noContent}</pre>
               )}

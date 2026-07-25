@@ -1,4 +1,5 @@
 import PostalMime, { type Address, type Attachment, type Mailbox } from "postal-mime";
+import { mailImageAssetOrigin, proxyMailImageCss, proxyMailImageSrcset, proxyMailImageUrl } from "./mailImageProxy.ts";
 import type { ParsedAttachmentSummary, ParsedMail, RawMail } from "./types";
 
 const CODE_PATTERNS = [
@@ -161,6 +162,7 @@ function sanitizeHtmlForFrame(html: string, allowExternalImages: boolean) {
   }
 
   const doc = new DOMParser().parseFromString(html, "text/html");
+  const assetOrigin = mailImageAssetOrigin();
   doc.querySelectorAll("script, base, object, embed, iframe, frame, meta[http-equiv='refresh']").forEach((node) => node.remove());
 
   doc.querySelectorAll<HTMLElement>("*").forEach((element) => {
@@ -192,14 +194,41 @@ function sanitizeHtmlForFrame(html: string, allowExternalImages: boolean) {
     img.decoding = "async";
     img.style.maxWidth = "100%";
     if (!img.getAttribute("height")) img.style.height = "auto";
-    if (!allowExternalImages && src && !isEmbeddedImage(src)) {
-      img.setAttribute("data-blocked-src", src);
-      img.removeAttribute("src");
+    if (src) {
+      const proxiedSrc = allowExternalImages ? proxyMailImageUrl(src, assetOrigin) : (isEmbeddedImage(src) ? src : "");
+      if (proxiedSrc) img.setAttribute("src", proxiedSrc);
+      else {
+        img.setAttribute("data-blocked-src", src);
+        img.removeAttribute("src");
+      }
     }
-    if (!allowExternalImages && srcset) {
-      img.setAttribute("data-blocked-srcset", srcset);
-      img.removeAttribute("srcset");
+    if (srcset) {
+      const proxiedSrcset = allowExternalImages ? proxyMailImageSrcset(srcset, assetOrigin) : "";
+      if (proxiedSrcset) img.setAttribute("srcset", proxiedSrcset);
+      else {
+        img.setAttribute("data-blocked-srcset", srcset);
+        img.removeAttribute("srcset");
+      }
     }
+  });
+
+  doc.querySelectorAll<HTMLElement>("[background],video[poster],input[type='image'][src]").forEach((element) => {
+    for (const name of ["background", "poster", "src"]) {
+      const value = element.getAttribute(name);
+      if (!value) continue;
+      const proxied = allowExternalImages ? proxyMailImageUrl(value, assetOrigin) : (isEmbeddedImage(value) ? value : "");
+      if (proxied) element.setAttribute(name, proxied);
+      else element.removeAttribute(name);
+    }
+  });
+
+  doc.querySelectorAll<HTMLElement>("[style]").forEach((element) => {
+    const style = element.getAttribute("style") || "";
+    element.setAttribute("style", allowExternalImages ? proxyMailImageCss(style, assetOrigin) : style.replace(/url\([^)]*\)/gi, "none"));
+  });
+  doc.querySelectorAll("style").forEach((style) => {
+    const css = style.textContent || "";
+    style.textContent = allowExternalImages ? proxyMailImageCss(css, assetOrigin) : css.replace(/url\([^)]*\)/gi, "none");
   });
 
   doc.querySelectorAll<HTMLTableElement>("table").forEach((table) => {
@@ -213,16 +242,16 @@ function sanitizeHtmlForFrame(html: string, allowExternalImages: boolean) {
 }
 
 export function sanitizeMailHtml(html: string, options: { allowExternalImages?: boolean } = {}) {
-  return sanitizeHtmlForFrame(html, options.allowExternalImages === true);
+  return sanitizeHtmlForFrame(html, options.allowExternalImages !== false);
 }
 
 export function buildMailFrameSrcDoc(
   html: string,
   options: { allowExternalImages?: boolean; mailId?: number } = {}
 ) {
-  const allowExternalImages = options.allowExternalImages === true;
+  const allowExternalImages = options.allowExternalImages !== false;
   const safeHtml = sanitizeHtmlForFrame(html, allowExternalImages);
-  const imagePolicy = allowExternalImages ? "img-src data: blob: https: http: cid:;" : "img-src data: blob:;";
+  const imagePolicy = allowExternalImages ? `img-src data: blob: ${mailImageAssetOrigin()};` : "img-src data: blob:;";
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; ${imagePolicy} script-src 'none'; style-src 'unsafe-inline'; font-src data:; media-src data: blob:; object-src 'none'; form-action 'none'; base-uri 'none'"><base target="_blank"><style>html{margin:0;padding:0;width:100%;min-height:0;background:#fff;overflow:auto;}body{box-sizing:border-box;margin:0;width:100%;min-height:0;padding:18px;background:#fff;color:#172033;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:15px;line-height:1.58;overflow:visible;overflow-wrap:anywhere;word-break:break-word;}*{box-sizing:border-box;}#loven7-scale-root{display:block;width:100%;min-height:0;overflow:visible;}#loven7-render-root{display:flow-root;width:100%;max-width:100%;min-height:0;overflow:visible;}a{color:#2563eb;text-decoration-thickness:.08em;text-underline-offset:2px;}img{max-width:100%!important;height:auto!important;border:0;vertical-align:middle;}svg,video,canvas{max-width:100%!important;height:auto!important;}table{max-width:100%;border-collapse:collapse;table-layout:auto;}td,th{max-width:100%;overflow-wrap:anywhere;}pre,code{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;}blockquote{margin-left:0;padding-left:14px;border-left:3px solid #dbe7ff;color:#42526b;}form[data-disabled-form='true']{opacity:.75;pointer-events:none;}@media(max-width:560px){body{padding:10px;font-size:14px;line-height:1.54;}p{margin-block:.72em;}table[width],td[width],th[width]{max-width:100%!important;}}</style></head><body><div id="loven7-scale-root"><div id="loven7-render-root" class="loven7-render-root">${safeHtml}</div></div><style id="loven7-final-fit">html,body{max-width:100%!important;}#loven7-render-root img,#loven7-render-root svg,#loven7-render-root video,#loven7-render-root canvas{max-width:100%!important;height:auto!important;}#loven7-render-root pre,#loven7-render-root code{white-space:pre-wrap!important;overflow-wrap:anywhere!important;}</style></body></html>`;
 }
 

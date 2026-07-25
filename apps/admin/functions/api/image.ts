@@ -1,5 +1,17 @@
-import { errorJson, withSecurityHeaders } from "../_lib/http";
-import type { PagesHandler } from "../_lib/types";
+type PagesHandler = (context: { request: Request; env: Record<string, unknown>; params?: Record<string, string>; next?: () => Promise<Response> }) => Response | Promise<Response>;
+
+function errorJson(status: number, message: string, code: string) {
+  return new Response(JSON.stringify({ error: { code, message } }), {
+    status,
+    headers: { "content-type": "application/json;charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
+  });
+}
+
+function withSecurityHeaders(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set("x-content-type-options", "nosniff");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_REDIRECTS = 4;

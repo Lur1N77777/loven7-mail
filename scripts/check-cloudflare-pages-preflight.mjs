@@ -73,6 +73,7 @@ const requiredFiles = [
   "apps/admin/index.html",
   "apps/admin/public/theme-init.js",
   "apps/admin/public/_headers",
+  "apps/admin/functions/api/image.ts",
   "apps/admin/src/index.css",
   "apps/admin/vite.config.ts",
   "apps/webmail/package.json",

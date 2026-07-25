@@ -229,7 +229,8 @@ async function findHtmlIconCandidates(domain: string, signal: AbortSignal) {
       const rel = tag.match(/\brel\s*=\s*(["'])(.*?)\1/i)?.[2]?.toLowerCase() || "";
       const href = tag.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2];
       if (!rel.includes("icon") || !href) continue;
-      const iconUrl = normalizeExternalUrl(href, home);
+      const responseUrl = normalizeExternalUrl(response.url || home.toString()) || home;
+      const iconUrl = normalizeExternalUrl(href, responseUrl);
       if (iconUrl) candidates.push({ url: iconUrl, source: rel.includes("apple") ? "apple-touch-icon" : "html-icon" });
     }
     return candidates.slice(0, 5);
@@ -295,7 +296,7 @@ async function fetchIcon(candidate: IconCandidate, signal: AbortSignal) {
 
 async function resolveIcon(domain: string, signal: AbortSignal) {
   const [bimi, html] = await Promise.all([findBimiCandidate(domain, signal), findHtmlIconCandidates(domain, signal)]);
-  const candidates = [...(bimi ? [bimi] : []), ...baseCandidates(domain), ...html];
+  const candidates = [...(bimi ? [bimi] : []), ...html, ...baseCandidates(domain)];
   const tried = new Set<string>();
   for (const candidate of candidates) {
     const key = candidate.url.toString();
@@ -351,7 +352,7 @@ export const onRequestGet = async ({ request, env }: PagesContext) => {
 
   const cache = typeof caches !== "undefined" ? (caches as unknown as { default?: Cache }).default || null : null;
   const cacheUrl = new URL("/api/brand-icon", request.url);
-  cacheUrl.search = new URLSearchParams({ v: "2", domain }).toString();
+  cacheUrl.search = new URLSearchParams({ v: "3", domain }).toString();
   const cacheKey = new Request(cacheUrl, { method: "GET" });
   const cached = await cache?.match(cacheKey);
   if (cached) return cached;

@@ -8,6 +8,7 @@ import { prepareMailboxCachePayload } from "../src/cache.ts";
 import { isChunkLoadError } from "../src/appRecovery.ts";
 import { reconcileServerMailRange } from "../src/mailSync.ts";
 import { buildMailFrameSrcDoc, isSafeNavigationUrl, sanitizeMailHtml } from "../src/mailParser.ts";
+import { proxyMailImageSrcset, proxyMailImageUrl } from "../src/mailImageProxy.ts";
 
 test("webmail sanitizer fails closed when DOMParser is unavailable", () => {
   const sanitized = sanitizeMailHtml(
@@ -28,6 +29,22 @@ test("webmail navigation URL policy uses an explicit scheme allowlist", () => {
   assert.equal(isSafeNavigationUrl("file:///etc/passwd"), false);
   assert.equal(isSafeNavigationUrl("data:text/html,<script>alert(1)</script>"), false);
   assert.equal(isSafeNavigationUrl("data:image/svg+xml,<svg onload=alert(1)>"), false);
+});
+
+test("webmail routes remote mail images through its same-origin proxy", () => {
+  assert.equal(
+    proxyMailImageUrl("https://assets.example.com/notion-logo.png", "https://mail.example.test"),
+    "https://mail.example.test/api/image?url=https%3A%2F%2Fassets.example.com%2Fnotion-logo.png",
+  );
+  assert.equal(proxyMailImageUrl("data:image/png;base64,AA==", "https://mail.example.test"), "data:image/png;base64,AA==");
+  assert.equal(proxyMailImageUrl("javascript:alert(1)", "https://mail.example.test"), "");
+  assert.equal(
+    proxyMailImageSrcset(
+      "data:image/png;base64,AA== 1x, https://assets.example.com/notion-logo.png 2x",
+      "https://mail.example.test",
+    ),
+    "data:image/png;base64,AA== 1x, https://mail.example.test/api/image?url=https%3A%2F%2Fassets.example.com%2Fnotion-logo.png 2x",
+  );
 });
 
 test("mailbox cache key is isolated by API origin and mailbox identity", async () => {
@@ -73,11 +90,11 @@ test("JWT links use fragments and legacy query links remain readable", () => {
   assert.equal(clearJwtFromHref("https://mail.example/?JWT=secret&view=inbox#JWT=secret-2&theme=dark"), "/?view=inbox#theme=dark");
 });
 
-test("mail HTML blocks remote assets by default inside a scriptless frame", () => {
+test("mail HTML allows only the same-origin image proxy inside a scriptless frame", () => {
   const document = buildMailFrameSrcDoc('<img src="https://tracker.example/pixel.gif"><p>Hello</p>');
   assert.match(document, /sandboxed-mail|loven7-render-root/);
-  assert.match(document, /img-src data: blob:/);
-  assert.doesNotMatch(document, /img-src[^;]*(?:https:|http:)/);
+  assert.match(document, /img-src data: blob: https:\/\/mail\.invalid;/);
+  assert.doesNotMatch(document, /img-src data: blob: https: http:/);
   assert.doesNotMatch(document, /<script/i);
 });
 

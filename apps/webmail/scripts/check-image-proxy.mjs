@@ -54,6 +54,22 @@ async function transpileToTemp() {
   return { tempRoot, imageModulePath: path.join(apiDir, 'image.mjs') };
 }
 
+async function transpileAdminRouteToTemp() {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), 'loven7-admin-image-proxy-check-'));
+  const sourceUrl = new URL('../../admin/functions/api/image.ts', import.meta.url);
+  const source = await readFile(sourceUrl, 'utf8');
+  const output = ts.transpileModule(source, {
+    fileName: sourceUrl.pathname,
+    reportDiagnostics: true,
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  });
+  const diagnostics = output.diagnostics?.filter((item) => item.category === ts.DiagnosticCategory.Error) || [];
+  if (diagnostics.length) throw new Error(diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('\n'));
+  const imageModulePath = path.join(tempRoot, 'image.mjs');
+  await writeFile(imageModulePath, output.outputText, 'utf8');
+  return { tempRoot, imageModulePath };
+}
+
 function requestFor(targetUrl) {
   return new Request(`https://mail.example.test/api/image?url=${encodeURIComponent(targetUrl)}`);
 }
@@ -140,6 +156,7 @@ globalThis.fetch = async (input, init = {}) => {
 };
 
 let tempRoot = '';
+let adminTempRoot = '';
 try {
   const compiled = await transpileToTemp();
   tempRoot = compiled.tempRoot;
@@ -154,6 +171,7 @@ try {
   const ok = await expectStatus(onRequestGet, 'https://cdn.example.com/ok.png', 200, 'valid png');
   assert.equal(ok.headers.get('content-type'), 'image/png', 'valid png content type');
   assert.equal(ok.headers.get('cache-control'), 'no-store, private, max-age=0', 'valid png cache control');
+  assert.equal(ok.headers.get('cross-origin-resource-policy'), 'cross-origin', 'sandboxed mail frames may display proxied images');
   assert.equal(new Uint8Array(await ok.arrayBuffer()).length, PNG_BYTES.length, 'valid png body length');
 
   const octetPng = await expectStatus(onRequestGet, 'https://cdn.example.com/octet-png', 200, 'octet-stream png magic');
@@ -249,6 +267,15 @@ try {
   }
   assert.equal(localLimitedStatus, 429, 'per-isolate fallback bucket limits requests when no distributed binding exists');
 
+  globalThis.caches = originalCaches;
+  const adminCompiled = await transpileAdminRouteToTemp();
+  adminTempRoot = adminCompiled.tempRoot;
+  const { onRequestGet: adminImageHandler } = await import(`file://${adminCompiled.imageModulePath.replace(/\\/g, '/')}`);
+  const adminOk = await expectStatus(adminImageHandler, 'https://cdn.example.com/ok.png', 200, 'admin valid png');
+  assert.equal(adminOk.headers.get('cross-origin-resource-policy'), 'cross-origin', 'admin sandboxed mail frame may display proxied images');
+  await expectStatus(adminImageHandler, 'http://127.0.0.1/a.png', 400, 'admin private target blocked');
+  await expectStatus(adminImageHandler, 'https://cdn.example.com/html', 415, 'admin non-image rejected');
+
   console.log(JSON.stringify({
     ok: true,
     checked: [
@@ -263,6 +290,7 @@ try {
       'optional rate limiter and canonical cache',
       'negative cache and local fallback rate limit',
       'single total deadline across DNS and redirect hops',
+      'admin image proxy parity',
     ],
     fetchCalls: calls.length,
   }, null, 2));
@@ -270,4 +298,5 @@ try {
   globalThis.fetch = originalFetch;
   globalThis.caches = originalCaches;
   if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
+  if (adminTempRoot) await rm(adminTempRoot, { recursive: true, force: true });
 }

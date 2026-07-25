@@ -1,6 +1,7 @@
 import type { ParsedAttachment, ParsedMail, ParsedSendbox, RawMailRecord, SendboxRecord } from '../types/api';
 import { PREVIEW_LEN } from './constants';
 import { humanBytes, safeJsonParse } from './format';
+import { mailImageAssetOrigin, proxyMailImageCss, proxyMailImageSrcset, proxyMailImageUrl } from './mailImageProxy';
 import { sanitizeMailHtmlWithoutDom } from './mailSanitizerFallback';
 
 const DANGEROUS_PROTOCOL = /^\s*(?:javascript|vbscript|data|file|blob|jar):/i;
@@ -48,7 +49,8 @@ export function sanitizeMailHtml(html: string, options: { allowExternalImages?: 
   }
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
-  const allowExternalImages = options.allowExternalImages === true;
+  const allowExternalImages = options.allowExternalImages !== false;
+  const assetOrigin = mailImageAssetOrigin();
   doc.querySelectorAll(Array.from(STRIP_TAGS).join(',')).forEach((node) => node.remove());
   doc.querySelectorAll('*').forEach((node) => {
     [...node.attributes].forEach((attr) => {
@@ -68,14 +70,7 @@ export function sanitizeMailHtml(html: string, options: { allowExternalImages?: 
           node.removeAttribute(attr.name);
           return;
         }
-        const safeSrcset = value
-          .split(',')
-          .map((part) => part.trim())
-          .filter((part) => {
-            const url = part.split(/\s+/)[0] || '';
-            return url && !SCRIPTABLE_PROTOCOL.test(url) && (!DANGEROUS_PROTOCOL.test(url) || SAFE_EMBEDDED_IMAGE_PROTOCOL.test(url));
-          })
-          .join(', ');
+        const safeSrcset = proxyMailImageSrcset(value, assetOrigin);
         if (safeSrcset) node.setAttribute(attr.name, safeSrcset);
         else node.removeAttribute(attr.name);
         return;
@@ -101,13 +96,34 @@ export function sanitizeMailHtml(html: string, options: { allowExternalImages?: 
     node.setAttribute('target', '_blank');
     node.setAttribute('rel', 'noopener noreferrer');
   });
+  doc.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
+    const src = img.getAttribute('src') || '';
+    if (src) {
+      const proxied = allowExternalImages ? proxyMailImageUrl(src, assetOrigin) : (SAFE_EMBEDDED_IMAGE_PROTOCOL.test(src) ? src : '');
+      if (proxied) img.setAttribute('src', proxied);
+      else img.removeAttribute('src');
+    }
+  });
+  doc.querySelectorAll<HTMLElement>('[background],video[poster],input[type="image"][src]').forEach((element) => {
+    for (const name of ['background', 'poster', 'src']) {
+      const value = element.getAttribute(name);
+      if (!value) continue;
+      const proxied = allowExternalImages ? proxyMailImageUrl(value, assetOrigin) : (SAFE_EMBEDDED_IMAGE_PROTOCOL.test(value) ? value : '');
+      if (proxied) element.setAttribute(name, proxied);
+      else element.removeAttribute(name);
+    }
+  });
+  doc.querySelectorAll<HTMLElement>('[style]').forEach((element) => {
+    const style = element.getAttribute('style') || '';
+    element.setAttribute('style', allowExternalImages ? proxyMailImageCss(style, assetOrigin) : style.replace(/url\([^)]*\)/gi, 'none'));
+  });
   return doc.body.innerHTML;
 }
 
 export function buildMailHtmlDocument(html: string, _theme: 'light' | 'dark' = 'light', options: { allowExternalImages?: boolean } = {}): string {
-  const allowExternalImages = options.allowExternalImages === true;
+  const allowExternalImages = options.allowExternalImages !== false;
   const safe = sanitizeMailHtml(html, { allowExternalImages });
-  const imagePolicy = allowExternalImages ? 'img-src data: blob: https: http: cid:;' : 'img-src data: blob:;';
+  const imagePolicy = allowExternalImages ? `img-src data: blob: ${mailImageAssetOrigin()};` : 'img-src data: blob:;';
   const swipeBridge = `<script>
     (() => {
       let startX = 0, startY = 0, lastX = 0, lastY = 0, active = false;

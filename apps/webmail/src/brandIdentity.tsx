@@ -19,9 +19,9 @@ type BrandIconCacheRecord = {
 type NegativeCacheRecord = { domain: string; savedAt: number };
 
 const BRAND_ICON_CACHE_KEY = 'loven7.brandIconCache';
-const BRAND_ICON_NEGATIVE_CACHE_KEY = 'loven7.brandIconNegativeCache';
+const BRAND_ICON_NEGATIVE_CACHE_KEY = 'loven7.brandIconNegativeCache.v2';
 const ICON_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const NEGATIVE_TTL_MS = 24 * 60 * 60 * 1000;
+const NEGATIVE_TTL_MS = 5 * 60 * 1000;
 const MAX_CACHE_ITEMS = 240;
 
 const BRAND_NAMES: Record<string, string> = {

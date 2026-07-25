@@ -679,24 +679,6 @@ button:disabled {
   min-height: clamp(420px, 68vh, 920px);
 }
 
-.mail-image-loading {
-  width: 100%;
-  min-height: 260px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 12px;
-  color: #607089;
-  font-size: 13px;
-  font-weight: 820;
-}
-
-.compact-spinner {
-  width: 26px;
-  height: 26px;
-  border-width: 3px;
-}
-
 .plain-body {
   width: 100%;
   height: 100%;
@@ -1300,8 +1282,7 @@ body {
 .meta-grid dt,
 .empty-state p,
 .end-note,
-.list-empty,
-.mail-image-loading {
+.list-empty {
   color: var(--lm-muted);
 }
 
@@ -2485,12 +2466,6 @@ textarea {
   color: var(--lm-muted);
   font-size: 12.5px;
   font-weight: var(--fw-medium) !important;
-}
-
-.mail-image-loading {
-  min-height: 96px;
-  gap: 0;
-  color: var(--lm-muted);
 }
 
 .mailbox-direct-shell .account-portal-hero > .brand-logo {

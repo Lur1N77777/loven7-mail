@@ -11,6 +11,7 @@ import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
 import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, loginAccountUser, registerAccountUser } from '../src/lib/userAuth.ts';
 import { readTrustedMailFrameMessage } from '../src/lib/mailFrameMessages.ts';
 import { adminMailStateEndpoint } from '../src/lib/mailStateEndpoint.ts';
+import { proxyMailImageSrcset, proxyMailImageUrl } from '../src/lib/mailImageProxy.ts';
 import { sanitizeMailHtmlWithoutDom } from '../src/lib/mailSanitizerFallback.ts';
 import { preserveRowsBelowAuthoritativeHead } from '../src/lib/mailSync.ts';
 import { createOutboundIdempotencyTracker } from '../src/lib/outboundIdempotency.ts';
@@ -22,6 +23,22 @@ test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
   );
   assert.match(sanitized, /Hello/);
   assert.doesNotMatch(sanitized, /<(?:a|img|script)\b|javascript:|onerror/i);
+});
+
+test('admin routes remote mail images through its same-origin proxy', () => {
+  assert.equal(
+    proxyMailImageUrl('https://assets.example.com/notion-logo.png', 'https://admin.example.test'),
+    'https://admin.example.test/api/image?url=https%3A%2F%2Fassets.example.com%2Fnotion-logo.png',
+  );
+  assert.equal(proxyMailImageUrl('data:image/png;base64,AA==', 'https://admin.example.test'), 'data:image/png;base64,AA==');
+  assert.equal(proxyMailImageUrl('javascript:alert(1)', 'https://admin.example.test'), '');
+  assert.equal(
+    proxyMailImageSrcset(
+      'data:image/png;base64,AA== 1x, https://assets.example.com/notion-logo.png 2x',
+      'https://admin.example.test',
+    ),
+    'data:image/png;base64,AA== 1x, https://admin.example.test/api/image?url=https%3A%2F%2Fassets.example.com%2Fnotion-logo.png 2x',
+  );
 });
 
 test('admin outbound attempts use RFC 4122 UUIDs by default', () => {
