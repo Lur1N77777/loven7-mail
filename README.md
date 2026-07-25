@@ -14,7 +14,7 @@
   <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml/badge.svg" /></a>
 </p>
 
-[5 分钟部署](#5-分钟部署) · [功能](#功能) · [手动部署](#手动部署) · [配置边界](#公开版与自用配置边界) · [文档](#文档)
+[界面预览](#界面预览) · [5 分钟部署](#5-分钟部署) · [功能](#功能) · [手动部署](#手动部署) · [配置边界](#公开版与自用配置边界) · [文档](#文档)
 
 </div>
 
@@ -28,6 +28,49 @@
 - 平板与移动端补齐专用布局、底部导航、快捷操作菜单和无横向溢出体验。
 - 深色模式、表单控件、分页、弹层和代码面板使用统一的圆角与表面规范。
 - 保持现有 Worker API、Pages 运行时变量和 KV 数据结构不变，可从旧版本平滑升级。
+
+## 界面预览
+
+### Admin · Paper, Ink & Sealing Wax
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>运营概览</strong><br />
+      <sub>邮件流量、地址活跃、站点规模与能力状态。</sub><br /><br />
+      <img src="docs/screenshots/admin-dashboard.png" alt="Admin 运营概览" />
+    </td>
+    <td width="50%" valign="top">
+      <strong>收件箱工作区</strong><br />
+      <sub>高密度邮件列表、阅读器与快捷操作。</sub><br /><br />
+      <img src="docs/screenshots/admin-inbox.png" alt="Admin 收件箱工作区" />
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="76%" valign="top">
+      <strong>系统设置</strong><br />
+      <sub>界面、连接、邮件规则和账户策略分区管理。</sub><br /><br />
+      <img src="docs/screenshots/admin-connection-settings.png" alt="Admin 系统设置" />
+    </td>
+    <td width="24%" align="center" valign="top">
+      <strong>移动端地址管理</strong><br />
+      <sub>响应式列表、底部导航和地址快捷操作。</sub><br /><br />
+      <img src="docs/screenshots/mobile-address-actions.png" alt="Admin 移动端地址管理" width="180" />
+    </td>
+  </tr>
+</table>
+
+### Webmail · 登录与分享
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/screenshots/webmail-login.png" alt="Webmail 邮箱登录" /></td>
+    <td width="50%" valign="top"><img src="docs/screenshots/webmail-share.png" alt="Webmail 多邮箱分享" /></td>
+  </tr>
+</table>
 
 ## 项目组成
 
@@ -48,10 +91,10 @@
 
 ## 5 分钟部署
 
-最省心的方式是把下面这段交给能操作 GitHub 和 Cloudflare 的 AI Agent。不要在聊天中补充任何密码或 Token；Agent 必须通过 Cloudflare 登录、Secret 输入或让你在控制台手动填写。
+最省心的方式是把下面整段一次性交给能操作 GitHub 和 Cloudflare 的 AI Agent。开始前先在浏览器登录 GitHub 与 Cloudflare，并准备好现有 Worker 的运行时配置；不要把任何密码或 Token 发进聊天。
 
 ```text
-请严格按照仓库 docs/AGENT_DEPLOY_PROMPT.md 部署当前项目。先只读检查仓库和 Cloudflare 状态，再创建两个 Cloudflare Pages 项目，分别使用 apps/admin 与 apps/webmail。不得修改或重新部署上游邮件 Worker，不得要求我在聊天中发送任何密码、Token、Worker 私有地址或加密密钥，不得输出密钥原文。没有安全写入 Secret 的能力时，停止该步骤并告诉我在 Cloudflare 控制台的准确填写位置。完成构建、Pages 运行时变量、SHARE_KV 绑定和 /api/runtime 验收后，再报告两个站点 URL、检查结果、未完成项和回滚方法。
+请严格按照仓库 docs/AGENT_DEPLOY_PROMPT.md，把当前仓库从只读预检到两个 Production 站点验收作为一个连续任务一次完成；不要在计划、预检、创建第一个站点或单次部署后结束。不得修改或重新部署上游邮件 Worker，不得要求我在聊天中发送任何密码、Token、Worker 私有地址或加密密钥，不得输出密钥原文。除 GitHub/Cloudflare 登录、由我在平台页面一次性填写全部 Secret，以及真实账号最终验收外，不要逐阶段停下征求确认；需要我操作时一次列出全部事项，我回复“已配置”后从断点继续。先部署 Admin 并取得最终 origin，再用该 origin 配置 Webmail 的 SHARE_ADMIN_CORS_ORIGINS、SHARE_KV 和分享密钥，然后部署 Webmail。完成构建、两个 Pages 部署、/api/runtime 探针和回滚点记录后，再统一报告两个站点 URL、证据、未完成项和回滚方法。
 ```
 
 完整、可直接复制的强约束提示词见 [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md)。如果你更喜欢自己操作，继续阅读下一节。
@@ -87,6 +130,8 @@
 
 ### 3. 创建 Webmail Pages
 
+先等待 Admin 的 Production 部署完成并记录实际 origin；Webmail 的 CORS 配置必须使用这个地址，不能提前猜测，也不能填写 Webmail 自己的 origin。
+
 再次导入同一个 Fork：
 
 | 设置 | 值 |
@@ -113,7 +158,7 @@ Preview 与 Production 的变量、Secret 和 KV 绑定相互独立。需要预�
 
 ### 4. 验收
 
-重新部署两个项目，然后依次检查：
+如果 Pages 项目在运行时配置完成前已经自动构建，先各触发一次新的 Production 部署。随后依次检查：
 
 1. 打开 Webmail 的 `/api/runtime`，确认 `ok: true`；接口只报告配置状态，不返回 Secret。
 2. 使用上游用户账号登录 Admin，确认仪表盘和收件箱可加载。
@@ -183,46 +228,6 @@ WEBMAIL_RUNTIME_URL=https://webmail.example.com npm run check:cloudflare:runtime
 | [项目结构](docs/PROJECT_STRUCTURE.md) | 模块职责和维护入口 |
 | [安全脱敏](docs/SECURITY_DESENSITIZATION.md) | 发布前检查与响应流程 |
 | [上游关系](docs/UPSTREAM.md) | 与邮件 Worker 的职责边界 |
-
-## 界面预览
-
-### Admin · Paper, Ink & Sealing Wax
-
-<table>
-  <tr>
-    <td width="50%">
-      <strong>运营概览</strong><br />
-      <sub>邮件流量、地址活跃、站点规模与能力状态。</sub><br /><br />
-      <img src="docs/screenshots/admin-dashboard.png" alt="Admin 运营概览" />
-    </td>
-    <td width="50%">
-      <strong>收件箱工作区</strong><br />
-      <sub>高密度邮件列表、阅读器与快捷操作。</sub><br /><br />
-      <img src="docs/screenshots/admin-inbox.png" alt="Admin 收件箱工作区" />
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <strong>系统设置</strong><br />
-      <sub>界面、连接、邮件规则和账户策略分区管理。</sub><br /><br />
-      <img src="docs/screenshots/admin-connection-settings.png" alt="Admin 系统设置" />
-    </td>
-    <td width="50%" align="center">
-      <strong>移动端地址管理</strong><br />
-      <sub>响应式列表、底部导航和地址快捷操作。</sub><br /><br />
-      <img src="docs/screenshots/mobile-address-actions.png" alt="Admin 移动端地址管理" width="300" />
-    </td>
-  </tr>
-</table>
-
-### Webmail · 登录与分享
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/webmail-login.png" alt="Webmail 邮箱登录" /></td>
-    <td width="50%"><img src="docs/screenshots/webmail-share.png" alt="Webmail 多邮箱分享" /></td>
-  </tr>
-</table>
 
 ## 开源与安全
 

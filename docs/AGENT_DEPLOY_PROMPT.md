@@ -6,8 +6,8 @@
 
 1. 将下方整段 Prompt 复制给 Agent。
 2. 把 `<REPOSITORY_URL>` 替换成你自己的 Fork 地址；这是唯一建议直接写进 Prompt 的值。
-3. 不要把 Worker 地址、密码、Token、Account ID、KV ID 或分享密钥补进聊天。
-4. Agent 无法安全写入 Secret 时，由你在 Cloudflare 控制台填写，Agent 继续做非敏感步骤和验收。
+3. 开始前在浏览器登录 GitHub 与 Cloudflare，并准备好现有 Worker 的地址、管理员密码和可选站点密码，但不要把它们补进聊天。
+4. Agent 无法安全写入 Secret 时，让它一次列出全部字段并打开对应的 Cloudflare 页面。你在平台表单中填写完后只回复“已配置”，Agent 应从断点连续完成剩余部署和验收。
 
 ## 可复制 Prompt
 
@@ -18,6 +18,13 @@
 - apps/webmail：用户邮箱与分享站
 
 严格遵守以下规则。规则优先于“尽快完成”。
+
+【连续执行与完成定义】
+1. 这是一个从预检到验收的端到端任务。除下列明确的人为暂停外，不得在计划、预检、资源创建、Admin 部署或 Webmail 部署后结束，也不得逐阶段重复询问是否继续。
+2. 只有三类操作可以暂停：GitHub/Cloudflare 登录或授权、用户在平台表单中填写 Secret、真实账号登录与分享验收。需要暂停时，一次列出全部待办并停在准确页面；用户回复“已配置”或“已登录”后，从当前断点继续，不要重跑已完成阶段。
+3. 任何非敏感选择必须在首次变更前一次问完。用户没有特殊要求时，使用本文默认项目名、只配置 Production，并采用 Cloudflare Pages GitHub 集成完成首次部署。
+4. 完成标准是两个 Pages 项目均部署成功、Webmail /api/runtime 通过、回滚点已记录，并清楚标记真实账号验收状态。只完成其中一个站点不算完成。
+5. 首次部署只选择一种持续部署入口。默认使用 Cloudflare Pages GitHub 集成；不要同时启用 Cloudflare Git 自动构建和 GitHub Actions 的 AUTO_DEPLOY_PAGES，避免一次提交触发两套 Production 部署。只有用户明确要求时才配置 GitHub Actions 自动部署。
 
 【绝对禁止】
 1. 不得修改、迁移、删除或重新部署上游邮件 Worker、D1、R2、邮件路由或现有生产资源；不得修改上游 Worker。
@@ -36,11 +43,10 @@
 
 【阶段 1：只读预检】
 1. 克隆仓库并记录当前 commit SHA，不做代码修改。
-2. 确认 Node.js 22 或更高版本可用。
+2. 确认 Node.js 22 或更高版本以及 Chrome/Chromium 可用；完整 release check 会运行浏览器 smoke。
 3. 在仓库根目录依次执行：
    - npm --prefix apps/admin ci
    - npm --prefix apps/webmail ci
-   - npm run check:public
    - npm run check:release
 4. 任何命令失败都停止部署，报告失败命令和非敏感错误摘要。不要跳过测试。
 5. 只读确认当前 Cloudflare 账号、已有 Pages 项目和 KV Namespace；不要读取 Secret 原文。
@@ -51,6 +57,7 @@
 3. 为 Webmail 创建或复用一个专用 KV Namespace，绑定名固定为 SHARE_KV。
 4. 可选：创建一个邮件状态 KV，并在 Admin 与 Webmail 两边都绑定为 MAIL_READ_STATE_KV。两个站点要共用状态时，必须指向同一个 Namespace。
 5. Production 与 Preview 是两个独立环境。除非用户明确要求 Preview，否则先只配置 Production。
+6. 复用已有项目时，先记录两个项目当前的 Production 部署 ID 和状态作为回滚点；无法确认项目归属或回滚点时停止。
 
 【阶段 3：创建两个 Pages 项目】
 使用 GitHub 集成或安全的 Cloudflare API 创建项目，参数必须准确：
@@ -68,7 +75,7 @@ Webmail：
 不要把两个项目的 Root directory 配反。不要设置 VITE_API_BASE。
 
 【阶段 4：安全写入运行时配置】
-先尝试使用 Secret 类型的安全写入能力；命令或工具会回显值时禁止使用。
+先尝试使用 Secret 类型的安全写入能力；命令或工具会回显值时禁止使用。需要用户手动填写时，把两个项目的全部字段集中到一次人工步骤，不要每个变量暂停一次。
 
 Admin Production：
 - MAIL_WORKER_BASE_URL：Secret，现有邮件 Worker 根地址
@@ -79,7 +86,7 @@ Webmail Production：
 - MAIL_WORKER_BASE_URL：Secret，与 Admin 指向同一个 Worker
 - SITE_PASSWORD：Secret，仅在 Worker 启用站点密码时设置
 - SHARE_ENCRYPTION_SECRET_V2：Secret，直接生成至少 32 随机字节并安全写入；不得输出密钥原文
-- SHARE_ADMIN_CORS_ORIGINS：普通变量，只填写 Admin 的完整 origin，例如 https://admin.example.com；禁止使用 *，禁止填写 Webmail 自己的 origin
+- SHARE_ADMIN_CORS_ORIGINS：普通变量，等待 Admin 部署后填写其实际 Production origin；多个实际使用的 Admin origin 用逗号分隔。禁止使用 *，禁止填写 Webmail 自己的 origin
 - SHARE_KV：KV Namespace binding，Binding name 必须完全一致
 - MAIL_READ_STATE_KV：可选 KV binding；需要跨站共享已读/星标时设置
 
@@ -91,11 +98,13 @@ Webmail Production：
 
 如果你不能在不回显的情况下生成并写入 SHARE_ENCRYPTION_SECRET_V2，也按同样方式停止该步骤，让我在控制台创建 Secret。
 
-【阶段 5：部署】
-1. 触发两个 Pages 项目的 Production 部署。
-2. 等待两个构建都结束，记录部署 ID、commit SHA、状态和公开 URL；不要记录任何 Secret。
-3. 任一项目失败时不要继续反复部署。先读取非敏感构建错误，判断是依赖/构建错误还是运行时配置错误。
-4. 不得通过修改安全检查、删除 Functions 或硬编码配置来“让构建变绿”。
+【阶段 5：按依赖顺序部署】
+1. 先确认 Admin 的运行时 Secret 已写入，再触发 Admin Production 部署。
+2. 等待 Admin 构建成功，记录部署 ID、commit SHA、状态和最终公开 origin。不得用猜测的项目 URL 代替实际结果。
+3. 将 Admin 的实际 origin 写入 Webmail Production 的 SHARE_ADMIN_CORS_ORIGINS，确认 Webmail Secret 与 SHARE_KV 均已配置，再触发 Webmail Production 部署。
+4. 如果 GitHub 集成在运行时配置完成前已经自动触发过构建，配置完成后必须重新部署；验收只能针对这次新部署。
+5. 等待 Webmail 构建成功，记录部署 ID、commit SHA、状态和公开 URL；不要记录任何 Secret。
+6. 任一项目失败时不要连续重试。先读取非敏感构建错误，判断是依赖、构建还是运行时配置问题；不得通过关闭安全检查、删除 Functions 或硬编码配置来“让构建变绿”。
 
 【阶段 6：验收清单】
 逐项执行并记录状态：
@@ -103,7 +112,7 @@ Webmail Production：
 2. Webmail 根页面 GET 返回 200，主要 JS/CSS 资源可加载。
 3. Webmail GET /api/runtime 返回 200 且 JSON 中 ok=true；只报告 checks 的布尔值、missing 和 hints，不输出环境变量内容。
 4. 确认 SHARE_KV 已绑定到 Webmail Production。
-5. 确认 SHARE_ADMIN_CORS_ORIGINS 精确等于 Admin origin 且不是 *。
+5. 确认 SHARE_ADMIN_CORS_ORIGINS 包含实际使用的 Admin origin、没有 Webmail origin 且不是 *。
 6. 用户自行用现有账号登录 Admin；你不得索要账号密码。若无法自动验证，标记为“等待用户确认”，不能伪造通过。
 7. 用户自行创建分享并在无痕窗口打开；若无法自动验证，同样标记为“等待用户确认”。
 
@@ -119,6 +128,7 @@ Webmail Production：
 - 仓库 commit SHA
 - Admin 项目名、URL、部署 ID、构建/HTTP 状态
 - Webmail 项目名、URL、部署 ID、构建/HTTP 状态
+- 首次部署使用的持续部署入口，以及是否启用了 GitHub Actions 自动部署
 - /api/runtime 的 ok、布尔 checks、missing、hints
 - SHARE_KV 是否已绑定（是/否，不输出 Namespace ID）
 - 用户验收项状态

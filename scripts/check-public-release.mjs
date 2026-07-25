@@ -237,12 +237,27 @@ const readmePath = resolve(repoRoot, "README.md");
 if (existsSync(readmePath)) {
   const readme = readFileSync(readmePath, "utf8");
   for (const heading of [
+    "## 界面预览",
     "## 5 分钟部署",
     "## 手动部署",
     "## 公开版与自用配置边界",
     "## 版本与升级",
   ]) {
     if (!readme.includes(heading)) errors.push(`README is missing section: ${heading}`);
+  }
+
+  const previewIndex = readme.indexOf("## 界面预览");
+  const projectIndex = readme.indexOf("## 项目组成");
+  if (previewIndex !== -1 && projectIndex !== -1 && previewIndex > projectIndex) {
+    errors.push("README interface preview must appear before the project and deployment details.");
+  }
+
+  const mobilePreviewTag = readme.match(/<img\b[^>]*mobile-address-actions\.png[^>]*>/)?.[0];
+  const mobilePreviewWidth = mobilePreviewTag?.match(/\bwidth="(\d+)"/)?.[1];
+  if (!mobilePreviewWidth) {
+    errors.push("README mobile address preview must declare a compact display width.");
+  } else if (Number(mobilePreviewWidth) > 200) {
+    errors.push("README mobile address preview must stay at or below 200px wide.");
   }
 }
 
@@ -262,6 +277,16 @@ if (existsSync(promptPath)) {
   ]) {
     if (!prompt.includes(requirement)) {
       errors.push(`Agent deployment prompt is missing safety requirement: ${requirement}`);
+    }
+  }
+  for (const requirement of [
+    "连续执行与完成定义",
+    "逐阶段重复询问",
+    "按依赖顺序部署",
+    "实际 Production origin",
+  ]) {
+    if (!prompt.includes(requirement)) {
+      errors.push(`Agent deployment prompt is missing one-pass workflow requirement: ${requirement}`);
     }
   }
 }

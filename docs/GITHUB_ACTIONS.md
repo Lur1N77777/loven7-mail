@@ -10,6 +10,8 @@
 
 Fork 后不配置 Cloudflare Secrets/Variables，CI 仍会运行，部署步骤会安全跳过。手动触发部署但配置不完整时，workflow 会失败并列出缺失的变量名，不输出 Secret。
 
+这条部署 workflow 只更新已经创建、已经配置运行时 Secret/KV 的 Pages 项目，不负责首次创建项目或写入 Cloudflare 运行时配置。首次部署先使用 [AI Agent 部署指令](AGENT_DEPLOY_PROMPT.md) 或 [部署速查](DEPLOYMENT_QUICKSTART.md) 完成两个项目的初始化与验收。
+
 ## CI 门禁
 
 CI 使用 Node.js 22，并执行：
@@ -28,6 +30,8 @@ npm run smoke
 `check:public` 阻止常见私人域名、本机路径、真实部署项目名和内部生产材料进入公开分支。它是自动门禁，不替代人工安全审查。
 
 ## 启用自动部署
+
+如果 Pages 项目已通过 Cloudflare Git 集成自动构建，不要再启用本 workflow 的 `AUTO_DEPLOY_PAGES`。两种持续部署入口选择一种即可，避免一次 `main` push 重复发布 Production。
 
 在 Fork 的 **Settings → Secrets and variables → Actions** 配置：
 
