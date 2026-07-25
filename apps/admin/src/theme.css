@@ -911,6 +911,12 @@ body .sidebar-reference-shell .sidebar-compose-btn span {
   white-space: nowrap;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-reference-tools .animate-spin {
+    animation: none !important;
+  }
+}
+
 /* keep every control inside buttons from wrapping when English labels grow */
 body :is(.product-button, .btn-primary, .btn-secondary, .btn-danger, .cap-state, .card-chip, .rules-nav-count) {
   white-space: nowrap !important;

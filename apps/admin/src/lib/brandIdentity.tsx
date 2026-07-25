@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { getRuntimeLocale, localeText } from './locale';
+import { getFallbackAvatarColor } from '../../../shared/avatarColor';
 
 export type BrandIdentity = {
   domain: string;
@@ -224,14 +225,16 @@ export function BrandAvatar({
 
   const locale = getRuntimeLocale();
   const fallbackName = senderName || localeText('发件人', 'sender', locale);
+  const fallbackColor = useMemo(() => getFallbackAvatarColor(sender, senderName || identity.displayName), [identity.displayName, sender, senderName]);
+  const hasIcon = Boolean(iconUrl);
   const label = identity.domain
     ? localeText(`${identity.displayName} 图标`, `${identity.displayName} icon`, locale)
     : localeText(`${fallbackName} 头像`, `${fallbackName} avatar`, locale);
 
   return (
     <span
-      className={joinClassName('brand-avatar', failed && 'brand-avatar-fallback', className)}
-      style={{ '--brand-avatar-size': `${size}px` } as CSSProperties}
+      className={joinClassName('brand-avatar', hasIcon ? 'brand-avatar-with-icon' : 'brand-avatar-fallback', failed && 'brand-avatar-icon-failed', className)}
+      style={{ '--brand-avatar-size': `${size}px`, '--brand-avatar-fallback-bg': fallbackColor } as CSSProperties}
       title={identity.domain ? `${identity.displayName} · ${identity.domain}` : fallbackName}
       aria-label={label}
     >

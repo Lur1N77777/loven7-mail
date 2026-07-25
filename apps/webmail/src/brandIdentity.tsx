@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { getFallbackAvatarColor } from '../../shared/avatarColor';
 
 export type BrandIdentity = {
   domain: string;
@@ -222,11 +223,13 @@ export function BrandAvatar({
   }, [identity.domain, size]);
 
   const label = identity.domain ? `${identity.displayName} 图标` : `${senderName || '发件人'} 头像`;
+  const fallbackColor = useMemo(() => getFallbackAvatarColor(sender, senderName || identity.displayName), [identity.displayName, sender, senderName]);
+  const hasIcon = Boolean(iconUrl);
 
   return (
     <span
-      className={joinClassName('brand-avatar', failed && 'brand-avatar-fallback', className)}
-      style={{ '--brand-avatar-size': `${size}px` } as CSSProperties}
+      className={joinClassName('brand-avatar', hasIcon ? 'brand-avatar-with-icon' : 'brand-avatar-fallback', failed && 'brand-avatar-icon-failed', className)}
+      style={{ '--brand-avatar-size': `${size}px`, '--brand-avatar-fallback-bg': fallbackColor } as CSSProperties}
       title={identity.domain ? `${identity.displayName} · ${identity.domain}` : senderName || '发件人'}
       aria-label={label}
     >

@@ -12,6 +12,7 @@ import { reconcileServerMailRange } from "../src/mailSync.ts";
 import { buildMailFrameSrcDoc, isSafeNavigationUrl, parseRawMail, sanitizeMailHtml } from "../src/mailParser.ts";
 import { proxyMailImageSrcset, proxyMailImageUrl } from "../src/mailImageProxy.ts";
 import { extractVerificationCode, extractVerificationCodes } from "../../shared/verificationCode.ts";
+import { getFallbackAvatarColor } from "../../shared/avatarColor.ts";
 
 test("webmail sanitizer fails closed when DOMParser is unavailable", () => {
   const sanitized = sanitizeMailHtml(
@@ -146,10 +147,14 @@ test("webmail exposes every high-confidence code as an individually copyable lis
   assert.match(source, /copyVerificationCode\(selectedMail, code\)/);
 });
 
-test("webmail keeps brand avatar frames full-size while centering icons at 85 percent", () => {
+test("webmail uses white only for real brand icons and deterministic color for initials", () => {
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(styles, /\.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
-  assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*#fff\s*!important;/s);
+  assert.match(styles, /\.brand-avatar-with-icon\s*\{[^}]*background:\s*#fff\s*!important;/s);
+  assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#fff\s*!important;[^}]*font-size:\s*calc\(var\(--brand-avatar-size\) \* \.456\);[^}]*font-weight:\s*560/s);
+  assert.equal(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('letter@example.test'));
+  assert.equal(getFallbackAvatarColor('letter@example.test', 'First label'), getFallbackAvatarColor('letter@example.test', 'Renamed label'));
+  assert.notEqual(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('other@example.test'));
 });
 
 test("mailbox cache key is isolated by API origin and mailbox identity", async () => {

@@ -28,12 +28,12 @@ function sleep(ms) {
 
 const mockNow = '2026-05-09T10:20:00.000Z';
 const mockUsers = [
-  { id: 101, user_email: 'alice@example.test', role_text: 'member', address_count: 2, created_at: mockNow, updated_at: mockNow },
+  { id: 101, user_email: 'extraordinarily.long.account.address.for.layout.testing@example.test', role_text: 'member', address_count: 2, created_at: mockNow, updated_at: mockNow },
   { id: 102, user_email: 'bob@example.test', role_text: 'member', address_count: 1, created_at: mockNow, updated_at: mockNow },
 ];
 const mockAddresses = [
-  { id: 301, name: 'alice.demo01@example.test', user_id: 101, user_email: 'alice@example.test', source_meta: 'user', mail_count: 2, send_count: 0, created_at: mockNow, updated_at: mockNow },
-  { id: 302, name: 'alice.work22@example.test', user_id: 101, user_email: 'alice@example.test', source_meta: 'user', mail_count: 1, send_count: 1, created_at: mockNow, updated_at: mockNow },
+  { id: 301, name: 'alice.demo01@example.test', user_id: 101, user_email: 'extraordinarily.long.account.address.for.layout.testing@example.test', source_meta: 'user', mail_count: 2, send_count: 0, created_at: mockNow, updated_at: mockNow },
+  { id: 302, name: 'alice.work22@example.test', user_id: 101, user_email: 'extraordinarily.long.account.address.for.layout.testing@example.test', source_meta: 'user', mail_count: 1, send_count: 1, created_at: mockNow, updated_at: mockNow },
   { id: 401, name: 'bob.shop88@example.test', user_id: 102, user_email: 'bob@example.test', source_meta: 'user', mail_count: 1, send_count: 0, created_at: mockNow, updated_at: mockNow },
 ];
 const mockRawMails = [
@@ -214,7 +214,8 @@ function startMockApi(port = mockApiPort) {
       }
       if (pathname === '/admin/mails') {
         const address = (url.searchParams.get('address') || '').toLowerCase();
-        return jsonResponse(response, 200, paginate(mockRawMails.filter((row) => !address || row.address.toLowerCase() === address), url));
+        setTimeout(() => jsonResponse(response, 200, paginate(mockRawMails.filter((row) => !address || row.address.toLowerCase() === address), url)), 180);
+        return;
       }
       if (pathname === '/admin/mails_unknow') return jsonResponse(response, 200, { results: [], count: 0 });
       if (pathname === '/admin/sendbox') return jsonResponse(response, 200, paginate(mockSendbox, url));
@@ -859,7 +860,7 @@ async function main() {
     sessionStorage.setItem('loven7.auth.v1.' + scope + '.addressJwt', 'smoke.session.jwt.token');
     localStorage.setItem('loven7.auth.v1.' + scope + '.rememberedAt', '1780000000000');
     sessionStorage.setItem('loven7.auth.v1.' + scope + '.rememberedAt', '1780000000000');
-    localStorage.setItem('loven7.addressUserFilter', JSON.stringify({ userId: 101, userEmail: 'alice@example.test', requestId: 1 }));
+    localStorage.setItem('loven7.addressUserFilter', JSON.stringify({ userId: 101, userEmail: 'extraordinarily.long.account.address.for.layout.testing@example.test', requestId: 1 }));
     localStorage.setItem('loven7.shareAdminListCache', JSON.stringify({ version: 1, results: [{ token: 'private-share-token' }] }));
     localStorage.setItem('loven7.mailListCache.inbox:1:20:', JSON.stringify({ version: 1, items: [{ id: 9002, subject: 'private mail cache' }] }));
     sessionStorage.setItem('loven7.mailDetailSession.inbox:9002', JSON.stringify({ id: 9002, raw: 'private raw mail cache' }));
@@ -1029,6 +1030,15 @@ async function main() {
     assert(mobileInbox.verifyCodes.some((item) => item.includes('123456')), `Japanese verification code should be extracted: ${mobileInbox.verifyCodes.join(',')}`);
     assert(mobileInbox.verifyCodes.includes('AB7281'), `alphanumeric verification code should be extracted exactly: ${mobileInbox.verifyCodes.join(',')}`);
     assert(!/Content-Transfer-Encoding|--smoke-boundary/i.test(mobileInbox.bodySample), `mail list preview should not show raw MIME source: ${mobileInbox.bodySample}`);
+    await sleep(250);
+    const fallbackAvatars = JSON.parse(await evaluate(mobile, `JSON.stringify([...document.querySelectorAll('.mail-list-item .brand-avatar-fallback')].map((avatar) => {
+      const style = getComputedStyle(avatar);
+      return { backgroundColor: style.backgroundColor, color: style.color, fontSize: style.fontSize, fontWeight: style.fontWeight };
+    }))`));
+    extraResults.push({ name: 'mobile-mail-fallback-avatars', avatars: fallbackAvatars });
+    assert(fallbackAvatars.length >= 2, `mock inbox should render multiple initial fallback avatars: ${JSON.stringify(fallbackAvatars)}`);
+    assert(fallbackAvatars.every((avatar) => avatar.backgroundColor !== 'rgb(255, 255, 255)' && avatar.color === 'rgb(255, 255, 255)'), `fallback avatars should use colored backgrounds with white initials: ${JSON.stringify(fallbackAvatars)}`);
+    assert(new Set(fallbackAvatars.map((avatar) => avatar.backgroundColor)).size >= 2, `different fallback senders should receive varied muted colors: ${JSON.stringify(fallbackAvatars)}`);
     await clickSelector(mobile, '.mail-list-item');
     const mobileMailDetail = await collect(mobile, 'mobile-mail-detail-open');
     extraResults.push(mobileMailDetail);
@@ -1233,7 +1243,7 @@ async function main() {
     await clickSelector(mobile, '.user-filter-trigger');
     const mobileAddressUsers = await collect(mobile, 'mobile-address-users-open');
     extraResults.push(mobileAddressUsers);
-    assert(mobileAddressUsers.userOptions.some((item) => item.includes('alice@example.test') && item.includes('2 个地址')), `user filter should show concrete users and address counts: ${mobileAddressUsers.userOptions.join(' | ')}`);
+    assert(mobileAddressUsers.userOptions.some((item) => item.includes('extraordinarily.long.account') && item.includes('2 个地址')), `user filter should show concrete users and address counts: ${mobileAddressUsers.userOptions.join(' | ')}`);
     const mobileUserFilterSurface = JSON.parse(await evaluate(mobile, `JSON.stringify((() => {
       const styleOf = (selector) => {
         const element = document.querySelector(selector);
@@ -1259,7 +1269,7 @@ async function main() {
     assert(mobileUserFilterSurface.count?.radius <= 4, `address user filter counts should not be pills: ${JSON.stringify(mobileUserFilterSurface)}`);
     assert(mobileUserFilterSurface.portalMounted, `address user filter should be mounted outside the clipped data card: ${JSON.stringify(mobileUserFilterSurface)}`);
     assert(mobileUserFilterSurface.rect?.left >= 0 && mobileUserFilterSurface.rect?.right <= mobileUserFilterSurface.viewport.width && mobileUserFilterSurface.rect?.top >= 0 && mobileUserFilterSurface.rect?.bottom <= mobileUserFilterSurface.viewport.height, `address user filter should stay inside the viewport: ${JSON.stringify(mobileUserFilterSurface)}`);
-    await clickSelector(mobile, '.user-filter-option', 'alice@example.test');
+    await clickSelector(mobile, '.user-filter-option', 'extraordinarily.long.account');
     const mobileAddressFiltered = await collect(mobile, 'mobile-address-user-filtered');
     extraResults.push(mobileAddressFiltered);
     assert(mobileAddressFiltered.bodySample.includes('alice.demo01@example.test'), 'user filter should show Alice address');
@@ -1641,6 +1651,53 @@ async function main() {
   });
   extraResults.push(desktopAddressLayout);
   assertWorkspaceLayout(desktopAddressLayout, 'desktop address');
+  await clickSelector(desktop, '.address-workspace .user-filter-trigger');
+  await clickSelector(desktop, '.address-workspace .user-filter-option', 'extraordinarily.long.account');
+  const longUserTrigger = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const trigger = document.querySelector('.address-workspace .user-filter-trigger');
+    const copy = trigger?.querySelector('.user-filter-copy');
+    const label = trigger?.querySelector('.user-filter-label');
+    const count = trigger?.querySelector('.user-filter-count');
+    const rect = (element) => {
+      const box = element?.getBoundingClientRect();
+      return box ? { top: box.top, right: box.right, bottom: box.bottom, left: box.left, width: box.width, height: box.height } : null;
+    };
+    const triggerRect = rect(trigger);
+    const labelRect = rect(label);
+    const countRect = rect(count);
+    return {
+      text: label?.textContent || '',
+      trigger: triggerRect,
+      copy: rect(copy),
+      label: labelRect,
+      count: countRect,
+      clipped: Boolean(label && label.scrollWidth > label.clientWidth),
+      topGap: triggerRect && labelRect ? labelRect.top - triggerRect.top : null,
+      bottomGap: triggerRect && countRect ? triggerRect.bottom - countRect.bottom : null,
+    };
+  })())`));
+  extraResults.push({ name: 'desktop-address-long-user-trigger', ...longUserTrigger });
+  assert(longUserTrigger.text.includes('extraordinarily.long.account'), `long account selection should be active before measuring layout: ${JSON.stringify(longUserTrigger)}`);
+  assert(longUserTrigger.clipped, `long account email should use ellipsis instead of escaping the trigger: ${JSON.stringify(longUserTrigger)}`);
+  assert(longUserTrigger.label.right <= longUserTrigger.copy.right + 1, `long account email should stay within its copy region: ${JSON.stringify(longUserTrigger)}`);
+  assert(Math.abs(longUserTrigger.topGap - longUserTrigger.bottomGap) <= 2, `account email stack should be vertically centered in the trigger: ${JSON.stringify(longUserTrigger)}`);
+
+  await clickText(desktop, '收件箱');
+  await evaluate(desktop, `document.querySelector('.sidebar-reference-tools .sidebar-tool-btn[aria-label="刷新"]')?.click()`);
+  await sleep(40);
+  const globalRefreshBusy = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const button = document.querySelector('.sidebar-reference-tools .sidebar-tool-btn[aria-label="刷新"]');
+    return { busy: button?.getAttribute('aria-busy'), disabled: button?.disabled, spinning: button?.querySelector('svg')?.classList.contains('animate-spin') };
+  })())`));
+  extraResults.push({ name: 'desktop-inbox-global-refresh-busy', ...globalRefreshBusy });
+  assert(globalRefreshBusy.busy === 'true' && globalRefreshBusy.disabled && globalRefreshBusy.spinning, `global inbox refresh should visibly spin while mail is loading: ${JSON.stringify(globalRefreshBusy)}`);
+  await sleep(520);
+  const globalRefreshSettled = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const button = document.querySelector('.sidebar-reference-tools .sidebar-tool-btn[aria-label="刷新"]');
+    return { busy: button?.getAttribute('aria-busy'), disabled: button?.disabled, spinning: button?.querySelector('svg')?.classList.contains('animate-spin') };
+  })())`));
+  extraResults.push({ name: 'desktop-inbox-global-refresh-settled', ...globalRefreshSettled });
+  assert(globalRefreshSettled.busy === 'false' && !globalRefreshSettled.disabled && !globalRefreshSettled.spinning, `global inbox refresh should stop spinning after mail reload completes: ${JSON.stringify(globalRefreshSettled)}`);
 
   await clickText(desktop, '用户管理');
   const desktopUsers = await collect(desktop, 'desktop-users');

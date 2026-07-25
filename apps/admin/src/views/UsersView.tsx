@@ -10,6 +10,7 @@ import { readJsonStorage, writeJsonStorage } from '../lib/storage';
 import { scopedStorageKey } from '../lib/cacheScope';
 import type { AddressUserFilter, BoundAddressRecord, ListResponse, RoleRecord, UserRecord } from '../types/api';
 import { EmptyState, LoadingState, Modal, Pagination, type Notify, useConfirm } from '../components/Common';
+import { completeGlobalRefresh, GLOBAL_REFRESH_EVENT, type GlobalRefreshDetail } from '../lib/globalRefresh';
 
 type CachedUserList = { version: number; count: number; savedAt: number; users: UserRecord[]; roles: RoleRecord[] };
 type InlineAddressCacheEntry = { data: BoundAddressRecord[]; loading: boolean; savedAt: number; requestId?: number };
@@ -149,12 +150,14 @@ export function UsersView({ request, notify, ask, globalQuery, cacheScope, onFil
   }, [listCacheKey]);
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => {
-    const onGlobalRefresh = (event: Event) => {
-      const targetMenu = (event as CustomEvent<{ menu?: string }>).detail?.menu;
-      if (!targetMenu || targetMenu === 'users') fetchData(true);
+    const onGlobalRefresh = async (event: Event) => {
+      const detail = (event as CustomEvent<GlobalRefreshDetail>).detail || {};
+      if (!detail.menu || detail.menu === 'users') {
+        try { await fetchData(true); } finally { completeGlobalRefresh(detail.requestId); }
+      }
     };
-    window.addEventListener('loven7-global-refresh', onGlobalRefresh);
-    return () => window.removeEventListener('loven7-global-refresh', onGlobalRefresh);
+    window.addEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
+    return () => window.removeEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
   }, [fetchData]);
 
   const totalPages = Math.max(1, Math.ceil(count / pageSize));

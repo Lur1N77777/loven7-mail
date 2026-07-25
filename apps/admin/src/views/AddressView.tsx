@@ -15,6 +15,7 @@ import { selectExpiredShareTokens, shareLifecycleStatus } from '../lib/shareLife
 import { parseRawMailListItem } from '../lib/mailParser';
 import type { AddressRecord, AddressUserFilter, BoundAddressRecord, ListResponse, OpenSettings, RawMailRecord, SenderAccessRecord, UserRecord } from '../types/api';
 import { EmptyState, LoadingState, Modal, Pagination, PopoverSelect, type Notify, useConfirm } from '../components/Common';
+import { completeGlobalRefresh, GLOBAL_REFRESH_EVENT, type GlobalRefreshDetail } from '../lib/globalRefresh';
 
 type CachedList<T> = { version: number; count: number; savedAt: number; results: T[]; complete?: boolean; truncated?: boolean };
 type CachedUserOptions = { version: number; savedAt: number; count?: number; users: UserRecord[]; truncated?: boolean };
@@ -904,12 +905,14 @@ export function AddressView({
     writeLocalStorage(STORAGE_KEYS.addressUserFilter, selectedUserFilter ? JSON.stringify(selectedUserFilter) : '');
   }, [selectedUserFilter]);
   useEffect(() => {
-    const onGlobalRefresh = (event: Event) => {
-      const targetMenu = (event as CustomEvent<{ menu?: string }>).detail?.menu;
-      if (!targetMenu || targetMenu === 'address') fetchData(true);
+    const onGlobalRefresh = async (event: Event) => {
+      const detail = (event as CustomEvent<GlobalRefreshDetail>).detail || {};
+      if (!detail.menu || detail.menu === 'address') {
+        try { await fetchData(true); } finally { completeGlobalRefresh(detail.requestId); }
+      }
     };
-    window.addEventListener('loven7-global-refresh', onGlobalRefresh);
-    return () => window.removeEventListener('loven7-global-refresh', onGlobalRefresh);
+    window.addEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
+    return () => window.removeEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
   }, [fetchData]);
   useEffect(() => {
     if (userTotal > usersTotal) setUsersTotal(userTotal);

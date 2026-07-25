@@ -18,6 +18,7 @@ import { preserveRowsBelowAuthoritativeHead } from '../src/lib/mailSync.ts';
 import { createOutboundIdempotencyTracker } from '../src/lib/outboundIdempotency.ts';
 import { selectExpiredShareTokens, shareLifecycleStatus } from '../src/lib/shareLifecycle.ts';
 import { extractVerificationCodes } from '../../shared/verificationCode.ts';
+import { getFallbackAvatarColor } from '../../shared/avatarColor.ts';
 
 test('address management keeps floating controls visible and reports refresh progress', () => {
   const source = readFileSync(new URL('../src/views/AddressView.tsx', import.meta.url), 'utf8');
@@ -197,10 +198,21 @@ test('admin locale changes stay outside account and mail request dependencies', 
   assert.doesNotMatch(workspaceSource, /\[address, autoSeconds,[^\]]*, t\]\);/s);
 });
 
-test('admin keeps brand avatar frames full-size while centering icons at 85 percent', () => {
+test('admin uses white only for real brand icons and deterministic color for initials', () => {
   const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const shellSource = readFileSync(new URL('../src/components/Shell.tsx', import.meta.url), 'utf8');
+  const workspaceStyles = readFileSync(new URL('../src/workspace-pages.css', import.meta.url), 'utf8');
   assert.match(styles, /\.mobile-mail-detail \.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
-  assert.match(styles, /html\.theme-dark body \.mobile-mail-detail \.brand-avatar-fallback\s*\{[^}]*background:\s*#fff\s*!important;/s);
+  assert.match(styles, /\.brand-avatar-with-icon\s*\{[^}]*background:\s*#fff\s*!important;/s);
+  assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#fff\s*!important;[^}]*font-size:\s*calc\(var\(--brand-avatar-size\) \* \.456\);[^}]*font-weight:\s*560/s);
+  assert.match(appSource, /globalRefreshing/);
+  assert.match(shellSource, /className=\{cls\('sidebar-mini-btn sidebar-tool-btn', refreshing && 'is-refreshing'\)\}/);
+  assert.match(shellSource, /<RefreshCw size=\{15\} className=\{cls\(refreshing && 'animate-spin'\)\}/);
+  assert.match(workspaceStyles, /\.user-filter-copy\s*\{[^}]*justify-content:\s*center\s*!important;[^}]*overflow:\s*hidden\s*!important;/s);
+  assert.equal(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('letter@example.test'));
+  assert.equal(getFallbackAvatarColor('letter@example.test', 'First label'), getFallbackAvatarColor('letter@example.test', 'Renamed label'));
+  assert.notEqual(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('other@example.test'));
 });
 
 test('admin outbound attempts use RFC 4122 UUIDs by default', () => {

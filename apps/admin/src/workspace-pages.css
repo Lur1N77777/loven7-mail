@@ -976,6 +976,38 @@ body .address-view-shell .address-toolbar .popover-select.address-sort-select .p
   border-radius: var(--workspace-radius) !important;
 }
 
+body .address-workspace .user-filter-trigger {
+  overflow: hidden !important;
+}
+
+body .address-workspace .user-filter-copy {
+  align-self: stretch;
+  justify-content: center !important;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden !important;
+  gap: 0 !important;
+  padding-block: 2px;
+}
+
+body .address-workspace :is(.user-filter-label, .user-filter-count) {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .address-workspace .user-filter-label {
+  line-height: 15px !important;
+}
+
+body .address-workspace .user-filter-count {
+  margin-top: 0 !important;
+  line-height: 13px !important;
+}
+
 @media (max-width: 767px) {
   body .address-view-shell .address-toolbar .popover-select.address-sort-select .popover-select-trigger {
     min-height: 36px !important;

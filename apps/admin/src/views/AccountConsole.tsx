@@ -12,6 +12,7 @@ import { isLocalAdminOrigin, normalizeFrontendBaseUrl } from '../lib/frontendBas
 import { localeText, type AppLocale } from '../lib/locale';
 import { readStorage, writeLocalStorage } from '../lib/storage';
 import { buildCacheScope } from '../lib/cacheScope';
+import { BrandAvatar } from '../lib/brandIdentity';
 import {
   createUserAddress,
   createUserShare,
@@ -443,9 +444,7 @@ function MailboxReader({ apiBase, jwt, address, locale, mode = 'inbox', refreshK
               >
                 <div className="flex min-w-0 items-start gap-2.5">
                   <div className="mail-avatar-wrap">
-                    <span className="brand-avatar brand-avatar-fallback mail-list-brand-avatar flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                      {(mail.source || mail.address || 'M').slice(0, 1).toUpperCase()}
-                    </span>
+                    <BrandAvatar sender={mail.source || mail.address} size={32} className="mail-list-brand-avatar" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="mb-0.5 flex items-start justify-between gap-3">

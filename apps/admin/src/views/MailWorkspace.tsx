@@ -15,6 +15,7 @@ import type { ComposePayload, ListResponse, ParsedMail, ParsedSendbox, RawMailRe
 import { EmptyState, LoadingState, type Notify, useConfirm } from '../components/Common';
 import { BrandAvatar } from '../lib/brandIdentity';
 import type { MenuKey } from '../components/Shell';
+import { completeGlobalRefresh, GLOBAL_REFRESH_EVENT, type GlobalRefreshDetail } from '../lib/globalRefresh';
 
 type MailMode = 'inbox' | 'unknown' | 'sent';
 type AnyMail = ParsedMail | ParsedSendbox;
@@ -923,8 +924,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     setAutoSeconds(Math.max(15, Number(readStorage(STORAGE_KEYS.mailAutoRefreshSeconds, '60')) || 60));
   }, [active]);
   useEffect(() => {
-    const onGlobalRefresh = (event: Event) => {
-      const detail = (event as CustomEvent<{ menu?: string; source?: string }>).detail || {};
+    const onGlobalRefresh = async (event: Event) => {
+      const detail = (event as CustomEvent<GlobalRefreshDetail>).detail || {};
       const targetMenu = detail.menu;
       if (targetMenu === mode && detail.source === 'repeat-menu-click' && compactViewport) {
         setIsMobileDetail(false);
@@ -938,10 +939,12 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         }
         return;
       }
-      if (!targetMenu || targetMenu === mode) fetchData(true);
+      if (!targetMenu || targetMenu === mode) {
+        try { await fetchData(true); } finally { completeGlobalRefresh(detail.requestId); }
+      }
     };
-    window.addEventListener('loven7-global-refresh', onGlobalRefresh);
-    return () => window.removeEventListener('loven7-global-refresh', onGlobalRefresh);
+    window.addEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
+    return () => window.removeEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
   }, [compactViewport, fetchData, mode]);
   useEffect(() => {
     if (!active || !autoRefresh) return undefined;

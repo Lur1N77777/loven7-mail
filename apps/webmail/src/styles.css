@@ -2884,8 +2884,17 @@ textarea {
   clip-path: none !important;
 }
 
-/* Brand artwork needs a neutral canvas in both light and dark themes. */
-.brand-avatar,
-.brand-avatar-fallback {
+/* Real brand artwork keeps a neutral canvas; initial fallbacks use sender-stable color. */
+.brand-avatar-with-icon {
   background: #fff !important;
+}
+
+.brand-avatar-fallback {
+  background: var(--brand-avatar-fallback-bg) !important;
+  color: #fff !important;
+  font-size: calc(var(--brand-avatar-size) * .456);
+  font-weight: 560;
+  letter-spacing: 0;
+  border-color: color-mix(in srgb, var(--brand-avatar-fallback-bg) 72%, #fff) !important;
+  box-shadow: none !important;
 }

@@ -18,6 +18,7 @@ import { AddressView } from './views/AddressView';
 import { DashboardView, StatsView } from './views/DashboardView';
 import { MailWorkspace } from './views/MailWorkspace';
 import { fetchUserProfile, isAdminRoleValue, isAuthenticationFailure, readCachedUserProfile, writeCachedUserProfile, type AccountUserProfile } from './lib/userAuth';
+import { GLOBAL_REFRESH_EVENT, waitForGlobalRefreshCompletion } from './lib/globalRefresh';
 
 const MemoDashboardView = memo(DashboardView);
 const MemoStatsView = memo(StatsView);
@@ -36,6 +37,7 @@ type IdleWindow = Window & {
 
 const emptyStats: Statistics = { mailCount: 0, sendMailCount: 0, userCount: 0, addressCount: 0, activeAddressCount7days: 0, activeAddressCount30days: 0 };
 const keepAliveMenus: MenuKey[] = ['dashboard', 'stats', 'address', 'users', 'inbox', 'sent', 'unknown', 'compose', 'settings', 'maintenance'];
+const viewManagedRefreshMenus = new Set<MenuKey>(['address', 'users', 'inbox', 'sent', 'unknown']);
 type MailboxAddressRequest = { address: string; requestId: number };
 type PageSwipeLock = 'none' | 'page' | 'scroll';
 type PageSwipeDirection = 1 | -1 | 0;
@@ -387,6 +389,7 @@ export default function App() {
   const [locale, setLocale] = useState<AppLocale>(() => readInitialLocale());
   const [stats, setStats] = useState<Statistics>(emptyStats);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [globalRefreshing, setGlobalRefreshing] = useState(false);
   const [openSettings, setOpenSettings] = useState<OpenSettings | null>(null);
   const [composeSeed, setComposeSeed] = useState<Partial<ComposePayload>>({});
   const [authExpiredNoticePending, setAuthExpiredNoticePending] = useState(() => INITIAL_AUTH_EXPIRY_CHECK.expired || Boolean(readStorage(STORAGE_KEYS.authExpiredNotice, '')));
@@ -409,6 +412,7 @@ export default function App() {
   const mobileTransitionMenuRef = useRef<MenuKey | null>(null);
   const credentialFingerprintRef = useRef<string | null>(null);
   const authResetSeqRef = useRef(0);
+  const globalRefreshSeqRef = useRef(0);
   const authResettingRef = useRef(false);
   const { notice, push } = useNotice();
   const { ask, modal: confirmModal } = useConfirm();
@@ -789,12 +793,22 @@ export default function App() {
       onConfirm: () => resetAuthenticationState('manual'),
     });
   }, [ask, resetAuthenticationState]);
-  const refreshCurrent = () => {
+  const refreshCurrent = useCallback(async () => {
+    const seq = ++globalRefreshSeqRef.current;
+    const startedAt = Date.now();
+    const menu = activeMenuRef.current;
+    setGlobalRefreshing(true);
     clearApiCache();
-    loadOpenSettings(true);
-    loadStats(true);
-    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('loven7-global-refresh', { detail: { menu: activeMenu } }));
-  };
+    const tasks: Promise<unknown>[] = [loadOpenSettings(true), loadStats(true)];
+    if (typeof window !== 'undefined') {
+      if (viewManagedRefreshMenus.has(menu)) tasks.push(waitForGlobalRefreshCompletion(seq));
+      window.dispatchEvent(new CustomEvent(GLOBAL_REFRESH_EVENT, { detail: { menu, requestId: seq, source: 'shell-refresh' } }));
+    }
+    await Promise.allSettled(tasks);
+    const remainingVisibleMs = 450 - (Date.now() - startedAt);
+    if (remainingVisibleMs > 0) await new Promise((resolve) => window.setTimeout(resolve, remainingVisibleMs));
+    if (seq === globalRefreshSeqRef.current) setGlobalRefreshing(false);
+  }, [loadOpenSettings, loadStats]);
   const navigateMenu = useCallback((menu: MenuKey) => {
     if (activeMenuRef.current === menu) {
       if (mobileTransitionMenuRef.current && mobileTransitionMenuRef.current !== menu && mobilePagesEnabled && connected) {
@@ -1142,6 +1156,7 @@ export default function App() {
           locale={locale}
           setLocale={updateLocale}
           refresh={refreshCurrent}
+          refreshing={globalRefreshing}
           apiBase={apiBase}
           connected={connected}
           accountName={adminPreviewMode ? localeText('本地预览', 'Local preview', locale) : accountProfile?.username || accountProfile?.userEmail || adminAccessProfile?.username || adminAccessProfile?.userEmail}

@@ -185,7 +185,7 @@ export function Logo() {
   );
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, stats, theme, setTheme, locale, setLocale, refresh, apiBase, connected, accountName, accountMeta, allowedMenus, showComposeButton = true, showSettingsShortcut = true, sidebarSubtitle, miniActionColumns, children }: {
+export function Sidebar({ activeMenu, setActiveMenu, stats, theme, setTheme, locale, setLocale, refresh, refreshing = false, apiBase, connected, accountName, accountMeta, allowedMenus, showComposeButton = true, showSettingsShortcut = true, sidebarSubtitle, miniActionColumns, children }: {
   activeMenu: MenuKey;
   setActiveMenu: (menu: MenuKey) => void;
   stats: Statistics;
@@ -194,6 +194,7 @@ export function Sidebar({ activeMenu, setActiveMenu, stats, theme, setTheme, loc
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
   refresh: () => void;
+  refreshing?: boolean;
   apiBase?: string;
   connected?: boolean;
   accountName?: string;
@@ -407,7 +408,7 @@ export function Sidebar({ activeMenu, setActiveMenu, stats, theme, setTheme, loc
 
         <div className="sidebar-reference-footer">
           <div className="sidebar-reference-tools">
-            <button type="button" onClick={refresh} className="sidebar-mini-btn sidebar-tool-btn" title={locale === 'en-US' ? 'Refresh' : '刷新'} aria-label={locale === 'en-US' ? 'Refresh' : '刷新'}><RefreshCw size={15} /><span>{locale === 'en-US' ? 'Refresh' : '刷新'}</span></button>
+            <button type="button" onClick={refresh} className={cls('sidebar-mini-btn sidebar-tool-btn', refreshing && 'is-refreshing')} disabled={refreshing} aria-busy={refreshing} title={locale === 'en-US' ? 'Refresh' : '刷新'} aria-label={locale === 'en-US' ? 'Refresh' : '刷新'}><RefreshCw size={15} className={cls(refreshing && 'animate-spin')} /><span>{refreshing ? (locale === 'en-US' ? 'Refreshing' : '刷新中') : (locale === 'en-US' ? 'Refresh' : '刷新')}</span></button>
             {showSettingsShortcut ? <button type="button" onClick={() => setActiveMenu('settings')} className="sidebar-mini-btn sidebar-tool-btn" title={locale === 'en-US' ? 'Settings' : '系统设置'} aria-label={locale === 'en-US' ? 'Settings' : '系统设置'}><Settings size={15} /><span>{locale === 'en-US' ? 'Settings' : '设置'}</span></button> : null}
             <a className="sidebar-mini-btn sidebar-tool-btn sidebar-github-link" href={OFFICIAL_GITHUB_URL} target="_blank" rel="noreferrer" title={locale === 'en-US' ? 'Official GitHub repository' : '官方 GitHub 仓库'} aria-label={locale === 'en-US' ? 'Open official GitHub repository' : '打开官方 GitHub 仓库'}>
               <Github size={15} />
