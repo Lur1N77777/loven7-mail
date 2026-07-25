@@ -322,11 +322,8 @@ body .users-workspace .pagination-bar :is(.pagination-size-trigger, .page-btn.co
    ------------------------------------------------------------------------- */
 
 body .address-workspace .sender-access-shell {
-  border-top: 1px solid var(--admin-divider) !important;
-  border-bottom: 1px solid var(--admin-divider) !important;
-  border-right: 0 !important;
-  border-left: 0 !important;
-  border-radius: 0 !important;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--workspace-radius) !important;
   background: transparent !important;
   box-shadow: none !important;
 }
@@ -341,6 +338,10 @@ body .address-workspace .sender-access-toggle {
   box-shadow: none !important;
   font-weight: 570 !important;
   transition: background-color 140ms ease;
+}
+
+body .address-workspace :is(.address-workspace-surface, .sender-access-shell) {
+  border-radius: var(--workspace-radius) !important;
 }
 
 body .address-workspace .sender-access-toggle:hover {
@@ -530,34 +531,47 @@ body .users-workspace .user-mobile-card .user-mobile-actions :is(.btn-secondary,
   background: var(--workspace-surface-hover) !important;
 }
 
-/* user filter dropdown menu (portal-less, inside toolbar) */
+/* User filter menu is portaled so data-card overflow cannot clip it. */
 
-body .address-workspace .user-filter-menu {
-  border: 1px solid var(--workspace-line-soft) !important;
-  border-radius: var(--workspace-radius-sm) !important;
-  background: var(--workspace-surface) !important;
+.user-filter-menu-portal {
+  position: fixed !important;
+  z-index: 1000 !important;
+  max-width: calc(100vw - 16px);
+  overscroll-behavior: contain;
+}
+
+body .user-filter-menu-portal {
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: var(--admin-radius-control-sm, 8px) !important;
+  background: var(--admin-panel) !important;
   padding: 4px !important;
   box-shadow: var(--admin-menu-shadow) !important;
 }
 
-body .address-workspace .user-filter-option {
+body .user-filter-menu-portal .user-filter-option {
   border-radius: 4px !important;
   background: transparent !important;
-  color: var(--workspace-ink-soft) !important;
+  color: var(--admin-text-soft) !important;
 }
 
-body .address-workspace .user-filter-option:hover,
-body .address-workspace .user-filter-option.active {
-  background: var(--workspace-surface-hover) !important;
-  color: var(--workspace-ink) !important;
+body .user-filter-menu-portal .user-filter-option:hover,
+body .user-filter-menu-portal .user-filter-option.active {
+  background: var(--admin-panel-hover) !important;
+  color: var(--admin-text) !important;
 }
 
-body .address-workspace .user-filter-option-count {
+body .user-filter-menu-portal .user-filter-option-count {
   border: 0 !important;
   border-radius: 4px !important;
-  background: var(--workspace-surface-soft) !important;
-  color: var(--workspace-muted) !important;
+  background: var(--admin-panel-soft) !important;
+  color: var(--admin-muted) !important;
   box-shadow: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body .address-workspace .address-toolbar-refresh .animate-spin {
+    animation: none !important;
+  }
 }
 
 /* ---------------------------------------------------------------------------

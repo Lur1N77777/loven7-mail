@@ -19,6 +19,18 @@ import { createOutboundIdempotencyTracker } from '../src/lib/outboundIdempotency
 import { selectExpiredShareTokens, shareLifecycleStatus } from '../src/lib/shareLifecycle.ts';
 import { extractVerificationCodes } from '../../shared/verificationCode.ts';
 
+test('address management keeps floating controls visible and reports refresh progress', () => {
+  const source = readFileSync(new URL('../src/views/AddressView.tsx', import.meta.url), 'utf8');
+  const workspaceCss = readFileSync(new URL('../src/workspace-pages.css', import.meta.url), 'utf8');
+
+  assert.match(source, /createPortal\(userFilterMenu, document\.body\)/, 'user filter menu must escape the clipped data-card surface');
+  assert.match(source, /className="user-filter-menu user-filter-menu-portal"/, 'user filter portal needs its fixed-position surface class');
+  assert.match(source, /aria-busy=\{loading\}/, 'refresh control must expose its active request state');
+  assert.match(source, /className=\{cls\(loading && 'animate-spin'\)\}/, 'refresh icon must spin even when the current address list is empty');
+  assert.doesNotMatch(source, /\(loading \|\| usersLoading\) && data\.length > 0 && 'animate-spin'/, 'refresh feedback must not depend on pre-existing rows');
+  assert.match(workspaceCss, /body \.address-workspace :is\(\.address-workspace-surface, \.sender-access-shell\)\s*\{[^}]*border-radius:\s*var\(--workspace-radius\)\s*!important;/s, 'address data and sender access shells must share the workspace radius');
+});
+
 test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
   const sanitized = sanitizeMailHtmlWithoutDom(
     '<p>Hello</p><a href="javascript:alert(1)">Open</a><img src=x onerror=alert(1)><script>alert(1)</script>',

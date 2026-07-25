@@ -162,7 +162,8 @@ function startMockApi(port = mockApiPort) {
       }
       if (pathname === '/admin/address') {
         const query = (url.searchParams.get('query') || '').toLowerCase();
-        return jsonResponse(response, 200, paginate(mockAddresses.filter((row) => !query || row.name.toLowerCase().includes(query)), url));
+        setTimeout(() => jsonResponse(response, 200, paginate(mockAddresses.filter((row) => !query || row.name.toLowerCase().includes(query)), url)), 180);
+        return;
       }
       if (pathname === '/admin/new_address' && request.method === 'POST') {
         let body = '';
@@ -752,7 +753,7 @@ function assertWorkspaceLayout(info, label, { fullWidth = false } = {}) {
   assert(!info.xOverflow, `${label} has horizontal page overflow: ${JSON.stringify(info)}`);
   assert(info.root.radius === 0 && info.root.boxShadow === 'none', `${label} root should be flat: ${JSON.stringify(info)}`);
   assert(info.structures.length > 0, `${label} structural surfaces should render: ${JSON.stringify(info)}`);
-  assert(info.structures.every((item) => item.radius === 0 && item.boxShadow === 'none'), `${label} structural surfaces should stay square and shadowless: ${JSON.stringify(info)}`);
+  assert(info.structures.every((item) => item.radius <= 8 && item.boxShadow === 'none'), `${label} structural surfaces should stay restrained and shadowless: ${JSON.stringify(info)}`);
   assert(info.controls.every((item) => item.radius <= 8), `${label} controls should use restrained radii: ${JSON.stringify(info)}`);
   assert(info.transparentActions.every((item) => item.backgroundColor === 'rgba(0, 0, 0, 0)'), `${label} row actions should use transparent backgrounds: ${JSON.stringify(info)}`);
   if (fullWidth) {
@@ -1071,6 +1072,29 @@ async function main() {
   });
   extraResults.push(mobileAddressLayout);
   assertWorkspaceLayout(mobileAddressLayout, 'mobile address', { fullWidth: true });
+  const mobileAddressShells = JSON.parse(await evaluate(mobile, `JSON.stringify((() => {
+    const radius = (selector) => Number.parseFloat(getComputedStyle(document.querySelector(selector)).borderRadius) || 0;
+    return { dataRadius: radius('.address-workspace-surface'), senderRadius: radius('.sender-access-shell') };
+  })())`));
+  extraResults.push({ name: 'mobile-address-shell-radii', ...mobileAddressShells });
+  assert(mobileAddressShells.dataRadius > 0 && mobileAddressShells.dataRadius <= 8, `address data surface should use the restrained workspace radius: ${JSON.stringify(mobileAddressShells)}`);
+  assert(mobileAddressShells.senderRadius === mobileAddressShells.dataRadius, `sender access shell should match the address data surface radius: ${JSON.stringify(mobileAddressShells)}`);
+  await evaluate(mobile, `document.querySelector('.address-toolbar-refresh')?.click()`);
+  await sleep(40);
+  const refreshBusy = JSON.parse(await evaluate(mobile, `JSON.stringify((() => {
+    const button = document.querySelector('.address-toolbar-refresh');
+    const icon = button?.querySelector('svg');
+    return { busy: button?.getAttribute('aria-busy'), disabled: button?.disabled, spinning: icon?.classList.contains('animate-spin') };
+  })())`));
+  extraResults.push({ name: 'mobile-address-refresh-busy', ...refreshBusy });
+  assert(refreshBusy.busy === 'true' && refreshBusy.disabled && refreshBusy.spinning, `address refresh should visibly enter a busy spinning state: ${JSON.stringify(refreshBusy)}`);
+  await sleep(300);
+  const refreshSettled = JSON.parse(await evaluate(mobile, `JSON.stringify((() => {
+    const button = document.querySelector('.address-toolbar-refresh');
+    return { busy: button?.getAttribute('aria-busy'), disabled: button?.disabled, spinning: button?.querySelector('svg')?.classList.contains('animate-spin') };
+  })())`));
+  extraResults.push({ name: 'mobile-address-refresh-settled', ...refreshSettled });
+  assert(refreshSettled.busy === 'false' && !refreshSettled.disabled && !refreshSettled.spinning, `address refresh should stop spinning when the request settles: ${JSON.stringify(refreshSettled)}`);
   if (mockServer) {
     await evaluate(mobile, `(() => {
       const input = document.querySelector('.address-search-field input');
@@ -1217,17 +1241,24 @@ async function main() {
         const style = getComputedStyle(element);
         return { borderRadius: style.borderRadius, radius: Number.parseFloat(style.borderRadius) || 0, backgroundColor: style.backgroundColor, boxShadow: style.boxShadow };
       };
+      const menu = document.querySelector('.user-filter-menu');
+      const rect = menu?.getBoundingClientRect();
       return {
         name: 'mobile-address-user-filter-surface',
-        menu: styleOf('.address-workspace .user-filter-menu'),
-        option: styleOf('.address-workspace .user-filter-option'),
-        count: styleOf('.address-workspace .user-filter-option-count'),
+        menu: styleOf('.user-filter-menu'),
+        option: styleOf('.user-filter-option'),
+        count: styleOf('.user-filter-option-count'),
+        portalMounted: menu?.parentElement === document.body,
+        rect: rect ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, height: rect.height } : null,
+        viewport: { width: innerWidth, height: innerHeight },
       };
     })())`));
     extraResults.push(mobileUserFilterSurface);
     assert(mobileUserFilterSurface.menu?.radius <= 8, `address user filter should not use an oversized rounded popover: ${JSON.stringify(mobileUserFilterSurface)}`);
     assert(mobileUserFilterSurface.option?.radius <= 4, `address user filter rows should use restrained radii: ${JSON.stringify(mobileUserFilterSurface)}`);
     assert(mobileUserFilterSurface.count?.radius <= 4, `address user filter counts should not be pills: ${JSON.stringify(mobileUserFilterSurface)}`);
+    assert(mobileUserFilterSurface.portalMounted, `address user filter should be mounted outside the clipped data card: ${JSON.stringify(mobileUserFilterSurface)}`);
+    assert(mobileUserFilterSurface.rect?.left >= 0 && mobileUserFilterSurface.rect?.right <= mobileUserFilterSurface.viewport.width && mobileUserFilterSurface.rect?.top >= 0 && mobileUserFilterSurface.rect?.bottom <= mobileUserFilterSurface.viewport.height, `address user filter should stay inside the viewport: ${JSON.stringify(mobileUserFilterSurface)}`);
     await clickSelector(mobile, '.user-filter-option', 'alice@example.test');
     const mobileAddressFiltered = await collect(mobile, 'mobile-address-user-filtered');
     extraResults.push(mobileAddressFiltered);

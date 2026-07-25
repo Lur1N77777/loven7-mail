@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Copy, Edit3, ExternalLink, Inbox, KeyRound, ListFilter, Loader2, Lock, MailOpen, MoreHorizontal, Plus, RefreshCw, Save, Search, Send, Share2, ShieldCheck, Trash2, UserRound, X } from 'lucide-react';
 import { buildQuery, type Requester } from '../lib/api';
@@ -590,7 +590,10 @@ export function AddressView({
   const [desktopActionMenu, setDesktopActionMenu] = useState<DesktopAddressActionMenu | null>(null);
   const [closingMobileActionMenuId, setClosingMobileActionMenuId] = useState<number | null>(null);
   const [senderPanelOpen, setSenderPanelOpen] = useState(false);
+  const [userMenuStyle, setUserMenuStyle] = useState<CSSProperties | undefined>(undefined);
   const userDropdownRef = useRef<HTMLDivElement | null>(null);
+  const userDropdownTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const userDropdownMenuRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuCloseTimerRef = useRef<number | null>(null);
   const requestSeqRef = useRef(0);
   const batchScanAbortRef = useRef<AbortController | null>(null);
@@ -915,16 +918,71 @@ export function AddressView({
     if (!userDropdownOpen) return undefined;
     const closeOnOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node | null;
-      if (target && userDropdownRef.current?.contains(target)) return;
+      if (target && (userDropdownRef.current?.contains(target) || userDropdownMenuRef.current?.contains(target))) return;
       setUserDropdownOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setUserDropdownOpen(false);
     };
     document.addEventListener('mousedown', closeOnOutside);
     document.addEventListener('touchstart', closeOnOutside, { passive: true });
+    document.addEventListener('keydown', closeOnEscape);
     return () => {
       document.removeEventListener('mousedown', closeOnOutside);
       document.removeEventListener('touchstart', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
     };
   }, [userDropdownOpen]);
+  const updateUserMenuPosition = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const rect = userDropdownTriggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const viewport = window.visualViewport;
+    const viewportLeft = viewport?.offsetLeft || 0;
+    const viewportTop = viewport?.offsetTop || 0;
+    const viewportWidth = viewport?.width || window.innerWidth;
+    const viewportHeight = viewport?.height || window.innerHeight;
+    const viewportRight = viewportLeft + viewportWidth;
+    const viewportBottom = viewportTop + viewportHeight;
+    const margin = 8;
+    const gap = 7;
+    const estimatedHeight = Math.min(416, Math.max(112, (usersForFilter.length + 1) * 49 + 12));
+    const availableBelow = Math.max(0, viewportBottom - rect.bottom - gap - margin);
+    const availableAbove = Math.max(0, rect.top - viewportTop - gap - margin);
+    const opensBelow = availableBelow >= Math.min(estimatedHeight, 220) || availableBelow >= availableAbove;
+    const availableHeight = opensBelow ? availableBelow : availableAbove;
+    const maxHeight = Math.max(48, Math.min(416, availableHeight || estimatedHeight));
+    const menuHeight = Math.min(estimatedHeight, maxHeight);
+    const width = Math.min(Math.max(rect.width, 288), Math.max(288, viewportWidth - margin * 2));
+    const left = Math.max(viewportLeft + margin, Math.min(rect.left, viewportRight - width - margin));
+    const top = opensBelow
+      ? Math.min(rect.bottom + gap, viewportBottom - margin - menuHeight)
+      : Math.max(viewportTop + margin, rect.top - gap - menuHeight);
+    setUserMenuStyle({
+      position: 'fixed',
+      left,
+      top,
+      width,
+      maxHeight,
+      zIndex: 1000,
+      transformOrigin: opensBelow ? 'top left' : 'bottom left',
+    });
+  }, [usersForFilter.length]);
+  useLayoutEffect(() => {
+    if (!userDropdownOpen) return undefined;
+    updateUserMenuPosition();
+    const viewport = window.visualViewport;
+    window.addEventListener('resize', updateUserMenuPosition, { passive: true });
+    window.addEventListener('scroll', updateUserMenuPosition, { passive: true, capture: true });
+    viewport?.addEventListener('resize', updateUserMenuPosition, { passive: true });
+    viewport?.addEventListener('scroll', updateUserMenuPosition, { passive: true });
+    return () => {
+      window.removeEventListener('resize', updateUserMenuPosition);
+      window.removeEventListener('scroll', updateUserMenuPosition, { capture: true });
+      viewport?.removeEventListener('resize', updateUserMenuPosition);
+      viewport?.removeEventListener('scroll', updateUserMenuPosition);
+    };
+  }, [updateUserMenuPosition, userDropdownOpen]);
   const closeMobileActionMenu = useCallback(() => {
     if (mobileMenuCloseTimerRef.current !== null) window.clearTimeout(mobileMenuCloseTimerRef.current);
     setMobileActionMenuId((current) => {
@@ -1768,6 +1826,43 @@ export function AddressView({
   };
 
   const credentialLoginUrl = credential ? buildAddressLoginUrl(credential.jwt, frontendBase()) : '';
+  const userFilterMenu = userDropdownOpen ? (
+    <div
+      ref={userDropdownMenuRef}
+      className="user-filter-menu user-filter-menu-portal"
+      role="listbox"
+      aria-label={t('选择用户', 'Select user')}
+      style={userMenuStyle ?? { position: 'fixed', left: -9999, top: -9999, zIndex: 1000 }}
+    >
+      <button type="button" className={cls('user-filter-option', !effectiveUserId && 'active')} onClick={() => pickUserFilter(null)} role="option" aria-selected={!effectiveUserId}>
+        <span className="user-filter-option-main">
+          <strong>{t('全部用户', 'All users')}</strong>
+          <small>{t('显示所有地址', 'Show all addresses')}</small>
+        </span>
+        <span className="user-filter-option-count">{userTotalLabel}</span>
+      </button>
+      {usersLoading && usersForFilter.length === 0 ? (
+        <div className="user-filter-empty">{t('正在加载用户...', 'Loading users...')}</div>
+      ) : usersForFilter.length === 0 ? (
+        <div className="user-filter-empty">{t('暂无用户', 'No users')}</div>
+      ) : usersForFilter.map((user) => (
+        <button key={user.id || user.user_email} type="button" className={cls('user-filter-option', effectiveUserId === user.id && 'active')} onClick={() => pickUserFilter(user)} role="option" aria-selected={effectiveUserId === user.id}>
+          <span className="user-filter-option-main">
+            <strong>{user.user_email}</strong>
+            <small>{t('用户 ID', 'User ID')} #{user.id}</small>
+          </span>
+          <span className="user-filter-option-count">{locale === 'en-US' ? `${Number(user.address_count ?? 0)} addresses` : `${Number(user.address_count ?? 0)} 个地址`}</span>
+        </button>
+      ))}
+      {usersTruncated && (
+        <div className="user-filter-empty" role="status">
+          {locale === 'en-US'
+            ? `Showing the first ${users.length} of ${usersTotal > users.length ? usersTotal : `${users.length}+`} users. Search in User management to open addresses for users outside this list.`
+            : `仅显示前 ${users.length} / ${usersTotal > users.length ? usersTotal : `${users.length}+`} 个用户；更多用户请在“用户管理”中搜索后查看其地址。`}
+        </div>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div className="address-view-shell address-workspace h-full overflow-y-auto" onScrollCapture={() => { closeMobileActionMenu(); closeDesktopActionMenu(); }}>
@@ -1794,6 +1889,7 @@ export function AddressView({
           ) : (
           <div className="user-filter-dropdown" ref={userDropdownRef}>
             <button
+              ref={userDropdownTriggerRef}
               type="button"
               className={cls('toolbar-field user-filter-trigger', userDropdownOpen && 'is-open')}
               onClick={() => setUserDropdownOpen((open) => !open)}
@@ -1831,37 +1927,7 @@ export function AddressView({
             >
               <X size={13} />
             </button>
-            {userDropdownOpen && (
-              <div className="user-filter-menu" role="listbox">
-                <button type="button" className={cls('user-filter-option', !effectiveUserId && 'active')} onClick={() => pickUserFilter(null)}>
-                  <span className="user-filter-option-main">
-                    <strong>{t("全部用户", "All users")}</strong>
-                    <small>{t("显示所有地址", "Show all addresses")}</small>
-                  </span>
-                  <span className="user-filter-option-count">{userTotalLabel}</span>
-                </button>
-                {usersLoading && usersForFilter.length === 0 ? (
-                  <div className="user-filter-empty">{t("正在加载用户...", "Loading users...")}</div>
-                ) : usersForFilter.length === 0 ? (
-                  <div className="user-filter-empty">{t("暂无用户", "No users")}</div>
-                ) : usersForFilter.map((user) => (
-                  <button key={user.id || user.user_email} type="button" className={cls('user-filter-option', effectiveUserId === user.id && 'active')} onClick={() => pickUserFilter(user)} role="option" aria-selected={effectiveUserId === user.id}>
-                    <span className="user-filter-option-main">
-                      <strong>{user.user_email}</strong>
-                      <small>{t("用户 ID", "User ID")} #{user.id}</small>
-                    </span>
-                    <span className="user-filter-option-count">{locale === 'en-US' ? `${Number(user.address_count ?? 0)} addresses` : `${Number(user.address_count ?? 0)} 个地址`}</span>
-                  </button>
-                ))}
-                {usersTruncated && (
-                  <div className="user-filter-empty" role="status">
-                    {locale === 'en-US'
-                      ? `Showing the first ${users.length} of ${usersTotal > users.length ? usersTotal : `${users.length}+`} users. Search in User management to open addresses for users outside this list.`
-                      : `仅显示前 ${users.length} / ${usersTotal > users.length ? usersTotal : `${users.length}+`} 个用户；更多用户请在“用户管理”中搜索后查看其地址。`}
-                  </div>
-                )}
-              </div>
-            )}
+            {userFilterMenu && (typeof document === 'undefined' ? userFilterMenu : createPortal(userFilterMenu, document.body))}
           </div>
           )}
           <label className="toolbar-field address-search-field" aria-label={t("搜索地址", "Search addresses")}>
@@ -1882,7 +1948,7 @@ export function AddressView({
           </label>
           <PopoverSelect className="address-sort-select" ariaLabel={t("地址排序字段", "Address sort field")} value={sortBy} options={addressSortOptions} onChange={setSortBy} />
           <button type="button" className="btn-secondary compact toolbar-action sort-order-action" title={sortOrder === 'ascend' ? t('当前升序，点击切换', 'Currently ascending. Click to toggle.') : t('当前降序，点击切换', 'Currently descending. Click to toggle.')} onClick={() => setSortOrder(sortOrder === 'ascend' ? 'descend' : 'ascend')}><ListFilter size={15} /> <span>{sortOrder === 'ascend' ? t('升序', 'Asc') : t('降序', 'Desc')}</span></button>
-          <button type="button" className="btn-secondary compact toolbar-action address-toolbar-refresh" title={t("刷新地址列表", "Refresh address list")} aria-label={t("刷新地址列表", "Refresh address list")} onClick={() => fetchData(true)}><RefreshCw size={15} className={cls((loading || usersLoading) && data.length > 0 && 'animate-spin')} /> <span>{t("刷新", "Refresh")}</span></button>
+          <button type="button" className="btn-secondary compact toolbar-action address-toolbar-refresh" title={t("刷新地址列表", "Refresh address list")} aria-label={t("刷新地址列表", "Refresh address list")} aria-busy={loading} disabled={loading} onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && 'animate-spin')} /> <span>{loading ? t("刷新中", "Refreshing") : t("刷新", "Refresh")}</span></button>
         </div>
         {!isAccountScoped && !effectiveUserFilter && (allAddressIndexLoading || (allAddressIndexReady && !allAddressIndexComplete)) && (
           <div className="border-t border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800" role="status" aria-live="polite">
@@ -2319,7 +2385,7 @@ function SenderAccessPanel({ request, notify, ask, cacheScope, embedded = false 
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input className="form-input py-2 text-sm" value={address} onChange={(e) => { setAddress(e.target.value); setPage(1); }} placeholder={t('按地址筛选', 'Filter by address')} />
-        <button type="button" className="btn-secondary" onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && data.length > 0 && 'animate-spin')} /> {t('刷新', 'Refresh')}</button>
+        <button type="button" className="btn-secondary" aria-busy={loading} disabled={loading} onClick={() => fetchData(true)}><RefreshCw size={15} className={cls(loading && 'animate-spin')} /> {loading ? t('刷新中', 'Refreshing') : t('刷新', 'Refresh')}</button>
       </div>
     </div>
     {loading && data.length === 0 ? <LoadingState /> : data.length === 0 ? <div className="p-4 md:p-6"><EmptyState icon={ShieldCheck} title={t('暂无发件权限记录', 'No sender access records')} /></div> : <>
