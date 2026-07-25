@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { changeAddressPassword, createSession, deleteMail, fetchMailPage, fetchMailState, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail, patchMailState } from "./api";
+import { createSession, deleteMail, fetchMailPage, fetchMailState, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail, patchMailState } from "./api";
 import { subscribeAuthenticationFailures } from "./authFailure";
 import { buildSessionCacheKey, clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
 import { clearMailboxCache, readMailboxCache, writeMailboxCache } from "./cache";
@@ -13,6 +13,7 @@ import type { MailPage, ParsedMail, RemoteMailState, SafeSettings, ShareInfo, Sh
 import { sanitizeVerificationCode } from "../../shared/verificationCode.ts";
 import "./styles.css";
 import "./theme.css";
+import "./mailWorkspace.css";
 
 const PAGE_SIZE = 50;
 const AUTO_REFRESH_MS = 10_000;
@@ -280,6 +281,27 @@ function MenuChevron() {
   );
 }
 
+type MailUiIconName = "back" | "copy" | "paperclip" | "trash";
+
+function MailUiIcon({ name, size = 16 }: { name: MailUiIconName; size?: number }) {
+  return (
+    <svg
+      className="mail-ui-icon"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {name === "back" ? <path d="m15 18-6-6 6-6M9 12h10" /> : null}
+      {name === "copy" ? <><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></> : null}
+      {name === "paperclip" ? <path d="m20.5 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 1 1-2.8-2.8l8.3-8.3" /> : null}
+      {name === "trash" ? <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /><path d="M10 11v5M14 11v5" /></> : null}
+    </svg>
+  );
+}
+
 function WebmailLocaleMenu({ locale, setLocale, title, label }: {
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
@@ -410,6 +432,11 @@ const UI_COPY = {
     refreshTitleOff: "手动刷新",
     refresh: "刷新",
     auto: "自动",
+    inboxTitle: "收件箱",
+    mailCount: (count: number) => `${count} 封`,
+    unreadCount: (count: number) => `${count} 未读`,
+    autoRefreshOnNote: "自动刷新开启 · 每 10 秒同步",
+    autoRefreshOffNote: "自动刷新关闭",
     logout: "退出",
     compose: "写邮件",
     composeTitle: "发送邮件",
@@ -441,22 +468,12 @@ const UI_COPY = {
     bodyCopied: "正文已复制",
     hideMail: "删除邮件",
     delete: "删除",
-    sender: "发件人",
     recipient: "收件人",
     attachments: "附件",
-    none: "无",
     mailFormat: "邮件显示格式",
     htmlFormat: "HTML 格式",
     textFormat: "显示文本格式",
     sourceFormat: "显示源码格式",
-    changePassword: "修改密码",
-    changePasswordTitle: "修改邮箱密码",
-    newPasswordPlaceholder: "输入至少 6 位新密码",
-    passwordTooShort: "新密码至少需要 6 位",
-    passwordChanged: "密码已更新，邮箱凭据已安全轮换",
-    savePassword: "保存并轮换凭据",
-    savingPassword: "保存中…",
-    cancel: "取消",
     noSource: "(无源码)",
     emptyTitle: "暂无邮件",
     emptyBody: "等待刷新新邮件",
@@ -510,6 +527,11 @@ const UI_COPY = {
     refreshTitleOff: "Refresh now",
     refresh: "Refresh",
     auto: "Auto",
+    inboxTitle: "Inbox",
+    mailCount: (count: number) => `${count} mail${count === 1 ? "" : "s"}`,
+    unreadCount: (count: number) => `${count} unread`,
+    autoRefreshOnNote: "Auto refresh on · syncs every 10 seconds",
+    autoRefreshOffNote: "Auto refresh off",
     logout: "Exit",
     compose: "Compose",
     composeTitle: "Send mail",
@@ -541,22 +563,12 @@ const UI_COPY = {
     bodyCopied: "Body copied",
     hideMail: "Delete mail",
     delete: "Delete",
-    sender: "From",
     recipient: "To",
     attachments: "Attachments",
-    none: "None",
     mailFormat: "Message format",
     htmlFormat: "HTML",
     textFormat: "Text",
     sourceFormat: "Source",
-    changePassword: "Change password",
-    changePasswordTitle: "Change mailbox password",
-    newPasswordPlaceholder: "Enter a new password (6+ characters)",
-    passwordTooShort: "Use at least 6 characters",
-    passwordChanged: "Password updated and mailbox credential rotated",
-    savePassword: "Save and rotate credential",
-    savingPassword: "Saving…",
-    cancel: "Cancel",
     noSource: "(No source)",
     emptyTitle: "No mail",
     emptyBody: "Waiting for new mail",
@@ -631,6 +643,8 @@ const MailListRow = React.memo(function MailListRow({
   const sender = getSender(mail, locale);
   const senderName = mail.from?.name || sender;
   const senderAddress = mail.from?.address || sender;
+  const recipientAddress = mail.to?.map((item) => item.address || item.name).filter(Boolean).join(", ") || "";
+  const attachmentCount = mail.attachments?.length || 0;
   const inert = deleting || exiting;
   const verificationCodes = getVerificationCodes(mail);
   const select = () => {
@@ -639,7 +653,7 @@ const MailListRow = React.memo(function MailListRow({
 
   return (
     <div
-      className={`mail-row ${selected ? "selected" : ""} ${mail.isUnread ? "unread" : "read"} ${deleting ? "deleting" : ""} ${exiting ? "removing" : ""}`}
+      className={`mail-row mail-list-item ${selected ? "selected mail-row-selected" : "mail-row-idle"} ${mail.isUnread ? "unread mail-row-unread" : "read"} ${deleting ? "deleting" : ""} ${exiting ? "removing" : ""}`}
       role="button"
       tabIndex={inert ? -1 : 0}
       aria-disabled={inert || undefined}
@@ -653,14 +667,25 @@ const MailListRow = React.memo(function MailListRow({
       }}
     >
       <div className="mail-row-inner">
-        <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
+        <div className="mail-avatar-wrap">
+          <BrandAvatar sender={senderAddress} senderName={senderName} size={32} className="mail-list-brand-avatar" />
+        </div>
         <div className="mail-row-content">
-          <span className="mail-row-top">
-            <strong><span className="mail-unread-dot" aria-hidden="true" />{mail.subject}</strong>
-            <time>{formatDate(mail.date || mail.createdAt, locale)}</time>
-          </span>
-          <span className="mail-row-from">{sender}</span>
-          <span className="mail-row-preview">{mail.preview || noContent}</span>
+          <div className="mail-row-primary">
+            <span className="mail-sender-line">
+              <span className="mail-sender">{sender}</span>
+              {recipientAddress ? <span className="mail-list-recipient-inline" title={recipientAddress}>{recipientAddress}</span> : null}
+            </span>
+            <span className="mail-list-side">
+              <time className="mail-time">{formatDate(mail.date || mail.createdAt, locale)}</time>
+              {mail.isUnread ? <span className="mail-unread-dot" aria-hidden="true" /> : null}
+            </span>
+          </div>
+          <div className="mail-subject-line">
+            <strong className="mail-subject">{mail.subject}</strong>
+            {attachmentCount ? <span className="mail-attachment-indicator" title={`${attachmentCount}`}><MailUiIcon name="paperclip" size={13} /></span> : null}
+          </div>
+          <span className="mail-row-preview mail-preview">{mail.preview || noContent}</span>
           {verificationCodes.length ? (
             <span className="code-row">
               {verificationCodes.map((code) => {
@@ -676,8 +701,10 @@ const MailListRow = React.memo(function MailListRow({
                         if (inert) return;
                         onCopyVerificationCode(mail, code);
                       }}
+                      aria-label={`${verificationCodeLabel} ${code}`}
+                      title={`${verificationCodeLabel} ${code}`}
                     >
-                      {verificationCodeLabel} {code}
+                      {code}
                     </button>
                     <em className={`code-copy-hint ${copied ? "visible" : ""}`} aria-live="polite">{copiedLabel}</em>
                   </span>
@@ -718,9 +745,6 @@ export default function App() {
   const [deletingMailId, setDeletingMailId] = useState<number | null>(null);
   const [exitingMailIds, setExitingMailIds] = useState<Set<string>>(new Set());
   const [mailViewMode, setMailViewMode] = useState<MailViewMode>("html");
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [newMailboxPassword, setNewMailboxPassword] = useState("");
-  const [passwordSaving, setPasswordSaving] = useState(false);
   const syncRef = useRef<SyncTask | null>(null);
   const runSequenceRef = useRef(0);
   const activeRunRef = useRef<ActiveRun | null>(null);
@@ -878,9 +902,6 @@ export default function App() {
     resetMailboxState();
     deletedMailIdsRef.current.clear();
     setMobilePane("list");
-    setPasswordDialogOpen(false);
-    setNewMailboxPassword("");
-    setPasswordSaving(false);
     setError(null);
     setLoginError(reason === "expired"
       ? (localeRef.current === "en-US"
@@ -1301,33 +1322,6 @@ export default function App() {
     [activateSession, assertRunActive, beginRun, copy.credentialsRequired, copy.wrongPassword, email, isRunActive, password]
   );
 
-  const saveMailboxPassword = useCallback(async () => {
-    const activeSession = sessionRef.current;
-    const value = newMailboxPassword.trim();
-    if (!activeSession || isShareSession(activeSession) || passwordSaving) return;
-    if (value.length < 6) {
-      showToast(copy.passwordTooShort);
-      return;
-    }
-    setPasswordSaving(true);
-    const previousCacheKey = activeSession.cacheKey;
-    try {
-      const passwordHash = await hashToken(value);
-      const nextJwt = await changeAddressPassword(activeSession.jwt, passwordHash);
-      await activateSession(nextJwt, activeSession.address, activeSession.settings);
-      void clearMailboxCache(previousCacheKey).catch(() => undefined);
-      setNewMailboxPassword("");
-      setPasswordDialogOpen(false);
-      showToast(copy.passwordChanged);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : copy.refreshFailed;
-      setError(message);
-      showToast(message);
-    } finally {
-      setPasswordSaving(false);
-    }
-  }, [activateSession, copy.passwordChanged, copy.passwordTooShort, copy.refreshFailed, newMailboxPassword, passwordSaving, showToast]);
-
   useEffect(() => {
     let cancelled = false;
     const run = beginRun();
@@ -1614,6 +1608,7 @@ export default function App() {
 
   const bodyText = useMemo(() => (selectedMail ? getMailBodyText(selectedMail) : ""), [selectedMail]);
   const selectedVerificationCodes = useMemo(() => (selectedMail ? getVerificationCodes(selectedMail) : []), [selectedMail]);
+  const unreadCount = useMemo(() => mails.filter((mail) => mail.isUnread).length, [mails]);
   const copyBodyText = useCallback(async () => {
     try {
       await copyText(bodyText);
@@ -1711,23 +1706,16 @@ export default function App() {
   } as React.CSSProperties;
 
   return (
-    <div className={`app-shell pane-${mobilePane} ${isShareSession(session) ? "share-mode" : ""}`}>
+    <div className={`app-shell mail-workspace pane-${mobilePane} ${isShareSession(session) ? "share-mode" : ""}`}>
       {toast ? <div className="toast">{toast}</div> : null}
-      {passwordDialogOpen && !isShareSession(session) ? (
-        <div className="webmail-modal-backdrop" role="presentation" onMouseDown={() => { if (!passwordSaving) setPasswordDialogOpen(false); }}>
-          <section className="webmail-modal-card" role="dialog" aria-modal="true" aria-labelledby="change-mailbox-password-title" onMouseDown={(event) => event.stopPropagation()}>
-            <h2 id="change-mailbox-password-title">{copy.changePasswordTitle}</h2>
-            <input type="password" autoComplete="new-password" value={newMailboxPassword} onChange={(event) => setNewMailboxPassword(event.target.value)} placeholder={copy.newPasswordPlaceholder} autoFocus />
-            <div>
-              <button type="button" className="ghost-button" disabled={passwordSaving} onClick={() => setPasswordDialogOpen(false)}>{copy.cancel}</button>
-              <button type="button" className="primary-button" disabled={passwordSaving} onClick={() => void saveMailboxPassword()}>{passwordSaving ? copy.savingPassword : copy.savePassword}</button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-      <aside className="sidebar" aria-label={copy.sidebarLabel}>
+      <aside className="sidebar mail-list-panel" aria-label={copy.sidebarLabel}>
+        <div className="mail-list-header">
         <div className="brand-row">
           <BrandLogo variant="compact" />
+          <div className="sidebar-header-actions">
+            <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
+            <button type="button" className="ghost-button sidebar-logout-button" onClick={logout}>{copy.logout}</button>
+          </div>
         </div>
 
         <div className="account-card">
@@ -1788,7 +1776,16 @@ export default function App() {
           </div>
         </div>
 
-        <div className="toolbar">
+        <div className="mail-list-summary">
+          <div className="mail-title-line">
+            <h2 className="mail-title-heading">{copy.inboxTitle}</h2>
+            <span className="mail-count-badge">{copy.mailCount(mails.length)}</span>
+            {unreadCount ? <span className="mail-count-badge unread">{copy.unreadCount(unreadCount)}</span> : null}
+          </div>
+          <p className="mail-auto-refresh-note">{autoRefreshEnabled ? copy.autoRefreshOnNote : copy.autoRefreshOffNote}</p>
+        </div>
+
+        <div className="toolbar mail-toolbar">
           <button type="button"
             className={`primary-button refresh-button ${autoRefreshEnabled ? "auto-refresh-active" : ""}`}
             disabled={loading === "sync" || isRefreshing}
@@ -1824,12 +1821,10 @@ export default function App() {
             <span className="auto-dot" aria-hidden="true" />
             <span>{copy.auto}</span>
           </button>
-          <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
-          {!isShareSession(session) ? <button type="button" className="ghost-button" onClick={() => setPasswordDialogOpen(true)}>{copy.changePassword}</button> : null}
-          <button type="button" className="ghost-button" onClick={logout}>{copy.logout}</button>
+        </div>
         </div>
 
-        <div className="mail-list" aria-label={copy.sidebarLabel}>
+        <div className="mail-list mail-list-viewport" aria-label={copy.sidebarLabel}>
           {mails.map((mail) => (
             <MailListRow
               key={mail.id}
@@ -1866,7 +1861,7 @@ export default function App() {
         </a>
       </aside>
 
-      <main className="reader" aria-label={copy.readerLabel}>
+      <main className="reader mail-detail-pane" aria-label={copy.readerLabel}>
         {error && !mails.length ? (
           <section className="empty-state error-state">
             <h1>{copy.loadFailed}</h1>
@@ -1877,37 +1872,81 @@ export default function App() {
             }}>{copy.retry}</button>
           </section>
         ) : selectedMail ? (
-          <article className="mail-detail">
-            <button type="button" className="mobile-back" onClick={() => setMobilePane("list")}>{copy.backToList}</button>
-            <header className="detail-header">
-              <BrandAvatar sender={selectedMail.from?.address || getSender(selectedMail, locale)} senderName={selectedMail.from?.name || getSender(selectedMail, locale)} size={42} className="mail-detail-brand-avatar" />
-              <div className="detail-title-block">
-                <h1>{selectedMail.subject}</h1>
-                <p>{getSender(selectedMail, locale)} · {formatDate(selectedMail.date || selectedMail.createdAt, locale)}</p>
+          <article className="mail-detail mail-detail-card">
+            <div className="mail-detail-topbar">
+              <button type="button" className="mobile-back mail-detail-icon-action" onClick={() => setMobilePane("list")} aria-label={copy.backToList} title={copy.backToList}>
+                <MailUiIcon name="back" size={18} />
+                <span>{copy.backToList}</span>
+              </button>
+              <div className="mail-detail-topbar-actions">
+                <button type="button" className="mail-detail-icon-action" onClick={() => void copyBodyText()} aria-label={copy.copyBody} title={copy.copyBody}>
+                  <MailUiIcon name="copy" />
+                </button>
+                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? (
+                  <button
+                    type="button"
+                    className="mail-detail-icon-action danger"
+                    disabled={deletingMailId === selectedMail.id || (session ? isMailExiting(session, selectedMail.id) : false)}
+                    onClick={() => removeMail(selectedMail)}
+                    aria-label={isShareSession(session) ? copy.hideMail : copy.delete}
+                    title={isShareSession(session) ? copy.hideMail : copy.delete}
+                  >
+                    <MailUiIcon name="trash" />
+                  </button>
+                ) : null}
               </div>
-              <div className="detail-actions">
+            </div>
+            <header className="detail-header mail-detail-header">
+              <div className="mail-detail-subject-row">
+                <h1 className="mail-detail-subject">{selectedMail.subject}</h1>
+              </div>
+              <div className="mail-detail-sender-row">
+                <BrandAvatar sender={selectedMail.from?.address || getSender(selectedMail, locale)} senderName={selectedMail.from?.name || getSender(selectedMail, locale)} size={40} className="mail-detail-brand-avatar" />
+                <div className="detail-title-block">
+                  <div className="mail-detail-sender-main">
+                    <span>{selectedMail.from?.name || getSender(selectedMail, locale)}</span>
+                    <span>{selectedMail.from?.address || getSender(selectedMail, locale)}</span>
+                  </div>
+                  <div className="mail-detail-to-line" title={selectedMail.to?.map((item) => item.address || item.name).join(", ") || session.address}>
+                    <span>{copy.recipient}</span>
+                    <strong>{selectedMail.to?.map((item) => item.address || item.name).join(", ") || session.address}</strong>
+                  </div>
+                </div>
+                <time className="mail-detail-inline-time">{formatDate(selectedMail.date || selectedMail.createdAt, locale)}</time>
+              </div>
+              {selectedMail.attachments?.length ? (
+                <div className="mail-detail-recipient-row">
+                  <MailUiIcon name="paperclip" size={14} />
+                  <span>{copy.attachments} {selectedMail.attachments.length}</span>
+                </div>
+              ) : null}
+            </header>
+
+            <div className="mail-detail-divider" />
+
+            {error ? <div className="inline-error">{error}</div> : null}
+
+            {selectedVerificationCodes.length ? (
+              <div className="mail-detail-code-strip" aria-label={copy.verificationCode}>
+                <span>{copy.verificationCode}</span>
                 {selectedVerificationCodes.map((code) => (
                   <span className="detail-code-copy" key={code}>
-                    <button type="button" className="primary-button" onClick={() => copyVerificationCode(selectedMail, code)}>
-                      {copy.copyCode} {code}
+                    <button
+                      type="button"
+                      className="code-pill code-copy-button detail-code-button"
+                      onClick={() => copyVerificationCode(selectedMail, code)}
+                      aria-label={`${copy.copyCode} ${code}`}
+                      title={`${copy.copyCode} ${code}`}
+                    >
+                      {code}
                     </button>
                     <em className={`code-copy-hint ${copiedCodeKey === verificationCopyKey(selectedMail.id, code) ? "visible" : ""}`} aria-live="polite">{copy.copied}</em>
                   </span>
                 ))}
-                <button type="button" className="ghost-button" onClick={() => void copyBodyText()}>{copy.copyBody}</button>
-                {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button type="button" className="danger-button" disabled={deletingMailId === selectedMail.id || (session ? isMailExiting(session, selectedMail.id) : false)} onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
               </div>
-            </header>
+            ) : null}
 
-            {error ? <div className="inline-error">{error}</div> : null}
-
-            <dl className="meta-grid">
-              <div><dt>{copy.sender}</dt><dd>{selectedMail.from?.address || getSender(selectedMail, locale)}</dd></div>
-              <div><dt>{copy.recipient}</dt><dd>{selectedMail.to?.map((item) => item.address || item.name).join(", ") || session.address}</dd></div>
-              <div><dt>{copy.attachments}</dt><dd>{selectedMail.attachments?.length ? (locale === "en-US" ? `${selectedMail.attachments.length}` : `${selectedMail.attachments.length} 个`) : copy.none}</dd></div>
-            </dl>
-
-            <div className="mail-view-tabs" role="tablist" aria-label={copy.mailFormat}>
+            <div className="mail-view-tabs mail-detail-format-tabs" role="tablist" aria-label={copy.mailFormat}>
               <button type="button"
                 className={activeViewMode === "html" ? "active" : ""}
                 disabled={!selectedMail.html}
@@ -1929,7 +1968,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className={`mail-body-shell mode-${activeViewMode}`}>
+            <div className={`mail-body-shell mail-detail-body mode-${activeViewMode}`}>
               {activeViewMode === "html" && selectedMail.html ? (
                 <MailHtmlView html={selectedResolvedHtml} />
               ) : (

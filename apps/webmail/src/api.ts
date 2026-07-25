@@ -169,16 +169,3 @@ export async function patchMailState(jwt: string, body: Partial<RemoteMailState>
   });
   return parseResponse<RemoteMailState>(response);
 }
-
-export async function changeAddressPassword(jwt: string, passwordHash: string, options: RequestOptions = {}): Promise<string> {
-  const response = await fetch("/api/address_change_password", {
-    method: "POST",
-    headers: { ...authHeaders(jwt), "content-type": "application/json" },
-    body: JSON.stringify({ new_password: passwordHash }),
-    signal: options.signal,
-  });
-  const result = await parseResponse<{ success?: boolean; jwt?: string }>(response);
-  const nextJwt = String(result?.jwt || "").trim();
-  if (!nextJwt) throw new Error(currentLocale() === "en-US" ? "Password changed, but the replacement credential is missing" : "密码已更新，但后端未返回新的邮箱凭据");
-  return nextJwt;
-}

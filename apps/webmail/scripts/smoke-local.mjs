@@ -347,11 +347,11 @@ async function captureVisualSnapshots() {
   await waitUntil(desktop, `!!document.querySelector('.webmail-locale-menu')`);
   await captureScreenshot(desktop, 'desktop-language-menu-light');
   captured.push('desktop-language-menu-light.png');
-  await evaluate(desktop, `document.querySelector('.webmail-locale-menu button.active')?.click()`);
-  await click(desktop, '.toolbar > .ghost-button');
-  await waitUntil(desktop, `!!document.querySelector('.webmail-modal-card')`);
-  await captureScreenshot(desktop, 'desktop-password-modal-light');
-  captured.push('desktop-password-modal-light.png');
+  await evaluate(desktop, `document.querySelector('.webmail-locale-menu button:not(.active)')?.click()`);
+  await waitUntil(desktop, `document.documentElement.lang === 'en-US' && document.body.innerText.includes('Inbox')`);
+  assert(!await evaluate(desktop, `document.body.innerText.includes('修改密码') || document.body.innerText.includes('Change password')`), '登录后的左栏不应提供修改密码入口');
+  await captureScreenshot(desktop, 'desktop-inbox-english-light');
+  captured.push('desktop-inbox-english-light.png');
 
   const desktopDark = await openApp('/', { width: 1440, height: 960, colorScheme: 'dark' });
   await waitUntil(desktopDark, `document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);
@@ -461,11 +461,12 @@ async function run() {
   const share = await openApp('/s/share-token');
   await waitUntil(share, `document.querySelectorAll('.mail-row').length === 1`);
   await click(share, '.mail-row');
-  await waitUntil(share, `document.querySelector('.danger-button')?.textContent?.includes('删除')`);
+  await waitUntil(share, `document.querySelector('.mail-detail-icon-action.danger')?.getAttribute('aria-label')?.includes('删除')`);
   const shareBefore = await evaluate(share, `document.body.innerText`);
-  assert(shareBefore.includes('删除邮件'), '共享模式详情按钮应显示“删除邮件”');
+  const shareDeleteLabel = await evaluate(share, `document.querySelector('.mail-detail-icon-action.danger')?.getAttribute('aria-label') || ''`);
+  assert(shareDeleteLabel === '删除邮件', `共享模式详情删除按钮需要准确的无障碍标签: ${shareDeleteLabel}`);
   assert(!shareBefore.includes('隐藏邮件'), '共享模式不应向用户显示“隐藏邮件”');
-  await click(share, '.danger-button');
+  await click(share, '.mail-detail-icon-action.danger');
   await waitUntil(share, `document.body.innerText.includes('邮件已删除') || document.querySelectorAll('.mail-row').length === 0`);
   const shareAfter = await evaluate(share, `document.body.innerText`);
   assert(shareAfter.includes('暂无邮件'), '共享删除后当前链接应隐藏该邮件并显示空状态');
@@ -478,7 +479,7 @@ async function run() {
   await setInput(raceLogin, '.password-input-wrap input', 'good');
   await click(raceLogin, '.login-button');
   await waitUntil(raceLogin, `window.__webmailSmokeRace.pending('mails:jwt-old') >= 1 && document.body.innerText.includes('old@example.test')`);
-  await click(raceLogin, '.toolbar .ghost-button:last-child');
+  await click(raceLogin, '.sidebar-logout-button');
   await waitUntil(raceLogin, `document.body.innerText.includes('请输入管理员提供的邮箱与密码') && !document.querySelector('.mail-row')`);
   await setInput(raceLogin, 'input[type="email"]', 'new@example.test');
   await setInput(raceLogin, '.password-input-wrap input', 'good');

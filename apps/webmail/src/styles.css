@@ -2844,30 +2844,6 @@ textarea {
 .recovery-card p { margin: 12px 0 20px; color: #607089; line-height: 1.65; }
 .recovery-card > div { display: flex; justify-content: center; gap: 10px; }
 
-.webmail-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background: rgba(20, 28, 44, .36);
-  backdrop-filter: blur(8px);
-}
-
-.webmail-modal-card {
-  width: min(100%, 430px);
-  padding: 24px;
-  border: 1px solid rgba(103, 119, 148, .18);
-  border-radius: 26px;
-  background: #fff;
-  box-shadow: 0 24px 70px rgba(20, 32, 55, .2);
-}
-
-.webmail-modal-card h2 { margin: 0 0 18px; font-size: 20px; color: #172033; }
-.webmail-modal-card input { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid rgba(103, 119, 148, .24); border-radius: 14px; background: #fff; color: #172033; font: inherit; }
-.webmail-modal-card > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
-
 @media (prefers-reduced-motion: reduce) {
   .mail-row.removing {
     animation-duration: 1ms !important;

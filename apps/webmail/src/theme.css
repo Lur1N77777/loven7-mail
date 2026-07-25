@@ -9,6 +9,15 @@
 :root {
   color-scheme: light;
 
+  /* Admin typography contract */
+  --apple-cn-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans GB", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
+  --apple-cn-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans GB", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Segoe UI Variable Display", "Segoe UI", Arial, sans-serif;
+  --font-ui: var(--apple-cn-font-ui);
+  --font-display: var(--apple-cn-font-display);
+  --font-ui-readable: var(--apple-cn-font-ui);
+  --font-display-readable: var(--apple-cn-font-display);
+  --mail-ui-font: var(--apple-cn-font-ui);
+
   /* paper surfaces */
   --lm-bg: #f6f5f3;
   --lm-surface: #ffffff;
@@ -57,6 +66,12 @@
   --lm-radius-control: 10px;
   --lm-radius-control-sm: 8px;
   --lm-radius-pill: 999px;
+}
+
+:root[data-font-mode="en"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Aptos Display", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", Arial, sans-serif;
+  --mail-ui-font: var(--font-ui);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -784,28 +799,6 @@ body ::selection {
   background: color-mix(in srgb, var(--lm-accent) 14%, transparent);
 }
 
-.webmail-modal-backdrop {
-  background: rgba(24, 21, 18, 0.42);
-  backdrop-filter: blur(6px);
-}
-
-.webmail-modal-card {
-  width: min(100%, 430px);
-  padding: 22px;
-  border: 1px solid var(--lm-border);
-  border-radius: var(--lm-radius-panel);
-  background: var(--lm-surface);
-  box-shadow: var(--lm-shadow-lift);
-}
-
-.webmail-modal-card h2 {
-  margin: 0 0 18px;
-  color: var(--lm-text-strong);
-  font-size: 20px;
-  font-weight: var(--fw-strong);
-}
-
-.webmail-modal-card input,
 .account-form input,
 .login-form input {
   min-height: 48px;
@@ -818,24 +811,17 @@ body ::selection {
   box-shadow: none;
 }
 
-.webmail-modal-card input:hover,
 .account-form input:hover,
 .login-form input:hover {
   border-color: var(--lm-border-strong);
   background: var(--lm-surface);
 }
 
-.webmail-modal-card input:focus,
 .account-form input:focus,
 .login-form input:focus {
   border-color: color-mix(in srgb, var(--lm-accent) 52%, var(--lm-border));
   background: var(--lm-surface);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--lm-accent) 15%, transparent);
-}
-
-.webmail-modal-card > div {
-  gap: 8px;
-  margin-top: 18px;
 }
 
 .toast {
@@ -1167,9 +1153,6 @@ body ::selection {
     background: var(--lm-bg);
   }
 
-  .webmail-modal-card {
-    padding: 20px;
-  }
 }
 
 @media (max-width: 380px) {

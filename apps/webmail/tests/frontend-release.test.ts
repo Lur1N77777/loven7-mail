@@ -185,15 +185,56 @@ test("webmail uses white only for real brand icons and deterministic color for i
   assert.notEqual(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('other@example.test'));
 });
 
-test("webmail loads its final theme after legacy styles and keeps browser chrome theme-aware", () => {
+test("webmail loads theme tokens and the signed-in workspace layer after legacy styles", () => {
   const app = readWebmailSource("../src/App.tsx");
   const cssImports = [...app.matchAll(/import\s+["']([^"']+\.css)["'];/g)].map((match) => match[1]);
-  assert.deepEqual(cssImports.slice(-2), ["./styles.css", "./theme.css"]);
-  assert.equal(cssImports.at(-1), "./theme.css");
+  assert.deepEqual(cssImports.slice(-3), ["./styles.css", "./theme.css", "./mailWorkspace.css"]);
+  assert.ok(cssImports.indexOf("./theme.css") < cssImports.indexOf("./mailWorkspace.css"));
 
   const html = readWebmailSource("../index.html");
   assert.match(html, /<meta name="theme-color" content="#f6f5f3" media="\(prefers-color-scheme: light\)"\s*\/>/);
   assert.match(html, /<meta name="theme-color" content="#121110" media="\(prefers-color-scheme: dark\)"\s*\/>/);
+});
+
+test("signed-in webmail uses Admin mail workspace semantics and exposes no password-management entry", () => {
+  const app = readWebmailSource("../src/App.tsx");
+  const api = readWebmailSource("../src/api.ts");
+  const workspace = readWebmailSource("../src/mailWorkspace.css");
+
+  for (const className of [
+    "mail-workspace",
+    "mail-list-panel",
+    "mail-list-header",
+    "mail-list-viewport",
+    "mail-list-item",
+    "mail-row-selected",
+    "mail-row-idle",
+    "mail-detail-pane",
+    "mail-detail-card",
+    "mail-detail-topbar",
+    "mail-detail-header",
+    "mail-detail-sender-row",
+    "mail-detail-body",
+  ]) {
+    assert.match(app, new RegExp(`className=[^\\n]*${className}|className=\\{[^\\n]*${className}`), `missing Admin-aligned class ${className}`);
+    assert.match(workspace, new RegExp(`\\.${className}\\b`), `missing workspace styling for ${className}`);
+  }
+
+  assert.doesNotMatch(app, /changeAddressPassword|passwordDialogOpen|newMailboxPassword|passwordSaving|saveMailboxPassword|changePasswordTitle|修改密码|Change password/);
+  assert.doesNotMatch(api, /address_change_password|changeAddressPassword/);
+  assert.doesNotMatch(workspace, /webmail-modal/);
+});
+
+test("webmail mail typography follows Admin's locale-aware Apple-style font contract", () => {
+  const theme = readWebmailSource("../src/theme.css");
+  const workspace = readWebmailSource("../src/mailWorkspace.css");
+
+  assert.match(theme, /--apple-cn-font-ui:[^;]*Noto Sans SC[^;]*PingFang SC[^;]*Microsoft YaHei UI/s);
+  assert.match(theme, /--apple-cn-font-display:[^;]*SF Pro Display[^;]*Noto Sans SC/s);
+  assert.match(theme, /:root\[data-font-mode="en"\][\s\S]*--mail-ui-font:\s*var\(--font-ui\)/);
+  assert.match(workspace, /\.mail-workspace,[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important/);
+  assert.match(workspace, /\.mail-subject\s*\{[\s\S]*font-weight:\s*520\s*!important/);
+  assert.match(workspace, /\.mail-detail-subject,[\s\S]*font-weight:\s*550\s*!important/);
 });
 
 test("webmail theme stays aligned with the admin paper, ink, and sealing-wax tokens", () => {
