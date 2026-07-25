@@ -424,6 +424,8 @@ async function run() {
     htmlText: document.querySelector('.mail-html-view')?.srcdoc || '',
     hasRemoteImageButton: [...document.querySelectorAll('button')].some((button) => /显示远程图片|Show remote images/.test(button.textContent || '')),
     hasLoadingText: document.body.innerText.includes('正在优化') || document.body.innerText.includes('Loading images'),
+    brandFontFamily: getComputedStyle(document.querySelector('.brand-wordmark')).fontFamily,
+    brandFontReady: document.fonts.check('28px "Loven7 Brand Script"'),
     emptyHuge: false
   })`));
   assert(!inboxMetrics.xOverflow, '用户站收件箱不应横向溢出');
@@ -433,6 +435,7 @@ async function run() {
   assert(inboxMetrics.htmlText.includes('/api/image?url='), `远程邮件图片应自动改写为同源代理地址: ${inboxMetrics.htmlText}`);
   assert(!inboxMetrics.hasRemoteImageButton, '远程邮件图片应自动通过代理加载，不应再要求手动允许');
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
+  assert(inboxMetrics.brandFontFamily.includes('Loven7 Brand Script') && inboxMetrics.brandFontReady, `顶部品牌字标应复用 Admin 手写字体: ${JSON.stringify(inboxMetrics)}`);
   await evaluate(login, `document.querySelectorAll('.mail-row')[1]?.click()`);
   await waitUntil(login, `document.querySelector('main h1')?.textContent?.includes('Security notice') && document.querySelectorAll('.mail-row')[1]?.classList.contains('selected') && document.querySelectorAll('.mail-row')[1]?.classList.contains('read')`);
   const mailInteractionMetrics = JSON.parse(await evaluate(login, `JSON.stringify((() => {

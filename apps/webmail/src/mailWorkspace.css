@@ -50,11 +50,23 @@
 }
 
 .mail-list-header .brand-logo-compact {
-  --brand-mark-size: 32px;
+  --brand-mark-size: 40px;
+  gap: 11px;
+}
+
+.mail-list-header .brand-logo-compact .brand-wordmark,
+.mail-list-header .brand-logo-compact .brand-wordmark > span {
+  font-family: var(--font-brand) !important;
+  font-style: normal !important;
+  font-weight: 400 !important;
+  font-synthesis: none;
+  letter-spacing: -.015em !important;
+  line-height: .86 !important;
+  text-rendering: geometricPrecision;
 }
 
 .mail-list-header .brand-logo-compact .brand-wordmark {
-  font-size: 23px;
+  font-size: 30px;
 }
 
 .sidebar-header-actions {
@@ -825,11 +837,12 @@
   }
 
   .mail-list-header .brand-logo-compact {
-    --brand-mark-size: 30px;
+    --brand-mark-size: 36px;
+    gap: 10px;
   }
 
   .mail-list-header .brand-logo-compact .brand-wordmark {
-    font-size: 22px;
+    font-size: 28px;
   }
 
   .sidebar-header-actions .webmail-locale-toggle,

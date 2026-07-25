@@ -233,6 +233,7 @@ test("webmail mail typography follows Admin's locale-aware Apple-style font cont
   assert.match(theme, /--apple-cn-font-display:[^;]*SF Pro Display[^;]*Noto Sans SC/s);
   assert.match(theme, /:root\[data-font-mode="en"\][\s\S]*--mail-ui-font:\s*var\(--font-ui\)/);
   assert.match(workspace, /\.mail-workspace,[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important/);
+  assert.match(workspace, /\.mail-list-header \.brand-logo-compact \.brand-wordmark,[\s\S]*font-family:\s*var\(--font-brand\)\s*!important/);
   assert.match(workspace, /\.mail-subject\s*\{[\s\S]*font-weight:\s*520\s*!important/);
   assert.match(workspace, /\.mail-detail-subject,[\s\S]*font-weight:\s*550\s*!important/);
 });
