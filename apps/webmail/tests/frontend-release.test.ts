@@ -48,9 +48,9 @@ test("webmail routes remote mail images through its same-origin proxy", () => {
   );
 });
 
-test("webmail keeps brand avatar frames full-size while centering icons at 75 percent", () => {
+test("webmail keeps brand avatar frames full-size while centering icons at 85 percent", () => {
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-  assert.match(styles, /\.brand-avatar img\s*\{[^}]*width:\s*75%\s*!important;[^}]*height:\s*75%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
+  assert.match(styles, /\.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
   assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*#fff\s*!important;/s);
 });
 

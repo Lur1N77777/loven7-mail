@@ -19550,8 +19550,8 @@ body .address-view-shell .toolbar-field.address-search-field input {
 .brand-avatar img,
 .mobile-mail-shell .brand-avatar img,
 .mobile-mail-detail .brand-avatar img {
-  width: 75% !important;
-  height: 75% !important;
+  width: 85% !important;
+  height: 85% !important;
   padding: 0 !important;
   object-fit: contain !important;
   border-radius: 0 !important;

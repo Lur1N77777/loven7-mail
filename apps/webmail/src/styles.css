@@ -2867,8 +2867,8 @@ textarea {
 
 /* Keep the avatar frame unchanged while giving square brand marks more breathing room. */
 .brand-avatar img {
-  width: 75% !important;
-  height: 75% !important;
+  width: 85% !important;
+  height: 85% !important;
   padding: 0 !important;
   object-fit: contain !important;
   border-radius: 0 !important;

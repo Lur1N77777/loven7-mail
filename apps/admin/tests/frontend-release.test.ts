@@ -41,9 +41,9 @@ test('admin routes remote mail images through its same-origin proxy', () => {
   );
 });
 
-test('admin keeps brand avatar frames full-size while centering icons at 75 percent', () => {
+test('admin keeps brand avatar frames full-size while centering icons at 85 percent', () => {
   const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
-  assert.match(styles, /\.mobile-mail-detail \.brand-avatar img\s*\{[^}]*width:\s*75%\s*!important;[^}]*height:\s*75%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
+  assert.match(styles, /\.mobile-mail-detail \.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
   assert.match(styles, /html\.theme-dark body \.mobile-mail-detail \.brand-avatar-fallback\s*\{[^}]*background:\s*#fff\s*!important;/s);
 });
 
