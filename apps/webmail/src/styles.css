@@ -2874,3 +2874,9 @@ textarea {
   border-radius: 0 !important;
   clip-path: none !important;
 }
+
+/* Brand artwork needs a neutral canvas in both light and dark themes. */
+.brand-avatar,
+.brand-avatar-fallback {
+  background: #fff !important;
+}

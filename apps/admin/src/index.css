@@ -19557,3 +19557,15 @@ body .address-view-shell .toolbar-field.address-search-field input {
   border-radius: 0 !important;
   clip-path: none !important;
 }
+
+/* Brand artwork needs a neutral canvas in both light and dark themes. */
+html body .brand-avatar,
+html body .brand-avatar-fallback,
+html.theme-dark body .brand-avatar,
+html.theme-dark body .brand-avatar-fallback,
+html.theme-dark body .mobile-mail-shell .brand-avatar,
+html.theme-dark body .mobile-mail-shell .brand-avatar-fallback,
+html.theme-dark body .mobile-mail-detail .brand-avatar,
+html.theme-dark body .mobile-mail-detail .brand-avatar-fallback {
+  background: #fff !important;
+}
