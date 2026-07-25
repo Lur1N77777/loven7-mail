@@ -19545,3 +19545,15 @@ body .address-view-shell .toolbar-field.address-search-field input {
   grid-column: 1 / -1;
   justify-content: center;
 }
+
+/* Keep the avatar frame unchanged while giving square brand marks more breathing room. */
+.brand-avatar img,
+.mobile-mail-shell .brand-avatar img,
+.mobile-mail-detail .brand-avatar img {
+  width: 75% !important;
+  height: 75% !important;
+  padding: 0 !important;
+  object-fit: contain !important;
+  border-radius: 0 !important;
+  clip-path: none !important;
+}

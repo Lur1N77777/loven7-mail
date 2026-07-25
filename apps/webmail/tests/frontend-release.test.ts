@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { buildSessionCacheKey, clearJwtFromHref, readJwtFromHref } from "../src/auth.ts";
@@ -45,6 +46,11 @@ test("webmail routes remote mail images through its same-origin proxy", () => {
     ),
     "data:image/png;base64,AA== 1x, https://mail.example.test/api/image?url=https%3A%2F%2Fassets.example.com%2Fnotion-logo.png 2x",
   );
+});
+
+test("webmail keeps brand avatar frames full-size while centering icons at 75 percent", () => {
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(styles, /\.brand-avatar img\s*\{[^}]*width:\s*75%\s*!important;[^}]*height:\s*75%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
 });
 
 test("mailbox cache key is isolated by API origin and mailbox identity", async () => {
