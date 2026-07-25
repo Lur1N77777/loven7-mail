@@ -50,15 +50,15 @@
 
 <table>
   <tr>
-    <td width="76%" valign="top">
+    <td width="50%" valign="top">
       <strong>系统设置</strong><br />
       <sub>界面、连接、邮件规则和账户策略分区管理。</sub><br /><br />
       <img src="docs/screenshots/admin-connection-settings.png" alt="Admin 系统设置" />
     </td>
-    <td width="24%" align="center" valign="top">
+    <td width="50%" valign="top">
       <strong>移动端地址管理</strong><br />
-      <sub>响应式列表、底部导航和地址快捷操作。</sub><br /><br />
-      <img src="docs/screenshots/mobile-address-actions.png" alt="Admin 移动端地址管理" width="180" />
+      <sub>响应式列表、底部导航和地址快捷操作，采用紧凑画廊避免竖图撑高页面。</sub><br /><br />
+      <img src="docs/screenshots/mobile-address-actions-preview.png" alt="Admin 移动端地址管理与快捷操作" width="440" />
     </td>
   </tr>
 </table>

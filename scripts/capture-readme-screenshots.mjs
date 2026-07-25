@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -144,6 +144,35 @@ async function captureMobileAdminScreenshot(browser, adminUrl) {
   await page.locator('.mobile-address-more').first().click();
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(screenshotDir, 'mobile-address-actions.png'), fullPage: false });
+  await page.close();
+
+  await composeMobileReadmePreview(browser);
+}
+
+async function composeMobileReadmePreview(browser) {
+  const rawScreenshot = readFileSync(path.join(screenshotDir, 'mobile-address-actions.png')).toString('base64');
+  const page = await browser.newPage({ viewport: { width: 760, height: 500 }, deviceScaleFactor: 1 });
+  await page.setContent(`
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 760px; height: 500px; overflow: hidden; background: #f7f5f2; }
+      body { padding: 18px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #302d29; }
+      .mobile-readme-preview { display: flex; gap: 18px; width: 724px; height: 464px; }
+      .panel { width: 353px; height: 464px; overflow: hidden; border: 1px solid #e0dbd4; border-radius: 18px; background: #fff; box-shadow: 0 8px 22px rgba(53, 45, 37, .08); }
+      .panel h3 { height: 44px; margin: 0; padding: 13px 16px 8px; font-size: 15px; line-height: 1; font-weight: 650; }
+      .crop { position: relative; width: 351px; height: 419px; overflow: hidden; background: #f8f7f5; }
+      .crop img { position: absolute; left: 0; width: 351px; height: auto; max-width: none; }
+      .crop.filter img { top: -81px; }
+      .crop.actions img { top: -292px; }
+    </style>
+    <main class="mobile-readme-preview">
+      <section class="panel"><h3>筛选与地址列表</h3><div class="crop filter"><img src="data:image/png;base64,${rawScreenshot}" alt="" /></div></section>
+      <section class="panel"><h3>快捷操作菜单</h3><div class="crop actions"><img src="data:image/png;base64,${rawScreenshot}" alt="" /></div></section>
+    </main>
+  `);
+  await page.locator('.mobile-readme-preview').screenshot({
+    path: path.join(screenshotDir, 'mobile-address-actions-preview.png'),
+  });
   await page.close();
 }
 
@@ -332,6 +361,7 @@ async function main() {
         'admin-connection-settings.png',
         'admin-inbox.png',
         'mobile-address-actions.png',
+        'mobile-address-actions-preview.png',
         'webmail-login.png',
         'webmail-share.png',
       ],
