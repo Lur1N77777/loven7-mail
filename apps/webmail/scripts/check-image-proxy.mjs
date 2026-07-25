@@ -109,7 +109,7 @@ globalThis.fetch = async (input, init = {}) => {
   calls.push(url.toString());
   fetchRecords.push({ url: url.toString(), signal: init.signal });
 
-  if (url.hostname === 'cloudflare-dns.com') {
+  if (url.hostname === '1.1.1.1' || url.hostname === '1.0.0.1') {
     const name = url.searchParams.get('name');
     if (name === 'rebinding.example') return Response.json({ Answer: [{ type: 1, data: '10.0.0.1' }] });
     if (name === 'unresolved.example') return Response.json({ Answer: [] });

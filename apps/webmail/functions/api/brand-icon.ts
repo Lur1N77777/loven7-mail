@@ -124,19 +124,23 @@ async function assertPublicDns(url: URL, signal: AbortSignal) {
   const host = normalizeHost(url.hostname);
   if (isBlockedHost(host)) throw new UnsafeTargetError("blocked host");
   if (isIpLiteral(host)) return;
-  const query = async (type: "A" | "AAAA") => {
-    const dnsUrl = new URL("https://cloudflare-dns.com/dns-query");
+  const providers = ["https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"];
+  const query = async (provider: string, type: "A" | "AAAA") => {
+    const dnsUrl = new URL(provider);
     dnsUrl.searchParams.set("name", host);
     dnsUrl.searchParams.set("type", type);
-    const response = await fetch(dnsUrl, { signal, redirect: "error", headers: { accept: "application/dns-json" } });
-    if (!response.ok) throw new UnsafeTargetError("DNS lookup failed");
+    const response = await fetch(dnsUrl, { signal, redirect: "manual", headers: { accept: "application/dns-json" } });
+    if (!response.ok) throw new Error("DNS provider unavailable");
     const data = await response.json() as { Answer?: Array<{ type?: number; data?: string }> };
     return (Array.isArray(data.Answer) ? data.Answer : [])
       .filter((answer) => answer.type === 1 || answer.type === 28)
       .map((answer) => normalizeHost(String(answer.data || "")))
       .filter(Boolean);
   };
-  const addresses = (await Promise.all([query("A"), query("AAAA")])).flat();
+  const answers = await Promise.allSettled(
+    providers.flatMap((provider) => ["A", "AAAA"].map((type) => query(provider, type as "A" | "AAAA"))),
+  );
+  const addresses = answers.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   if (!addresses.length) throw new UnsafeTargetError("no public DNS answer");
   if (addresses.some((address) => isPrivateIpv4(address) || isPrivateIpv6(address))) {
     throw new UnsafeTargetError("private DNS answer");
@@ -201,7 +205,7 @@ async function findBimiCandidate(domain: string, signal: AbortSignal): Promise<I
     const url = new URL("https://cloudflare-dns.com/dns-query");
     url.searchParams.set("name", `default._bimi.${domain}`);
     url.searchParams.set("type", "TXT");
-    const response = await fetch(url, { signal, redirect: "error", headers: { accept: "application/dns-json" } });
+    const response = await fetch(url, { signal, redirect: "manual", headers: { accept: "application/dns-json" } });
     if (!response.ok) return null;
     const data = await response.json() as { Answer?: Array<{ data?: string }> };
     for (const answer of Array.isArray(data.Answer) ? data.Answer : []) {

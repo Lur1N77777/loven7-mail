@@ -183,23 +183,27 @@ async function readBodyWithLimit(body: ReadableStream<Uint8Array>, maxBytes: num
 
 async function assertPublicDnsTarget(url: URL, signal: AbortSignal) {
   const hostname = normalizeHostname(url.hostname);
-  const query = async (type: "A" | "AAAA") => {
-    const dnsUrl = new URL("https://cloudflare-dns.com/dns-query");
+  const providers = ["https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"];
+  const query = async (provider: string, type: "A" | "AAAA") => {
+    const dnsUrl = new URL(provider);
     dnsUrl.searchParams.set("name", hostname);
     dnsUrl.searchParams.set("type", type);
     const response = await fetch(dnsUrl.toString(), {
       signal,
-      redirect: "error",
+      redirect: "manual",
       headers: { accept: "application/dns-json" },
     });
-    if (!response.ok) throw imageProxyError(502, "图片域名解析失败", "image_dns_failed");
+    if (!response.ok) throw new Error("dns provider unavailable");
     const data = await response.json() as { Answer?: Array<{ type?: number; data?: string }> };
     return (Array.isArray(data.Answer) ? data.Answer : [])
       .filter((answer) => answer.type === 1 || answer.type === 28)
       .map((answer) => normalizeHostname(String(answer.data || "")))
       .filter(Boolean);
   };
-  const addresses = (await Promise.all([query("A"), query("AAAA")])).flat();
+  const answers = await Promise.allSettled(
+    providers.flatMap((provider) => ["A", "AAAA"].map((type) => query(provider, type as "A" | "AAAA"))),
+  );
+  const addresses = answers.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   if (!addresses.length) {
     throw imageProxyError(502, "图片域名解析失败", "image_dns_failed");
   }

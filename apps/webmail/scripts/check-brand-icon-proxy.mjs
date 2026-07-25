@@ -117,7 +117,7 @@ try {
         globalThis.fetch = async (input, init = {}) => {
           const url = input instanceof URL ? input : new URL(typeof input === 'string' ? input : input.url);
           if (init.signal?.aborted) throw new DOMException('aborted', 'AbortError');
-          if (url.hostname === 'cloudflare-dns.com') return dnsResponse();
+          if (url.hostname === 'cloudflare-dns.com' || url.hostname === '1.1.1.1' || url.hostname === '1.0.0.1') return dnsResponse();
           if (url.hostname === 'notion.so' && url.pathname === '/') {
             return new Response('<link rel="icon" href="/front-static/favicon.ico">', {
               status: 200,
@@ -153,7 +153,7 @@ try {
         let targetFetches = 0;
         globalThis.fetch = async (input) => {
           const url = input instanceof URL ? input : new URL(typeof input === 'string' ? input : input.url);
-          if (url.hostname === 'cloudflare-dns.com') return dnsResponse('');
+          if (url.hostname === 'cloudflare-dns.com' || url.hostname === '1.1.1.1' || url.hostname === '1.0.0.1') return dnsResponse('');
           targetFetches += 1;
           return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } });
         };
@@ -167,7 +167,7 @@ try {
         let privateFetches = 0;
         globalThis.fetch = async (input) => {
           const url = input instanceof URL ? input : new URL(typeof input === 'string' ? input : input.url);
-          if (url.hostname === 'cloudflare-dns.com') return dnsResponse();
+          if (url.hostname === 'cloudflare-dns.com' || url.hostname === '1.1.1.1' || url.hostname === '1.0.0.1') return dnsResponse();
           if (url.hostname === 'example.com' && url.pathname === '/') {
             return new Response('<link rel="icon" href="http://[::ffff:127.0.0.1]/secret.png">', {
               status: 200,
@@ -190,7 +190,7 @@ try {
         let followedPrivate = 0;
         globalThis.fetch = async (input, init = {}) => {
           const url = input instanceof URL ? input : new URL(typeof input === 'string' ? input : input.url);
-          if (url.hostname === 'cloudflare-dns.com') return dnsResponse();
+          if (url.hostname === 'cloudflare-dns.com' || url.hostname === '1.1.1.1' || url.hostname === '1.0.0.1') return dnsResponse();
           if (url.hostname === 'example.com' && url.pathname === '/') return new Response('', { status: 200, headers: { 'content-type': 'text/html' } });
           if (url.hostname === 'example.com') {
             if (init.redirect === 'follow') {
@@ -211,7 +211,7 @@ try {
         const counter = { bytes: 0, cancelled: false };
         globalThis.fetch = async (input) => {
           const url = input instanceof URL ? input : new URL(typeof input === 'string' ? input : input.url);
-          if (url.hostname === 'cloudflare-dns.com') return dnsResponse();
+          if (url.hostname === 'cloudflare-dns.com' || url.hostname === '1.1.1.1' || url.hostname === '1.0.0.1') return dnsResponse();
           if (url.hostname === 'example.com' && url.pathname === '/') {
             return new Response(htmlStream(2 * 1024 * 1024, counter), { status: 200, headers: { 'content-type': 'text/html' } });
           }
@@ -230,7 +230,7 @@ try {
         globalThis.fetch = async (input) => {
           const url = input instanceof URL ? input : new URL(typeof input === 'string' ? input : input.url);
           cacheCalls.push(url.toString());
-          if (url.hostname === 'cloudflare-dns.com') return dnsResponse();
+          if (url.hostname === 'cloudflare-dns.com' || url.hostname === '1.1.1.1' || url.hostname === '1.0.0.1') return dnsResponse();
           if (url.hostname === 'cachetest.example.com' && url.pathname === '/apple-touch-icon.png') {
             iconFetches += 1;
             return new Response(PNG_BYTES, { status: 200, headers: { 'content-type': 'image/png' } });
