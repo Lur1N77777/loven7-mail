@@ -237,6 +237,17 @@ test("webmail mail typography follows Admin's locale-aware Apple-style font cont
   assert.match(workspace, /\.mail-detail-subject,[\s\S]*font-weight:\s*550\s*!important/);
 });
 
+test("webmail keeps read messages visibly interactive and removes the desktop reader spacer", () => {
+  const workspace = readWebmailSource("../src/mailWorkspace.css");
+
+  assert.doesNotMatch(workspace, /\.mail-list-item\.mail-row\.(?:read|unread)\s*\{/);
+  assert.doesNotMatch(workspace, /\.mail-list-item\.read\s+:is\([^)]*\.mail-subject/);
+  assert.match(workspace, /\.mail-list-item\.mail-row-selected[\s\S]*background:\s*var\(--lm-surface\)/);
+  assert.match(workspace, /\.mail-detail-card\.mail-detail\s*\{[\s\S]*position:\s*relative/);
+  assert.match(workspace, /\.mail-detail-topbar\s*\{[\s\S]*position:\s*absolute/);
+  assert.match(workspace, /@media\s*\(max-width:\s*760px\)[\s\S]*\.mail-detail-topbar\s*\{[\s\S]*position:\s*static/);
+});
+
 test("webmail theme stays aligned with the admin paper, ink, and sealing-wax tokens", () => {
   const webmailTheme = readWebmailSource("../src/theme.css");
   const adminTheme = readWebmailSource("../../admin/src/theme.css");

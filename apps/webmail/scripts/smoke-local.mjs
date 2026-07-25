@@ -433,6 +433,26 @@ async function run() {
   assert(inboxMetrics.htmlText.includes('/api/image?url='), `远程邮件图片应自动改写为同源代理地址: ${inboxMetrics.htmlText}`);
   assert(!inboxMetrics.hasRemoteImageButton, '远程邮件图片应自动通过代理加载，不应再要求手动允许');
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
+  await evaluate(login, `document.querySelectorAll('.mail-row')[1]?.click()`);
+  await waitUntil(login, `document.querySelector('main h1')?.textContent?.includes('Security notice') && document.querySelectorAll('.mail-row')[1]?.classList.contains('selected') && document.querySelectorAll('.mail-row')[1]?.classList.contains('read')`);
+  const mailInteractionMetrics = JSON.parse(await evaluate(login, `JSON.stringify((() => {
+    const rows = [...document.querySelectorAll('.mail-row')];
+    const selected = rows.find((row) => row.classList.contains('selected'));
+    const subject = selected?.querySelector('.mail-subject');
+    const preview = selected?.querySelector('.mail-row-preview');
+    return {
+      selectedIndex: rows.indexOf(selected),
+      detailSubject: document.querySelector('main h1')?.textContent || '',
+      cursor: selected ? getComputedStyle(selected).cursor : '',
+      selectedBackground: selected ? getComputedStyle(selected).backgroundColor : '',
+      subjectColor: subject ? getComputedStyle(subject).color : '',
+      previewColor: preview ? getComputedStyle(preview).color : ''
+    };
+  })())`));
+  assert(mailInteractionMetrics.selectedIndex === 1 && mailInteractionMetrics.detailSubject.includes('Security notice'), `点击邮件后应切换选中项和详情: ${JSON.stringify(mailInteractionMetrics)}`);
+  assert(mailInteractionMetrics.cursor === 'pointer', `邮件行应保持明确的可交互指针: ${JSON.stringify(mailInteractionMetrics)}`);
+  assert(mailInteractionMetrics.selectedBackground !== 'rgba(0, 0, 0, 0)', `已读邮件选中态不应被基础样式覆盖: ${JSON.stringify(mailInteractionMetrics)}`);
+  assert(mailInteractionMetrics.subjectColor !== mailInteractionMetrics.previewColor, `已读邮件标题不应与摘要一起灰化: ${JSON.stringify(mailInteractionMetrics)}`);
   await click(login, '.webmail-locale-toggle');
   const localeMenu = JSON.parse(await evaluate(login, `JSON.stringify((() => {
     const menu = document.querySelector('.webmail-locale-menu');
@@ -440,7 +460,22 @@ async function run() {
     return { exists: !!menu, z: Number(getComputedStyle(menu).zIndex), top: rect?.top, bottom: rect?.bottom, innerHeight };
   })())`));
   assert(localeMenu.exists && localeMenu.z > 1000, `语言菜单应在最上层: ${JSON.stringify(localeMenu)}`);
-  results.push({ name: 'webmail-login-inbox', loginMetrics, inboxMetrics, localeMenu });
+
+  const desktopLayout = await openApp('/', { width: 1440, height: 960 });
+  await loginWithMockMailbox(desktopLayout);
+  const desktopReaderMetrics = JSON.parse(await evaluate(desktopLayout, `JSON.stringify((() => {
+    const card = document.querySelector('.mail-detail-card');
+    const header = document.querySelector('.mail-detail-header');
+    const topbar = document.querySelector('.mail-detail-topbar');
+    const cardRect = card?.getBoundingClientRect();
+    const headerRect = header?.getBoundingClientRect();
+    return {
+      topbarPosition: topbar ? getComputedStyle(topbar).position : '',
+      headerGap: cardRect && headerRect ? headerRect.top - cardRect.top : 999
+    };
+  })())`));
+  assert(desktopReaderMetrics.topbarPosition === 'absolute' && desktopReaderMetrics.headerGap <= 32, `桌面详情工具栏不应占据标题上方整行空白: ${JSON.stringify(desktopReaderMetrics)}`);
+  results.push({ name: 'webmail-login-inbox', loginMetrics, inboxMetrics, mailInteractionMetrics, localeMenu, desktopReaderMetrics });
 
   const empty = await openApp('/');
   await setInput(empty, 'input[type="email"]', 'empty@example.test');
