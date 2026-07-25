@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { isChunkLoadError } from '../src/lib/appRecovery.ts';
+import { activateWaitingServiceWorker, isChunkLoadError } from '../src/lib/appRecovery.ts';
 import { loadBoundedAddressIndex } from '../src/lib/addressIndex.ts';
 import { subscribeAuthenticationFailures } from '../src/lib/authFailure.ts';
 import { createApiClient } from '../src/lib/api.ts';
@@ -382,10 +382,53 @@ test('chunk load failures are recognized for recoverable update UI', () => {
   assert.equal(isChunkLoadError(new Error('ordinary validation failure')), false);
 });
 
+test('confirmed admin refresh activates a waiting worker before reloading once', () => {
+  let state = 'installed';
+  let stateChange: (() => void) | undefined;
+  let fallback: (() => void) | undefined;
+  let fallbackDelay = 0;
+  let reloads = 0;
+  const messages: unknown[] = [];
+  const waitingWorker = {
+    get state() { return state; },
+    addEventListener(type: string, listener: () => void) {
+      assert.equal(type, 'statechange');
+      stateChange = listener;
+    },
+    postMessage(message: unknown) {
+      messages.push(message);
+    },
+  };
+
+  const requested = activateWaitingServiceWorker(
+    waitingWorker,
+    () => { reloads += 1; },
+    (callback, delay) => {
+      fallback = callback;
+      fallbackDelay = delay;
+    },
+  );
+
+  assert.equal(requested, true);
+  assert.deepEqual(messages, [{ type: 'SKIP_WAITING' }]);
+  assert.equal(reloads, 0);
+  assert.equal(fallbackDelay, 4_000);
+  state = 'activated';
+  stateChange?.();
+  assert.equal(reloads, 1);
+  fallback?.();
+  assert.equal(reloads, 1);
+});
+
+test('admin refresh leaves normal reload handling to the caller without a waiting worker', () => {
+  assert.equal(activateWaitingServiceWorker(undefined, () => assert.fail('must not reload'), () => assert.fail('must not schedule')), false);
+});
+
 test('admin PWA migrates through a network-fresh registrar without force-activating old clients', () => {
   const viteSource = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
   const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const registrarSource = readFileSync(new URL('../public/pwa-register-v2.js', import.meta.url), 'utf8');
+  const errorBoundarySource = readFileSync(new URL('../src/components/AppErrorBoundary.tsx', import.meta.url), 'utf8');
   const headersSource = readFileSync(new URL('../public/_headers', import.meta.url), 'utf8');
   assert.match(viteSource, /registerType:\s*'prompt'/);
   assert.match(viteSource, /filename:\s*'sw-v2\.js'/);
@@ -396,6 +439,8 @@ test('admin PWA migrates through a network-fresh registrar without force-activat
   assert.match(htmlSource, /<script src="\/pwa-register-v2\.js" defer><\/script>/);
   assert.match(registrarSource, /serviceWorker[\s\S]*register\('\/sw-v2\.js',\s*\{\s*scope:\s*'\/'\s*\}\)/);
   assert.match(registrarSource, /registration\.update\(\)/);
+  assert.match(errorBoundarySource, /navigator\.serviceWorker[\s\S]*getRegistration\('\/'\)/);
+  assert.match(errorBoundarySource, /activateWaitingServiceWorker/);
   assert.match(headersSource, /\/pwa-register-v2\.js[\s\S]*Cache-Control: no-cache, no-store, must-revalidate/);
 });
 

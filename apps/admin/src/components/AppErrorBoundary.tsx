@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { isChunkLoadError } from '../lib/appRecovery';
+import { activateWaitingServiceWorker, isChunkLoadError } from '../lib/appRecovery';
 
 type BoundaryState = { error: Error | null; chunkFailure: boolean };
 
@@ -42,7 +42,20 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, Boundar
     this.setState({ error: normalizeError(event.payload || 'Application update failed to load'), chunkFailure: true });
   };
 
-  private reload = () => window.location.reload();
+  private reload = async () => {
+    try {
+      const registration = await navigator.serviceWorker?.getRegistration('/');
+      const activationRequested = activateWaitingServiceWorker(
+        registration?.waiting,
+        () => window.location.reload(),
+        (callback, delay) => { window.setTimeout(callback, delay); },
+      );
+      if (activationRequested) return;
+    } catch {
+      // A normal reload remains the fallback when service-worker APIs are unavailable.
+    }
+    window.location.reload();
+  };
 
   render() {
     if (!this.state.error) return this.props.children;
