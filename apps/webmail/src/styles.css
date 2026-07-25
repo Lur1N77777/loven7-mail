@@ -1104,9 +1104,18 @@ button:disabled {
 .code-row {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   margin-top: 10px;
   max-width: 100%;
+}
+
+.code-copy-item,
+.detail-code-copy {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
 }
 
 .code-copy-button {

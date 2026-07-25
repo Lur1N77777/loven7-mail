@@ -545,10 +545,10 @@ export default function App() {
     push(
       reason === 'expired' ? 'info' : 'success',
       reason === 'expired'
-        ? localeText('登录凭据已失效，已清理本机敏感数据，请重新登录。', 'Your session expired. Local sensitive data was cleared; please sign in again.', locale)
-        : localeText('已退出，并清除本机保存的敏感凭据和管理缓存。', 'Signed out and cleared saved sensitive credentials plus admin caches on this browser.', locale),
+        ? localeText('登录凭据已失效，已清理本机敏感数据，请重新登录。', 'Your session expired. Local sensitive data was cleared; please sign in again.', getRuntimeLocale())
+        : localeText('已退出，并清除本机保存的敏感凭据和管理缓存。', 'Signed out and cleared saved sensitive credentials plus admin caches on this browser.', getRuntimeLocale()),
     );
-  }, [apiBase, cancelPendingPageAnimation, locale, push, settleMobilePageAt]);
+  }, [apiBase, cancelPendingPageAnimation, push, settleMobilePageAt]);
   const applyAccountLogin = useCallback(async (profile: AccountUserProfile) => {
     authResettingRef.current = false;
     const activeProfile = profile.newUserToken
@@ -575,14 +575,14 @@ export default function App() {
         addressJwt: '',
         rememberedAt,
       }, rememberedAt);
-      push('success', localeText('已进入管理员后台。', 'Admin console opened.', locale));
+      push('success', localeText('已进入管理员后台。', 'Admin console opened.', getRuntimeLocale()));
       return;
     }
     setAdminPassword('');
     setUserAccessToken('');
     writeBoundAuth(apiBase, { adminPassword: '', sitePassword: '', userAccessToken: '', addressJwt: '' });
-    push('success', localeText('已进入个人邮箱后台。', 'Personal mailbox console opened.', locale));
-  }, [apiBase, locale, push]);
+    push('success', localeText('已进入个人邮箱后台。', 'Personal mailbox console opened.', getRuntimeLocale()));
+  }, [apiBase, push]);
   useEffect(() => subscribeAuthenticationFailures(() => {
     if (adminPreviewMode || authResettingRef.current) return;
     if (!accountBooting && !accountProfile && !accountUserToken && !adminPassword && !userAccessToken) return;
@@ -606,7 +606,7 @@ export default function App() {
           } else {
             const cachedProfile = readCachedUserProfile(apiBase, accountUserToken);
             if (cachedProfile) setAccountProfile(cachedProfile);
-            push('info', localeText('网络暂时不可用，已保留登录状态，可稍后重试。', 'The network is temporarily unavailable. Your session is preserved; retry shortly.', locale));
+            push('info', localeText('网络暂时不可用，已保留登录状态，可稍后重试。', 'The network is temporarily unavailable. Your session is preserved; retry shortly.', getRuntimeLocale()));
           }
         }
       })
@@ -616,7 +616,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [accountUserToken, apiBase, applyAccountLogin, locale, push, resetAuthenticationState]);
+  }, [accountUserToken, apiBase, applyAccountLogin, push, resetAuthenticationState]);
   const decodedAdminAccessProfile = useMemo(() => decodeAdminAccessProfile(userAccessToken), [userAccessToken]);
   const adminAccessProfile = decodedAdminAccessProfile || (accountProfile?.isAdmin && userAccessToken ? {
     userEmail: accountProfile.userEmail,
@@ -628,14 +628,15 @@ export default function App() {
   const effectiveUserAccessToken = adminAccessProfile ? userAccessToken : '';
   const effectiveAdminPassword = adminPassword;
   const effectiveAccountUserToken = accountUserToken || accountProfile?.userToken || '';
+  // Keep API client identity stable across locale toggles so mail workspaces do not remount/refetch.
   const client = useMemo(() => createApiClient(() => apiBase, () => ({
     adminPassword: effectiveAdminPassword,
     sitePassword,
     userAccessToken: effectiveUserAccessToken,
     accountUserToken: effectiveAccountUserToken,
     addressJwt: '',
-    lang: getBackendLang(locale),
-  })), [apiBase, effectiveAccountUserToken, effectiveAdminPassword, effectiveUserAccessToken, locale, sitePassword]);
+    lang: getBackendLang(getRuntimeLocale()),
+  })), [apiBase, effectiveAccountUserToken, effectiveAdminPassword, effectiveUserAccessToken, sitePassword]);
   const previewRequest = useMemo(() => createAdminPreviewRequest(), []);
   const request = useCallback(<T,>(path: string, options?: Parameters<typeof client.request>[1]) => (
     adminPreviewMode ? previewRequest<T>(path, options) : client.request<T>(path, options)
@@ -679,11 +680,14 @@ export default function App() {
       const res = await request<Statistics>('/admin/statistics', { forceRefresh, cacheTtlMs: 30_000 });
       if (seq === authResetSeqRef.current && connected) setStats({ ...emptyStats, ...res });
     } catch (error) {
-      if (seq === authResetSeqRef.current && connected) push('error', error instanceof Error ? error.message : localeText('统计加载失败', 'Failed to load stats', locale));
+      // Read locale at throw-time so language toggles do not recreate this callback or re-fetch stats.
+      if (seq === authResetSeqRef.current && connected) {
+        push('error', error instanceof Error ? error.message : localeText('统计加载失败', 'Failed to load stats', getRuntimeLocale()));
+      }
     } finally {
       if (seq === authResetSeqRef.current) setStatsLoading(false);
     }
-  }, [connected, locale, push, request]);
+  }, [connected, push, request]);
   const loadOpenSettings = useCallback(async (forceRefresh = false) => { try { const res = await request<OpenSettings>('/open_api/settings', { forceRefresh, cacheTtlMs: 120_000 }); setOpenSettings(res); } catch { /* open settings may require site auth */ } }, [request]);
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -884,7 +888,7 @@ export default function App() {
       const visualMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : activeMenu;
       return (
         <div key={`${menu}:${mailStateScope}`} className="h-full min-h-0">
-          <MemoMailWorkspace mode={menu} active={activeMenu === menu} visualActive={visualMenu === menu} request={request} notify={push} ask={ask} globalQuery={globalQuery} addressRequest={menu === 'inbox' ? mailboxAddressRequest : null} setActiveMenu={navigateMenu} setComposeSeed={setComposeSeed} mailStateScope={mailStateScope} theme={theme} />
+          <MemoMailWorkspace mode={menu} active={activeMenu === menu} visualActive={visualMenu === menu} request={request} notify={push} ask={ask} globalQuery={globalQuery} addressRequest={menu === 'inbox' ? mailboxAddressRequest : null} setActiveMenu={navigateMenu} setComposeSeed={setComposeSeed} mailStateScope={mailStateScope} theme={theme} locale={locale} />
         </div>
       );
     }

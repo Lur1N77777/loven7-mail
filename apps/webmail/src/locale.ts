@@ -32,7 +32,10 @@ export function applyRuntimeLocale(locale: AppLocale) {
   if (typeof document === 'undefined') return;
   document.documentElement.lang = runtimeLocale;
   document.documentElement.dataset.locale = runtimeLocale;
-  document.documentElement.dataset.fontMode = runtimeLocale === 'en-US' ? 'en' : 'zh';
+  // Avoid thrashing fontMode on every language toggle; it causes a visible full-UI reflow.
+  if (!document.documentElement.dataset.fontMode) {
+    document.documentElement.dataset.fontMode = runtimeLocale === 'en-US' ? 'en' : 'zh';
+  }
 }
 
 export function getRuntimeLocale(): AppLocale {

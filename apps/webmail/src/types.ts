@@ -77,6 +77,7 @@ export type ParsedMail = {
   createdAt: string;
   attachments?: ParsedAttachmentSummary[];
   verificationCode?: string;
+  verificationCodes?: string[];
   isUnread?: boolean;
 };
 

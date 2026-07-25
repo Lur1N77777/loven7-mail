@@ -5,11 +5,13 @@ import test from "node:test";
 import { buildSessionCacheKey, clearJwtFromHref, readJwtFromHref } from "../src/auth.ts";
 import { subscribeAuthenticationFailures } from "../src/authFailure.ts";
 import { ApiError, fetchSafeSettings } from "../src/api.ts";
-import { prepareMailboxCachePayload } from "../src/cache.ts";
+import { MAILBOX_CACHE_VERSION, prepareMailboxCachePayload } from "../src/cache.ts";
+import { copyText } from "../src/clipboard.ts";
 import { isChunkLoadError } from "../src/appRecovery.ts";
 import { reconcileServerMailRange } from "../src/mailSync.ts";
-import { buildMailFrameSrcDoc, isSafeNavigationUrl, sanitizeMailHtml } from "../src/mailParser.ts";
+import { buildMailFrameSrcDoc, isSafeNavigationUrl, parseRawMail, sanitizeMailHtml } from "../src/mailParser.ts";
 import { proxyMailImageSrcset, proxyMailImageUrl } from "../src/mailImageProxy.ts";
+import { extractVerificationCode, extractVerificationCodes } from "../../shared/verificationCode.ts";
 
 test("webmail sanitizer fails closed when DOMParser is unavailable", () => {
   const sanitized = sanitizeMailHtml(
@@ -48,6 +50,84 @@ test("webmail routes remote mail images through its same-origin proxy", () => {
   );
 });
 
+test("webmail verification extraction uses the same high-confidence filtering", () => {
+  const newsletter = "OpenAI Dev News: OpenAI Built Codex\n&#8199; &#8205; GPT-5.6-Terra\nOpenAI\n1455 3rd Street\nSan Francisco, CA 94158";
+  assert.deepEqual(extractVerificationCodes(newsletter), []);
+  assert.equal(extractVerificationCode(newsletter), undefined);
+  assert.equal(extractVerificationCode("Your login code is 956125"), "956125");
+  assert.equal(extractVerificationCode("登录 Notion\nrxthEC\nNever share this code with anyone."), "rxthEC");
+  assert.equal(
+    extractVerificationCode("登录 Notion", ['<pre style="text-align:center">rxthEC</pre><a href="https://notion.example.test/?password=rxthEC">login</a>']),
+    "rxthEC",
+  );
+  assert.deepEqual(extractVerificationCodes("ChatGPT\nYour verification code is 847291"), ["847291"]);
+  assert.deepEqual(extractVerificationCodes("Your ChatGPT code is 123456"), ["123456"]);
+  assert.deepEqual(extractVerificationCodes("antarctic clicking something code"), []);
+  assert.deepEqual(
+    extractVerificationCodes("Your verification code is 604181", ['<a href="https://example.test/click?token=54382401&code=ABCD1234">continue</a>']),
+    ["604181"],
+  );
+  assert.deepEqual(extractVerificationCodes("Developer newsletter", ["<code>ABCD1234</code>"]), []);
+  assert.deepEqual(extractVerificationCodes("Your code is GPT-6"), []);
+  assert.deepEqual(extractVerificationCodes("Security notice\nCA 994158"), []);
+});
+
+test("webmail mail parsing applies the shared high-confidence verification filter", async () => {
+  const parsed = await parseRawMail({
+    id: 1,
+    raw: "From: OpenAI <news@example.com>\r\nSubject: OpenAI Built Codex\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nOpenAI\r\n1455 3rd Street\r\nSan Francisco, CA 94158\r\nGPT-5.6-Terra",
+  });
+  assert.equal(parsed.verificationCode, undefined);
+});
+
+test("webmail clipboard falls back to a temporary textarea and copies only trimmed code text", async () => {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
+  let copiedCommand = "";
+  let appendedValue = "";
+  let removed = false;
+  const textarea = {
+    value: "",
+    style: {} as Record<string, string>,
+    setAttribute: () => undefined,
+    focus: () => undefined,
+    select: () => undefined,
+    setSelectionRange: () => undefined,
+    remove: () => { removed = true; },
+  };
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { clipboard: { writeText: async () => { throw new Error("blocked"); } } },
+  });
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      activeElement: null,
+      body: { appendChild: (node: typeof textarea) => { appendedValue = node.value; } },
+      createElement: () => textarea,
+      execCommand: (command: string) => { copiedCommand = command; return true; },
+    },
+  });
+  try {
+    await copyText("  604181  ");
+    assert.equal(appendedValue, "604181");
+    assert.equal(copiedCommand, "copy");
+    assert.equal(removed, true);
+  } finally {
+    if (navigatorDescriptor) Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    else delete (globalThis as { navigator?: unknown }).navigator;
+    if (documentDescriptor) Object.defineProperty(globalThis, "document", documentDescriptor);
+    else delete (globalThis as { document?: unknown }).document;
+  }
+});
+
+test("webmail exposes every high-confidence code as an individually copyable list and detail action", () => {
+  const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(source, /verificationCodes\.map\(\(code\)\s*=>/);
+  assert.match(source, /selectedVerificationCodes\.map\(\(code\)\s*=>/);
+  assert.match(source, /copyVerificationCode\(selectedMail, code\)/);
+});
+
 test("webmail keeps brand avatar frames full-size while centering icons at 85 percent", () => {
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(styles, /\.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
@@ -80,6 +160,7 @@ test("cache truncation keeps offset contiguous and enforces a byte budget", () =
     mails,
   }, 512_000);
   const bytes = new TextEncoder().encode(JSON.stringify(prepared)).byteLength;
+  assert.equal(prepared.version, MAILBOX_CACHE_VERSION);
   assert.ok(prepared.mails.length <= 300);
   assert.equal(prepared.nextOffset, prepared.mails.length);
   assert.ok(bytes <= 512_000, `cache payload uses ${bytes} bytes`);

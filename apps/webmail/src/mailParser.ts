@@ -1,13 +1,7 @@
 import PostalMime, { type Address, type Attachment, type Mailbox } from "postal-mime";
 import { mailImageAssetOrigin, proxyMailImageCss, proxyMailImageSrcset, proxyMailImageUrl } from "./mailImageProxy.ts";
 import type { ParsedAttachmentSummary, ParsedMail, RawMail } from "./types";
-
-const CODE_PATTERNS = [
-  /(?:verification code|security code|one[- ]?time code|login code|passcode|otp)(?:\s+is|\s*[:：-])\s*([A-Z0-9]{4,8})/i,
-  /(?:验证码|校验码|动态码|安全码|登录码)(?:为|是|[:：\s-])*([A-Z0-9]{4,8})/i,
-  /\b([0-9]{6})\b/,
-  /\b([A-Z0-9]{4,8})\b/,
-];
+import { extractVerificationCode, extractVerificationCodes } from "../../shared/verificationCode.ts";
 
 function normalizeAddress(address?: Address): Mailbox | undefined {
   if (!address) return undefined;
@@ -19,12 +13,16 @@ function stripHtml(html = "") {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|div|tr|li|h[1-6]|pre|table|section|article|header|footer)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -40,14 +38,6 @@ function escapeHtmlText(value: string) {
 function truncate(text = "", length = 180) {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > length ? `${clean.slice(0, length)}…` : clean;
-}
-
-function extractVerificationCode(text: string) {
-  for (const pattern of CODE_PATTERNS) {
-    const match = text.match(pattern);
-    if (match?.[1]) return match[1].trim();
-  }
-  return undefined;
 }
 
 function fallbackSubject(raw: string, explicit?: string) {
@@ -277,6 +267,7 @@ export async function parseRawMail(rawMail: RawMail): Promise<ParsedMail> {
         }))
       : undefined;
 
+    const verificationCodes = extractVerificationCodes(`${parsed?.subject || ""}\n${text}`, [html || ""]);
     return {
       id: rawMail.id,
       messageId: parsed?.messageId || rawMail.message_id,
@@ -293,10 +284,12 @@ export async function parseRawMail(rawMail: RawMail): Promise<ParsedMail> {
       date: parsed?.date || fallbackDate(raw, rawMail.created_at),
       createdAt: rawMail.created_at || parsed?.date || new Date().toISOString(),
       attachments,
-      verificationCode: extractVerificationCode(`${parsed?.subject || ""}\n${text}\n${stripHtml(html || "")}`),
+      verificationCode: verificationCodes[0],
+      verificationCodes,
     };
   } catch {
     const text = raw || rawMail.subject || "";
+    const verificationCodes = extractVerificationCodes(text);
     return {
       id: rawMail.id,
       subject: fallbackSubject(raw, rawMail.subject),
@@ -305,7 +298,8 @@ export async function parseRawMail(rawMail: RawMail): Promise<ParsedMail> {
       raw,
       date: fallbackDate(raw, rawMail.created_at),
       createdAt: rawMail.created_at || new Date().toISOString(),
-      verificationCode: extractVerificationCode(text),
+      verificationCode: verificationCodes[0] || extractVerificationCode(text),
+      verificationCodes,
     };
   }
 }

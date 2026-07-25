@@ -16,6 +16,7 @@ import { sanitizeMailHtmlWithoutDom } from '../src/lib/mailSanitizerFallback.ts'
 import { preserveRowsBelowAuthoritativeHead } from '../src/lib/mailSync.ts';
 import { createOutboundIdempotencyTracker } from '../src/lib/outboundIdempotency.ts';
 import { selectExpiredShareTokens, shareLifecycleStatus } from '../src/lib/shareLifecycle.ts';
+import { extractVerificationCodes } from '../../shared/verificationCode.ts';
 
 test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
   const sanitized = sanitizeMailHtmlWithoutDom(
@@ -39,6 +40,128 @@ test('admin routes remote mail images through its same-origin proxy', () => {
     ),
     'data:image/png;base64,AA== 1x, https://admin.example.test/api/image?url=https%3A%2F%2Fassets.example.com%2Fnotion-logo.png 2x',
   );
+});
+
+test('verification extraction keeps the exact Notion code and removes a spaced numeric suffix', () => {
+  assert.deepEqual(
+    extractVerificationCodes('Your Notion signup code\n683744 96 Sign up for Notion\nYour code is 683744'),
+    ['683744'],
+  );
+  assert.deepEqual(
+    extractVerificationCodes('Your Notion signup code\n192322 96 Sign up for Notion\nYou can sign up by entering the code on the sign up page in Notion.\n192322'),
+    ['192322'],
+  );
+});
+
+test('verification extraction ignores Codex footer address and postal numbers', () => {
+  assert.deepEqual(
+    extractVerificationCodes('用 Codex 高效完成工作\nOpenAI\n1455 3rd Street\nSan Francisco, CA 94158'),
+    [],
+  );
+});
+
+test('verification extraction ignores HTML entity numbers and product version names', () => {
+  assert.deepEqual(
+    extractVerificationCodes('OpenAI Dev News: OpenAI Built Codex\nThat idea has a deadline. &#8199; &#8205; GPT-5.6-Terra'),
+    [],
+  );
+});
+
+test('verification extraction keeps real codes while rejecting unrelated footer metadata', () => {
+  assert.deepEqual(
+    extractVerificationCodes('Your verification code is 472913.\nOpenAI\n1455 3rd Street\nSan Francisco, CA 94158\nGPT-5.6-Terra\n&#8199;'),
+    ['472913'],
+  );
+});
+
+test('verification extraction supports formatted numeric and alphanumeric codes', () => {
+  assert.deepEqual(extractVerificationCodes('验证码：123 456\nYour security code is AB-7281'), ['123456', 'AB7281']);
+});
+
+test('verification extraction keeps pure alphabetic Notion codes', () => {
+  const notionHtml = [
+    '<div class="notion-email"><h1>登录 Notion</h1>',
+    '<pre style="text-align:center;font-size:22px">rxthEC</pre>',
+    '<a href="https://notion.example.test/loginwithemail?password=rxthEC&isSignup=false">使用魔法链接登录</a>',
+    '<p>Never share this code with anyone.</p></div>',
+  ].join('');
+  assert.deepEqual(extractVerificationCodes('登录 Notion', [notionHtml]), ['rxthEC']);
+  assert.deepEqual(
+    extractVerificationCodes('登录 Notion\nrxthEC\nNever share this code with anyone. If you didn’t request this code, you can ignore this email.'),
+    ['rxthEC'],
+  );
+});
+
+test('verification extraction rejects brand words and keeps the real ChatGPT OTP', () => {
+  assert.deepEqual(
+    extractVerificationCodes('ChatGPT verification email\nYour code is 482913\nChatGPT\nantarctic clicking'),
+    ['482913'],
+  );
+  assert.deepEqual(extractVerificationCodes('Your ChatGPT code is 123456'), ['123456']);
+  assert.deepEqual(extractVerificationCodes('antarctic clicking something code'), []);
+});
+
+test('verification extraction matches the real ChatGPT and login-alert mailbox samples', () => {
+  assert.deepEqual(
+    extractVerificationCodes('你的临时 ChatGPT 登录代码\n输入此临时验证码以继续： 956125\n未请求验证码？你可以忽略此邮件。'),
+    ['956125'],
+  );
+  assert.deepEqual(
+    extractVerificationCodes('你的帐号已在新设备上登录\n审核新设备的最近登录信息\nIP 和大致位置 103.151.172.32\n时间 2026/07/24 GMT 12:59:59'),
+    [],
+  );
+});
+
+test('verification extraction rejects the current production mailbox false-positive samples', () => {
+  assert.deepEqual(
+    extractVerificationCodes('在 Notion 上加入你的团队\n你的团队正在使用 Notion 进行协作。Loven77777 邀请你加入工作空间。96'),
+    [],
+  );
+  assert.deepEqual(
+    extractVerificationCodes('Finish signing up for Notion\nIt only takes 1 minute.\nComplete'),
+    [],
+  );
+  assert.deepEqual(
+    extractVerificationCodes('OpenAI Dev News: OpenAI Build Week, GPT-5.6, ChatGPT Work\nThat idea in your backlog has a deadline.\nAsterism projects coverage'),
+    [],
+  );
+});
+
+test('verification extraction never promotes tracking query parameters', () => {
+  const trackingHtml = [
+    '<p>Your verification code is 604181</p>',
+    '<a href="https://example.test/unsubscribe?token=54382401&code=ABCD1234">Unsubscribe</a>',
+  ].join('');
+  assert.deepEqual(extractVerificationCodes('Your verification code is 604181', [trackingHtml]), ['604181']);
+  assert.deepEqual(
+    extractVerificationCodes('OpenAI developer newsletter', ['<a href="https://example.test/click?token=54382401&code=ABCD1234">Read more</a>']),
+    [],
+  );
+  assert.deepEqual(
+    extractVerificationCodes('OpenAI developer newsletter', ['<p>Example identifier</p><code>ABCD1234</code>']),
+    [],
+  );
+});
+
+test('verification extraction rejects product versions and state/postal pairs', () => {
+  assert.deepEqual(extractVerificationCodes('Your code is GPT-6'), []);
+  assert.deepEqual(extractVerificationCodes('Security notice\nCA 994158'), []);
+});
+
+test('verification extraction does not capture prose from the line after a code-like subject', () => {
+  assert.deepEqual(extractVerificationCodes('Re: Your verification code\nReceived, thanks.'), []);
+  assert.deepEqual(extractVerificationCodes('Re: Your verification code\nReceived 14553, thanks.'), []);
+  assert.deepEqual(extractVerificationCodes('Your verification code is Received'), []);
+});
+
+test('admin locale changes stay outside account and mail request dependencies', () => {
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(appSource, /\[accountUserToken, apiBase, applyAccountLogin, locale, push, resetAuthenticationState\]/);
+  assert.doesNotMatch(appSource, /\}, \[apiBase, locale, push\]\);/);
+  assert.doesNotMatch(appSource, /\}, \[apiBase, cancelPendingPageAnimation, locale, push, settleMobilePageAt\]\);/);
+  assert.match(appSource, /lang:\s*getBackendLang\(getRuntimeLocale\(\)\)/);
+  assert.doesNotMatch(workspaceSource, /\[address, autoSeconds,[^\]]*, t\]\);/s);
 });
 
 test('admin keeps brand avatar frames full-size while centering icons at 85 percent', () => {

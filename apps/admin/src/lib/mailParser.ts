@@ -3,6 +3,11 @@ import { PREVIEW_LEN } from './constants';
 import { humanBytes, safeJsonParse } from './format';
 import { mailImageAssetOrigin, proxyMailImageCss, proxyMailImageSrcset, proxyMailImageUrl } from './mailImageProxy';
 import { sanitizeMailHtmlWithoutDom } from './mailSanitizerFallback';
+import {
+  extractVerificationCode as extractSharedVerificationCode,
+  extractVerificationCodes as extractSharedVerificationCodes,
+  sanitizeVerificationCode as sanitizeSharedVerificationCode,
+} from '../../../shared/verificationCode';
 
 const DANGEROUS_PROTOCOL = /^\s*(?:javascript|vbscript|data|file|blob|jar):/i;
 const SCRIPTABLE_PROTOCOL = /^\s*(?:javascript|vbscript|file|jar):/i;
@@ -33,13 +38,21 @@ function stripHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr|li|h[1-6]|pre|table|section|article|header|footer)>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
-    .replace(/\s+/g, ' ')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function collectVerificationCodes(subject: string, text: string, html = ''): string[] {
+  return extractVerificationCodes(`${subject}\n${text}`, [html]);
 }
 
 export function sanitizeMailHtml(html: string, options: { allowExternalImages?: boolean } = {}): string {
@@ -365,173 +378,16 @@ function decodeBody(body: string, transferEncoding: string, contentType: string)
   return body;
 }
 
-function normalizeCodeText(value: string): string {
-  const digitRanges = [
-    [0x0660, 0x0669], [0x06f0, 0x06f9], [0x0966, 0x096f], [0x09e6, 0x09ef], [0x0a66, 0x0a6f], [0x0ae6, 0x0aef],
-    [0x0b66, 0x0b6f], [0x0be6, 0x0bef], [0x0c66, 0x0c6f], [0x0ce6, 0x0cef], [0x0d66, 0x0d6f], [0x0e50, 0x0e59],
-    [0x0ed0, 0x0ed9], [0x0f20, 0x0f29], [0x1040, 0x1049], [0x17e0, 0x17e9], [0x1810, 0x1819], [0xff10, 0xff19],
-  ];
-  return value
-    .normalize('NFKC')
-    .replace(/\p{Nd}/gu, (char) => {
-      const point = char.codePointAt(0) || 0;
-      const range = digitRanges.find(([start, end]) => point >= start && point <= end);
-      return range ? String(point - range[0]) : char;
-    });
+export function sanitizeVerificationCode(value: unknown, options?: { allowAlphaOnly?: boolean }): string | undefined {
+  return sanitizeSharedVerificationCode(value, options);
 }
 
-const codeContextSource = [
-  '验证码', '校验码', '动态码', '安全码', '登录码', '认证码', '一次性密码',
-  'code', 'otp', 'pin', 'passcode', 'one\\s*time', 'two\\s*factor', '2fa', 'mfa', 'verify', 'verification', 'security', 'auth', 'login', 'confirm', 'token',
-  'c[oó]digo', 'codice', 'c[oó]digo\\s+de\\s+verifica', 'c[oó]digo\\s+de\\s+seguran', 'c[oó]digo\\s+de\\s+acesso',
-  'verifizierung', 'best[aä]tigung', 'sicherheitscode', 'anmeldecode',
-  'cod\\s+de\\s+verificare', 'kod', 'kode', 'koodi', 'kodėl', 'parol', 'hasło', 'haslo',
-  'код', 'парол', 'підтвердж', 'однораз', 'верификац', 'провероч',
-  'رمز', 'كود', 'تحقق', 'الأمان', 'تأكيد',
-  'קוד', 'אימות', 'אבטחה',
-  'コード', '認証', '確認', 'ワンタイム', 'セキュリティ', '確認\\s*コード', '認証\\s*コード', '認証\\s*番号', '確認\\s*番号', 'セキュリティ\\s*コード', 'ワンタイム\\s*パスワード', 'ログイン\\s*コード', '本人\\s*確認',
-  '코드', '인증', '확인', '보안',
-  'รหัส', 'ยืนยัน', 'ความปลอดภัย',
-  'mã', 'xac\\s*minh', 'xác\\s*minh', 'bao\\s*mat', 'bảo\\s*mật',
-  'verificatie', 'bevestig', 'veiligheid', 'einmal', 'zugangscode',
-  'verifica', 'sicurezza', 'acceso', 'seguridad', 'contraseña', 'senha',
-  'potvr', 'overen', 'overovací', 'ověř', 'jelszó', 'megerős', 'biztons',
-  'doğrulama', 'güvenlik', 'şifre', 'onay',
-  'कोड', 'सत्यापन', 'सुरक्षा',
-  'কোড', 'যাচাই',
-].join('|');
-const codeContextPattern = new RegExp(codeContextSource, 'iu');
-
-const negativeContextPattern = /(invoice|receipt|order|tracking|shipment|phone|mobile|tel|amount|price|total|date|time|zip|postal|address|account|iban|card|账单|订单|快递|物流|电话|手机|金额|价格|合计|日期|时间|邮编|地址|账户|银行卡)/iu;
-const codeSeparatorSource = ' \\t._\\-\\u2010-\\u2015\\u2212';
-const candidateTokenPattern = new RegExp(`[A-Za-z0-9](?:[A-Za-z0-9]|[${codeSeparatorSource}](?=[A-Za-z0-9])){3,17}`, 'g');
-const directContextCandidatePattern = new RegExp(`(?:${codeContextSource})[\\s\\S]{0,48}?([A-Za-z0-9](?:[A-Za-z0-9]|[${codeSeparatorSource}](?=[A-Za-z0-9])){3,17})`, 'giu');
-const directNumericContextCandidatePattern = new RegExp(`(?:${codeContextSource})[\\s\\S]{0,72}?([0-9](?:[0-9]|[${codeSeparatorSource}](?=[0-9])){3,13})`, 'giu');
-
-function isAsciiBoundary(value: string, index: number): boolean {
-  const char = value[index] || '';
-  return !char || !/[A-Za-z0-9]/.test(char);
+export function extractVerificationCodes(text = '', extraSources: string[] = []): string[] {
+  return extractSharedVerificationCodes(text, extraSources);
 }
 
-function normalizeCandidate(value: string): string {
-  const parts = value.trim().split(new RegExp(`[${codeSeparatorSource}]+`, 'u')).filter(Boolean);
-  if (parts.length > 1 && /^(?:is|are|be|ist|est|es|e|to|为|是)$/iu.test(parts[0])) parts.shift();
-  while (parts.length > 1 && isTrailingNaturalWord(parts[parts.length - 1])) parts.pop();
-  if (parts.length > 1 && /^\d{4,8}$/.test(parts[0]) && parts.slice(1).every((part) => /^[A-Za-z]{2,}$/.test(part))) return parts[0];
-  return parts.join('').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-}
-
-function isTrailingNaturalWord(value: string): boolean {
-  const word = value.normalize('NFKC').replace(/[^A-Za-z]/g, '').toLowerCase();
-  if (!word) return false;
-  if (/^(didn|didnt|did|doesn|doesnt|don|dont|enter|continue|request|requested|ignore|expires?|valid|temporary|verification|verify|code|security|login|your|this|the|team|best|thanks|thank|hello|hi)$/.test(word)) return true;
-  return word.length >= 5 && /^(?:enter|conti|verif|secur|tempo|reque|ignor|thank|expir|valid)/.test(word);
-}
-
-function isLikelyCode(value: string): boolean {
-  const hasDigit = /\d/.test(value);
-  const hasLetter = /[A-Z]/.test(value);
-  if (!hasDigit) return false;
-  if (/^(\d)\1+$/.test(value) || /^([A-Z0-9])\1+$/.test(value)) return false;
-  if (/^20\d{2}$/.test(value)) return false;
-  if (/^(19|20)\d{6}$/.test(value)) return false;
-  if (/^\d{9,}$/.test(value)) return false;
-  return /^\d{4,8}$/.test(value) || (hasLetter && /^[A-Z0-9]{5,10}$/.test(value));
-}
-
-export function sanitizeVerificationCode(value: unknown): string | undefined {
-  const compact = normalizeCodeText(String(value || '')).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-  if (!compact) return undefined;
-  const naturalSuffix = compact.match(/^(\d{4,8})([A-Z]{2,12})$/);
-  if (naturalSuffix && isTrailingNaturalWord(naturalSuffix[2])) return naturalSuffix[1];
-  return isLikelyCode(compact) ? compact : undefined;
-}
-
-function scoreCandidate(text: string, raw: string, start: number, code: string): number {
-  const before = text.slice(Math.max(0, start - 180), start);
-  const after = text.slice(start, Math.min(text.length, start + 180));
-  const windowText = `${before} ${after}`;
-  const nearText = text.slice(Math.max(0, start - 48), Math.min(text.length, start + raw.length + 48));
-  const positive = codeContextPattern.test(windowText);
-  const closePositive = codeContextPattern.test(nearText);
-  const negative = negativeContextPattern.test(windowText);
-  const lineStart = text.lastIndexOf('\n', start) + 1;
-  const nextLineBreak = text.indexOf('\n', start);
-  const lineEnd = nextLineBreak === -1 ? text.length : nextLineBreak;
-  const line = text.slice(lineStart, lineEnd).trim();
-  const compactLine = normalizeCandidate(line);
-  const digitOnly = /^\d+$/.test(code);
-  let score = 0;
-  if (positive) score += 4.5;
-  if (closePositive) score += 2.5;
-  if (/[:：#]\s*$/.test(before.slice(-8)) || /^\s*[:：#]/.test(after.slice(raw.length, raw.length + 8))) score += 1.3;
-  if (line.length <= 42 && compactLine.includes(code)) score += compactLine === code ? 3.2 : 1.4;
-  if (start < 220) score += 1.1;
-  if (digitOnly && code.length === 6) score += 1.8;
-  else if (digitOnly && (code.length === 5 || code.length === 7)) score += 1.25;
-  else if (digitOnly && code.length === 4) score += positive ? .75 : -1.2;
-  else score += 1.5;
-  if (negative && !positive) score -= 4.8;
-  if (/[¥$€£]\s*$/.test(before.slice(-4)) || /\d{1,2}[:：]\d{2}/.test(windowText) || /\b(?:19|20)\d{2}[-/.]\d{1,2}/.test(windowText)) score -= 2.4;
-  return score;
-}
-
-export function extractVerificationCodes(text = ''): string[] {
-  const normalized = normalizeCodeText(text).replace(/\r/g, '\n');
-  const candidates = new Map<string, { code: string; score: number; firstIndex: number; count: number }>();
-  const addCandidate = (raw: string, index: number, bonus = 0, requireBoundary = true) => {
-    if (requireBoundary && (!isAsciiBoundary(normalized, index - 1) || !isAsciiBoundary(normalized, index + raw.length))) return;
-    const code = sanitizeVerificationCode(normalizeCandidate(raw));
-    if (!code) return;
-    const score = scoreCandidate(normalized, raw, index, code) + bonus;
-    const existing = candidates.get(code);
-    if (existing) {
-      existing.count += 1;
-      existing.score = Math.max(existing.score, score) + Math.min(existing.count, 3) * .45;
-      existing.firstIndex = Math.min(existing.firstIndex, index);
-    } else {
-      candidates.set(code, { code, score, firstIndex: index, count: 1 });
-    }
-  };
-  for (const match of normalized.matchAll(directNumericContextCandidatePattern)) {
-    const raw = match[1];
-    if (!raw) continue;
-    const index = (match.index || 0) + match[0].lastIndexOf(raw);
-    addCandidate(raw, index, 4.8, false);
-  }
-  for (const match of normalized.matchAll(directContextCandidatePattern)) {
-    const raw = match[1];
-    if (!raw) continue;
-    const index = (match.index || 0) + match[0].lastIndexOf(raw);
-    addCandidate(raw, index, 3.2, false);
-  }
-  for (const match of normalized.matchAll(candidateTokenPattern)) {
-    const raw = match[0];
-    const index = match.index || 0;
-    addCandidate(raw, index);
-  }
-  for (const item of [...candidates.values()]) {
-    if (!/^\d+$/.test(item.code)) continue;
-    const embeddedInAlphaNumeric = [...candidates.values()].some((other) => (
-      other.code !== item.code
-      && /[A-Z]/.test(other.code)
-      && other.code.includes(item.code)
-      && Math.abs(other.firstIndex - item.firstIndex) <= 4
-    ));
-    if (embeddedInAlphaNumeric) candidates.delete(item.code);
-  }
-  const ranked = [...candidates.values()].sort((a, b) => b.score - a.score || a.firstIndex - b.firstIndex);
-  if (!ranked.length) return [];
-  const strong = ranked.filter((item) => item.score >= 5.4);
-  if (strong.length) return strong.slice(0, 5).map((item) => item.code);
-  const hasCodeContext = codeContextPattern.test(normalized);
-  return (hasCodeContext ? ranked.filter((item) => item.score >= 3.2) : ranked.filter((item) => item.score >= 4.2))
-    .slice(0, 6)
-    .map((item) => item.code);
-}
-
-export function extractVerificationCode(text = ''): string | undefined {
-  return extractVerificationCodes(text)[0];
+export function extractVerificationCode(text = '', extraSources: string[] = []): string | undefined {
+  return extractSharedVerificationCode(text, extraSources);
 }
 
 function simpleParse(raw = '') {
@@ -554,11 +410,13 @@ export function parseRawMailListItem(item: RawMailRecord): ParsedMail {
   const headers = entity.headers;
   const fromValue = parseAddress(decodeMimeHeader(headers.from || String(item.source || '')));
   const subject = decodeMimeHeader(headers.subject || '') || 'No Subject';
-  const text = (entity.text || stripHtml(entity.html || '') || (looksLikeMimeSource(raw) ? '' : raw))
-    .replace(/\s+/g, ' ')
+  const html = entity.html || '';
+  const text = (entity.text || stripHtml(html) || (looksLikeMimeSource(raw) ? '' : raw))
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/\r\n?/g, '\n')
     .trim();
-  const preview = (text || subject).slice(0, PREVIEW_LEN);
-  const verificationCodes = extractVerificationCodes(`${subject} ${text}`);
+  const preview = (text || subject).replace(/\s+/g, ' ').trim().slice(0, PREVIEW_LEN);
+  const verificationCodes = collectVerificationCodes(subject, text, html);
   return {
     ...item,
     sender: fromValue.full || String(item.source || 'Unknown'),
@@ -566,7 +424,7 @@ export function parseRawMailListItem(item: RawMailRecord): ParsedMail {
     senderAddress: fromValue.address || String(item.source || ''),
     to: decodeMimeHeader(headers.to || '') || String(item.address || ''),
     subject,
-    message: entity.html || '',
+    message: html,
     text,
     preview,
     attachments: [],
@@ -635,7 +493,7 @@ export async function parseRawMail(item: RawMailRecord): Promise<ParsedMail> {
   }
   const subject = postal?.subject || fallback?.subject || 'No Subject';
   const preview = (text || stripHtml(safeMessage) || subject).replace(/\s+/g, ' ').trim().slice(0, PREVIEW_LEN);
-  const verificationCodes = extractVerificationCodes(`${subject} ${text || stripHtml(safeMessage)}`);
+  const verificationCodes = collectVerificationCodes(subject, text || stripHtml(safeMessage), inlinedHtml || safeMessage);
   const verificationCode = verificationCodes[0];
   return {
     ...item,
@@ -659,7 +517,7 @@ export function parseSendbox(item: SendboxRecord): ParsedSendbox {
   const subject = rawBody.subject || 'No Subject';
   const content = rawBody.content || item.raw || '';
   const text = rawBody.is_html ? stripHtml(content) : content;
-  const verificationCodes = extractVerificationCodes(`${subject} ${text}`);
+  const verificationCodes = collectVerificationCodes(subject, String(text || ''), String(content || ''));
   const verificationCode = verificationCodes[0];
   return {
     ...item,

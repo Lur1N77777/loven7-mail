@@ -2,12 +2,14 @@ import type { ParsedMail } from "./types";
 
 const DB_NAME = "cloudmail_webmail_cache_v1";
 const STORE_NAME = "mailboxes";
+export const MAILBOX_CACHE_VERSION = 2;
 const MAX_CACHED_MAILS = 300;
 export const MAX_MAILBOX_CACHE_BYTES = 4 * 1024 * 1024;
 const FALLBACK_MAILBOX_CACHE_BYTES = 512 * 1024;
 const MAX_FULL_MAIL_BYTES = 512 * 1024;
 
 export type MailboxCachePayload = {
+  version?: number;
   cacheKey: string;
   address: string;
   updatedAt: string;
@@ -36,6 +38,7 @@ export function prepareMailboxCachePayload(
   const budget = Math.max(16 * 1024, Number(maxBytes) || MAX_MAILBOX_CACHE_BYTES);
   const base: MailboxCachePayload = {
     ...payload,
+    version: MAILBOX_CACHE_VERSION,
     updatedAt: payload.updatedAt || new Date().toISOString(),
     nextOffset: 0,
     mails: [],
@@ -84,7 +87,7 @@ async function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStor
 export async function readMailboxCache(cacheKey: string): Promise<MailboxCachePayload | null> {
   try {
     const cached = (await withStore("readonly", (store) => store.get(cacheKey))) || null;
-    if (!cached || cached.cacheKey !== cacheKey || !Array.isArray(cached.mails)) return null;
+    if (!cached || cached.version !== MAILBOX_CACHE_VERSION || cached.cacheKey !== cacheKey || !Array.isArray(cached.mails)) return null;
     return {
       ...cached,
       nextOffset: Math.min(cached.mails.length, Math.max(0, Number(cached.nextOffset) || cached.mails.length)),

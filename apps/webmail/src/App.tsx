@@ -4,11 +4,13 @@ import { changeAddressPassword, createSession, deleteMail, fetchMailPage, fetchM
 import { subscribeAuthenticationFailures } from "./authFailure";
 import { buildSessionCacheKey, clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
 import { clearMailboxCache, readMailboxCache, writeMailboxCache } from "./cache";
+import { copyText } from "./clipboard";
 import { buildMailFrameSrcDoc, getMailBodyText, mergeMails, parseMailBatch } from "./mailParser";
 import { reconcileServerMailRange } from "./mailSync";
 import { BrandAvatar } from "./brandIdentity";
 import { applyRuntimeLocale, readInitialLocale, writeLocale, type AppLocale } from "./locale";
 import type { MailPage, ParsedMail, RemoteMailState, SafeSettings, ShareInfo, SharedMailbox, WebmailSession } from "./types";
+import { sanitizeVerificationCode } from "../../shared/verificationCode.ts";
 import "./styles.css";
 
 const PAGE_SIZE = 50;
@@ -192,8 +194,24 @@ function getMailboxLabel(mailbox: SharedMailbox, locale: AppLocale = "zh-CN") {
   return mailbox.address || `${locale === "en-US" ? "Mailbox" : "邮箱"} #${mailbox.id}`;
 }
 
-async function copyText(value: string) {
-  await navigator.clipboard.writeText(value);
+function getVerificationCodes(mail: ParsedMail): string[] {
+  const values = [...(mail.verificationCodes || []), mail.verificationCode];
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const value of values) {
+    const code = sanitizeVerificationCode(value, { allowAlphaOnly: true });
+    if (!code) continue;
+    const key = code.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    codes.push(code);
+    if (codes.length >= 3) break;
+  }
+  return codes;
+}
+
+function verificationCopyKey(mailId: number, code: string): string {
+  return `${mailId}:${code.toUpperCase()}`;
 }
 
 function BrandLogo({ variant = "regular" }: { variant?: "hero" | "regular" | "compact" }) {
@@ -589,11 +607,11 @@ type MailListRowProps = {
   noContent: string;
   verificationCodeLabel: string;
   copiedLabel: string;
-  copied: boolean;
+  copiedCodeKey: string | null;
   deleting: boolean;
   exiting: boolean;
   onSelect: (mail: ParsedMail) => void;
-  onCopyVerificationCode: (mail: ParsedMail) => void;
+  onCopyVerificationCode: (mail: ParsedMail, code: string) => void;
 };
 
 const MailListRow = React.memo(function MailListRow({
@@ -603,7 +621,7 @@ const MailListRow = React.memo(function MailListRow({
   noContent,
   verificationCodeLabel,
   copiedLabel,
-  copied,
+  copiedCodeKey,
   deleting,
   exiting,
   onSelect,
@@ -613,6 +631,7 @@ const MailListRow = React.memo(function MailListRow({
   const senderName = mail.from?.name || sender;
   const senderAddress = mail.from?.address || sender;
   const inert = deleting || exiting;
+  const verificationCodes = getVerificationCodes(mail);
   const select = () => {
     if (!inert) onSelect(mail);
   };
@@ -641,21 +660,28 @@ const MailListRow = React.memo(function MailListRow({
           </span>
           <span className="mail-row-from">{sender}</span>
           <span className="mail-row-preview">{mail.preview || noContent}</span>
-          {mail.verificationCode ? (
+          {verificationCodes.length ? (
             <span className="code-row">
-              <button
-                type="button"
-                className="code-pill code-copy-button"
-                disabled={inert}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (inert) return;
-                  onCopyVerificationCode(mail);
-                }}
-              >
-                {verificationCodeLabel} {mail.verificationCode}
-              </button>
-              <em className={`code-copy-hint ${copied ? "visible" : ""}`} aria-live="polite">{copiedLabel}</em>
+              {verificationCodes.map((code) => {
+                const copied = copiedCodeKey === verificationCopyKey(mail.id, code);
+                return (
+                  <span className="code-copy-item" key={code}>
+                    <button
+                      type="button"
+                      className="code-pill code-copy-button"
+                      disabled={inert}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (inert) return;
+                        onCopyVerificationCode(mail, code);
+                      }}
+                    >
+                      {verificationCodeLabel} {code}
+                    </button>
+                    <em className={`code-copy-hint ${copied ? "visible" : ""}`} aria-live="polite">{copiedLabel}</em>
+                  </span>
+                );
+              })}
             </span>
           ) : null}
         </div>
@@ -687,7 +713,7 @@ export default function App() {
   const [refreshFeedback, setRefreshFeedback] = useState<string | null>(null);
   const [addressCopied, setAddressCopied] = useState(false);
   const [mailboxMenuOpen, setMailboxMenuOpen] = useState(false);
-  const [copiedCodeMailId, setCopiedCodeMailId] = useState<number | null>(null);
+  const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
   const [deletingMailId, setDeletingMailId] = useState<number | null>(null);
   const [exitingMailIds, setExitingMailIds] = useState<Set<string>>(new Set());
   const [mailViewMode, setMailViewMode] = useState<MailViewMode>("html");
@@ -1570,20 +1596,23 @@ export default function App() {
 
 
 
-  const copyVerificationCode = useCallback(async (mail: ParsedMail) => {
-    if (!mail.verificationCode) return;
+  const copyVerificationCode = useCallback(async (mail: ParsedMail, code: string) => {
+    const sanitized = sanitizeVerificationCode(code, { allowAlphaOnly: true });
+    if (!sanitized) return;
     try {
-      await copyText(mail.verificationCode);
-      setCopiedCodeMailId(mail.id);
+      await copyText(sanitized);
+      const key = verificationCopyKey(mail.id, sanitized);
+      setCopiedCodeKey(key);
       showToast(copy.codeCopied);
       if (codeCopyTimerRef.current) window.clearTimeout(codeCopyTimerRef.current);
-      codeCopyTimerRef.current = window.setTimeout(() => setCopiedCodeMailId(null), 1500);
+      codeCopyTimerRef.current = window.setTimeout(() => setCopiedCodeKey((current) => (current === key ? null : current)), 1500);
     } catch {
       showToast(copy.copyFailed);
     }
   }, [copy.codeCopied, copy.copyFailed, showToast]);
 
   const bodyText = useMemo(() => (selectedMail ? getMailBodyText(selectedMail) : ""), [selectedMail]);
+  const selectedVerificationCodes = useMemo(() => (selectedMail ? getVerificationCodes(selectedMail) : []), [selectedMail]);
   const copyBodyText = useCallback(async () => {
     try {
       await copyText(bodyText);
@@ -1809,7 +1838,7 @@ export default function App() {
               noContent={copy.noContent}
               verificationCodeLabel={copy.verificationCode}
               copiedLabel={copy.copied}
-              copied={copiedCodeMailId === mail.id}
+              copiedCodeKey={copiedCodeKey}
               deleting={deletingMailId === mail.id}
               exiting={session ? isMailExiting(session, mail.id) : false}
               onSelect={selectMail}
@@ -1856,11 +1885,14 @@ export default function App() {
                 <p>{getSender(selectedMail, locale)} · {formatDate(selectedMail.date || selectedMail.createdAt, locale)}</p>
               </div>
               <div className="detail-actions">
-                {selectedMail.verificationCode ? (
-                  <button type="button" className="primary-button" onClick={() => copyVerificationCode(selectedMail)}>
-                    {copy.copyCode}
-                  </button>
-                ) : null}
+                {selectedVerificationCodes.map((code) => (
+                  <span className="detail-code-copy" key={code}>
+                    <button type="button" className="primary-button" onClick={() => copyVerificationCode(selectedMail, code)}>
+                      {copy.copyCode} {code}
+                    </button>
+                    <em className={`code-copy-hint ${copiedCodeKey === verificationCopyKey(selectedMail.id, code) ? "visible" : ""}`} aria-live="polite">{copy.copied}</em>
+                  </span>
+                ))}
                 <button type="button" className="ghost-button" onClick={() => void copyBodyText()}>{copy.copyBody}</button>
                 {(!isShareSession(session) || shareInfo?.permissions?.hideMail) ? <button type="button" className="danger-button" disabled={deletingMailId === selectedMail.id || (session ? isMailExiting(session, selectedMail.id) : false)} onClick={() => removeMail(selectedMail)}>{isShareSession(session) ? copy.hideMail : copy.delete}</button> : null}
               </div>

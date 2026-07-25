@@ -46,7 +46,7 @@ type MobileMailChromePaddingVars = CSSProperties & {
   '--mobile-mail-viewport-bottom-pad': string;
 };
 
-const MAIL_LIST_CACHE_VERSION = 4;
+const MAIL_LIST_CACHE_VERSION = 5;
 const MAIL_SEARCH_INDEX_PAGE_SIZE = 240;
 const MAIL_SEARCH_INDEX_MAX_PAGES = 240;
 const MAIL_STATE_CHANGED_EVENT = 'loven7-mail-state-changed';
@@ -287,9 +287,18 @@ function mergeMailLists(primary: AnyMail[], secondary: AnyMail[]): AnyMail[] {
 
 function getVerificationCodes(mail: AnyMail): string[] {
   const list = Array.isArray((mail as any).verificationCodes) ? (mail as any).verificationCodes : [];
-  return [...new Set([...(list as string[]), mail.verificationCode]
-    .map(sanitizeVerificationCode)
-    .filter(Boolean) as string[])].slice(0, 6);
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const value of [...(list as string[]), mail.verificationCode]) {
+    const code = sanitizeVerificationCode(value, { allowAlphaOnly: true });
+    if (!code) continue;
+    const key = code.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    codes.push(code);
+    if (codes.length >= 6) break;
+  }
+  return codes;
 }
 
 function getAttachmentObjectUrls(items: AnyMail[]): Set<string> {
@@ -388,6 +397,9 @@ function mailDetailCacheKey(scope: string, mode: MailMode, id: number): string {
 
 function stripForListCache(mail: AnyMail): AnyMail {
   const clone: any = { ...mail };
+  const codes = getVerificationCodes(mail);
+  clone.verificationCode = codes[0];
+  clone.verificationCodes = codes;
   if (isParsed(mail)) {
     clone.raw = '';
     clone.message = '';
@@ -428,7 +440,7 @@ function writeSessionMailDetail(scope: string, mode: MailMode, mail: AnyMail): v
   }
 }
 
-export function MailWorkspace({ mode, active, visualActive = active, request, notify, ask, globalQuery, addressRequest, setActiveMenu, setComposeSeed, mailStateScope, theme = 'light' }: { mode: MailMode; active: boolean; visualActive?: boolean; request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; addressRequest?: MailboxAddressRequest | null; setActiveMenu: (menu: MenuKey) => void; setComposeSeed: (seed: Partial<ComposePayload>) => void; mailStateScope: string; theme?: 'light' | 'dark' }) {
+export function MailWorkspace({ mode, active, visualActive = active, request, notify, ask, globalQuery, addressRequest, setActiveMenu, setComposeSeed, mailStateScope, theme = 'light', locale = 'zh-CN' }: { mode: MailMode; active: boolean; visualActive?: boolean; request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; globalQuery: string; addressRequest?: MailboxAddressRequest | null; setActiveMenu: (menu: MenuKey) => void; setComposeSeed: (seed: Partial<ComposePayload>) => void; mailStateScope: string; theme?: 'light' | 'dark'; locale?: 'zh-CN' | 'en-US' }) {
   const [mails, setMails] = useState<AnyMail[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
@@ -509,8 +521,9 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const deferredAddressQuery = useDeferredValue(mailSearchQuery);
   const isSearchMode = Boolean(deferredQuery || deferredAddressQuery);
   const mobileListContext = useMemo(() => `${mode}|${pageSize}|${address.trim()}|${isSearchMode ? 'search' : 'list'}`, [address, isSearchMode, mode, pageSize]);
-  const locale = getRuntimeLocale();
-  const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
+  // Display locale comes from props so text updates on language toggle.
+  // fetchData must NOT depend on locale — only read runtime locale inside notify strings.
+  const t: TranslateFn = useCallback((zh, en) => localeText(zh, en, locale), [locale]);
   const title = mode === 'sent' ? t('发件箱', 'Sent') : mode === 'unknown' ? t('未知邮件', 'Unknown mail') : t('收件箱', 'Inbox');
   const immersiveMobileMail = mode === 'inbox' || mode === 'sent';
   const ownsMobileChrome = visualActive && immersiveMobileMail && compactViewport && !isMobileDetail;
@@ -706,7 +719,10 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
 
       if (incremental && targetPage !== 1) {
         const addedCount = Math.max(0, nextCount - latestCountRef.current);
-        if (addedCount > 0) notify('info', locale === 'en-US' ? `${addedCount} new message${addedCount === 1 ? '' : 's'} detected. Return to page 1 to view.` : `检测到 ${addedCount} 封新邮件，回到第一页可查看`);
+        if (addedCount > 0) {
+          const english = getRuntimeLocale() === 'en-US';
+          notify('info', english ? `${addedCount} new message${addedCount === 1 ? '' : 's'} detected. Return to page 1 to view.` : `检测到 ${addedCount} 封新邮件，回到第一页可查看`);
+        }
         return;
       }
 
@@ -728,7 +744,8 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
           setNewIds(new Set(added.map((mail) => mail.id)));
           if (newIdsTimerRef.current !== null) window.clearTimeout(newIdsTimerRef.current);
           newIdsTimerRef.current = window.setTimeout(() => { setNewIds(new Set()); newIdsTimerRef.current = null; }, NEW_MAIL_FLASH_MS);
-          notify('success', locale === 'en-US' ? `${added.length} new message${added.length === 1 ? '' : 's'}` : `新增 ${added.length} 封邮件`);
+          const english = getRuntimeLocale() === 'en-US';
+          notify('success', english ? `${added.length} new message${added.length === 1 ? '' : 's'}` : `新增 ${added.length} 封邮件`);
         }
       } else {
         setMails(parsed);
@@ -736,7 +753,9 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       }
     } catch (error) {
       if (abortController.signal.aborted) return;
-      if (seq === fetchSeqRef.current) notify('error', error instanceof Error ? error.message : t('邮件加载失败', 'Failed to load mail'));
+      if (seq === fetchSeqRef.current) {
+        notify('error', error instanceof Error ? error.message : localeText('邮件加载失败', 'Failed to load mail', getRuntimeLocale()));
+      }
     } finally {
       if (seq === fetchSeqRef.current) {
         setLoading(false);
@@ -746,7 +765,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         if (fetchAbortRef.current === abortController) fetchAbortRef.current = null;
       }
     }
-  }, [address, autoSeconds, filterDeletedMails, loadPage, locale, mailStateScope, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds, t]);
+  }, [address, autoSeconds, filterDeletedMails, loadPage, mailStateScope, mode, notify, page, pageSize, readAllBefore, readIds, saveListCache, starredIds]);
 
   const loadSearchIndex = useCallback(async (forceRefresh = false) => {
     const normalizedAddress = address.trim();
@@ -1401,7 +1420,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     targets.forEach((mail) => next.add(storageId(mode, mail.id)));
     persistReadIds(next);
     patchRemoteMailState({ readIdsToAdd: targets.map((mail) => storageId(mode, mail.id)) });
-    notify('success', locale === 'en-US' ? `${targets.length} marked as read` : `已标记 ${targets.length} 封为已读`);
+    notify('success', getRuntimeLocale() === 'en-US' ? `${targets.length} marked as read` : `已标记 ${targets.length} 封为已读`);
   };
   const markAllRead = () => {
     if (!mails.length) {
@@ -1675,6 +1694,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
                 key={entry.key}
                 mail={entry.mail}
                 mode={mode}
+                locale={locale}
                 selected={selected?.id === entry.mail.id}
                 isNew={newIds.has(entry.mail.id)}
                 deleting={deletingMailId === entry.mail.id}
@@ -1689,6 +1709,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
                 key={entry.key}
                 entry={entry}
                 mode={mode}
+                locale={locale}
                 selectedId={selected?.id ?? null}
                 expanded={expandedMailStacks.has(entry.key)}
                 isNew={entry.mails.some((mail) => newIds.has(mail.id))}
@@ -1710,23 +1731,24 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         </div>
       </div>
       <div className="mail-detail-pane hidden h-full min-w-0 flex-1 flex-col lg:flex">
-        {!compactViewport && <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} />}
+        {!compactViewport && <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} locale={locale} theme={theme} copiedKey={copiedKey} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} />}
       </div>
       {isMobileDetail && (
         <div
           className={cls('mobile-mail-detail absolute inset-0 z-40 flex h-full min-h-0 flex-col bg-white lg:hidden', mobileDetailSettling && 'mobile-detail-settling')}
           style={{ transform: `translate3d(${mobileDetailDragX}px, 0, 0)` }}
         >
-          <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} theme={theme} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} mobile />
+          <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} locale={locale} theme={theme} copiedKey={copiedKey} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} mobile />
         </div>
       )}
     </div>
   );
 }
 
-const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, deleting, exiting, copiedKey, onOpen, onCopy, onToggleStar }: {
+const MailListItem = memo(function MailListItem({ mail, mode, locale = 'zh-CN', selected, isNew, deleting, exiting, copiedKey, onOpen, onCopy, onToggleStar }: {
   mail: AnyMail;
   mode: MailMode;
+  locale?: 'zh-CN' | 'en-US';
   selected: boolean;
   isNew: boolean;
   deleting: boolean;
@@ -1736,7 +1758,6 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, d
   onCopy: (value: string, label?: string, key?: string) => void;
   onToggleStar: (mail: AnyMail) => void;
 }) {
-  const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const senderAddress = getSenderAddress(mail);
   const senderName = getSenderName(mail);
@@ -1799,20 +1820,25 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, d
       </div>
       {verificationCodes.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1.5">
-          {verificationCodes.slice(0, 3).map((code) => (
-            <button
-              key={code}
-              type="button"
-              className="verify-pill compact"
-              disabled={inert}
-              onClick={(event) => {
-                event.stopPropagation();
-                onCopy(code, t('验证码已复制', 'Verification code copied'), `verify-list-${mode}-${mail.id}-${code}`);
-              }}
-            >
-              {code}
-            </button>
-          ))}
+          {verificationCodes.slice(0, 3).map((code) => {
+            const copyKey = `verify-list-${mode}-${mail.id}-${code}`;
+            return (
+              <span className="inline-flex items-center gap-1" key={code}>
+                <button
+                  type="button"
+                  className="verify-pill compact"
+                  disabled={inert}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCopy(code, t('验证码已复制', 'Verification code copied'), copyKey);
+                  }}
+                >
+                  {code}
+                </button>
+                <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">{t('已复制', 'Copied')}</em>
+              </span>
+            );
+          })}
         </div>
       )}
         </div>
@@ -1821,9 +1847,10 @@ const MailListItem = memo(function MailListItem({ mail, mode, selected, isNew, d
   );
 });
 
-const MailListStackItem = memo(function MailListStackItem({ entry, mode, selectedId, expanded, isNew, deletingMailId, isMailExiting, copiedKey, onOpen, onCopy, onToggleStar, onToggle }: {
+const MailListStackItem = memo(function MailListStackItem({ entry, mode, locale = 'zh-CN', selectedId, expanded, isNew, deletingMailId, isMailExiting, copiedKey, onOpen, onCopy, onToggleStar, onToggle }: {
   entry: Extract<MailListEntry, { type: 'stack' }>;
   mode: MailMode;
+  locale?: 'zh-CN' | 'en-US';
   selectedId: number | null;
   expanded: boolean;
   isNew: boolean;
@@ -1835,7 +1862,6 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
   onToggleStar: (mail: AnyMail) => void;
   onToggle: () => void;
 }) {
-  const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   const mail = entry.latest;
   const senderAddress = getSenderAddress(mail);
@@ -1848,6 +1874,7 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
   const stackRemoving = stackHasExiting && (!expanded || entry.mails.every(isMailExiting) || isMailExiting(mail));
   const stackInert = stackDeleting || stackRemoving;
   const recipientPressRef = useRef<PressPoint | null>(null);
+  const verificationCodes = getVerificationCodes(mail);
   return (
     <div
       onClick={() => { if (!stackInert) onOpen(mail); }}
@@ -1909,6 +1936,29 @@ const MailListStackItem = memo(function MailListStackItem({ entry, mode, selecte
               <Star size={15} fill={mail.isStarred ? 'currentColor' : 'none'} />
             </button>
           </div>
+          {verificationCodes.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {verificationCodes.slice(0, 3).map((code) => {
+                const copyKey = `verify-stack-${mode}-${mail.id}-${code}`;
+                return (
+                  <span className="inline-flex items-center gap-1" key={code}>
+                    <button
+                      type="button"
+                      className="verify-pill compact"
+                      disabled={stackInert}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCopy(code, t('验证码已复制', 'Verification code copied'), copyKey);
+                      }}
+                    >
+                      {code}
+                    </button>
+                    <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">{t('已复制', 'Copied')}</em>
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <div className={cls('mail-stack-children-shell', expanded && 'open')} aria-hidden={!expanded}>
             <div className="mail-stack-children" onClick={(event) => event.stopPropagation()}>
               {entry.mails.map((stackMail, index) => {
@@ -1952,6 +2002,8 @@ function MailDetail({
   cacheScope,
   mail,
   mode,
+  locale = 'zh-CN',
+  copiedKey,
   deletingMailId,
   onDelete,
   onReply,
@@ -1970,7 +2022,9 @@ function MailDetail({
   cacheScope: string;
   mail: AnyMail | null;
   mode: MailMode;
+  locale?: 'zh-CN' | 'en-US';
   theme: 'light' | 'dark';
+  copiedKey: string | null;
   deletingMailId: number | null;
   onDelete: (mail: AnyMail) => void;
   onReply: (mail: AnyMail) => void;
@@ -1986,7 +2040,6 @@ function MailDetail({
   onFrameWindowChange?: (frameWindow: Window | null) => void;
   mobile?: boolean;
 }) {
-  const locale = getRuntimeLocale();
   const t: TranslateFn = (zh, en) => localeText(zh, en, locale);
   useEffect(() => { if (mail) writeSessionMailDetail(cacheScope, mode, mail); }, [cacheScope, mail, mode]);
   const parsedForMemo = mail ? isParsed(mail) : false;
@@ -2004,6 +2057,7 @@ function MailDetail({
   const senderName = getSenderName(mail);
   const subtitle = parsed ? mail.senderAddress : t('发件记录', 'Sent record');
   const recipientAddress = getRecipient(mail);
+  const verificationCodes = getVerificationCodes(mail);
   const deleting = deletingMailId === mail.id;
   const recipientLabel = mode === 'sent'
     ? `${t('to', 'to')} ${recipientAddress || t('unknown', 'unknown')}`
@@ -2056,6 +2110,26 @@ function MailDetail({
             </div>
           </header>
           <div className="my-2 h-px shrink-0 bg-slate-100 md:my-2.5" />
+          {verificationCodes.length > 0 && (
+            <div className="mail-detail-code-strip mb-2 flex shrink-0 flex-wrap items-center gap-2" aria-label={t('验证码快捷复制', 'Quick-copy verification codes')}>
+              <span className="text-xs font-semibold text-slate-500">{t('验证码', 'Verification code')}</span>
+              {verificationCodes.slice(0, 3).map((code) => {
+                const copyKey = `verify-detail-${mode}-${mail.id}-${code}`;
+                return (
+                  <span className="inline-flex items-center gap-1" key={code}>
+                    <button
+                      type="button"
+                      className="verify-pill"
+                      onClick={() => onCopy(code, t('验证码已复制', 'Verification code copied'), copyKey)}
+                    >
+                      {code}
+                    </button>
+                    <em className={cls('copy-hint', copiedKey === copyKey && 'show')} aria-live="polite">{t('已复制', 'Copied')}</em>
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <div className="mail-detail-body min-h-0 flex-1 overflow-hidden">
             {iframeDocument ? <iframe ref={(node) => onFrameWindowChange?.(node?.contentWindow || null)} title={`mail-${mail.id}`} sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={iframeDocument} referrerPolicy="no-referrer" className="mail-frame" /> : <pre className="mail-text">{text || mail.preview || t('邮件正文仍在后台同步，请稍后刷新。', 'Message body is still syncing. Please refresh later.')}</pre>}
           </div>
