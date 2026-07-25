@@ -112,6 +112,26 @@ test('verification extraction matches the real ChatGPT and login-alert mailbox s
   );
 });
 
+test('verification extraction crosses harmless HTML whitespace before a real ChatGPT OTP', () => {
+  const chatGptHtml = `
+    <html>
+      <head><style>.code { font-family: monospace; }</style></head>
+      <body>
+        <p>输入此临时验证码以继续：</p>
+
+
+        <p class="code">
+          <!--[if mso]><span><![endif]-->
+          956125
+          <!--[if mso]></span><![endif]-->
+        </p>
+        <p>未请求验证码？你可以忽略此邮件。</p>
+      </body>
+    </html>
+  `;
+  assert.deepEqual(extractVerificationCodes('你的临时 ChatGPT 登录代码', [chatGptHtml]), ['956125']);
+});
+
 test('verification extraction rejects the current production mailbox false-positive samples', () => {
   assert.deepEqual(
     extractVerificationCodes('在 Notion 上加入你的团队\n你的团队正在使用 Notion 进行协作。Loven77777 邀请你加入工作空间。96'),
@@ -344,6 +364,11 @@ test('every Admin mail-state request uses the same-origin non-authoritative chan
   const source = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
   assert.equal([...source.matchAll(/adminMailStateEndpoint\(/g)].length, 3);
   assert.equal([...source.matchAll(/reportAuthFailure:\s*false/g)].length, 3);
+});
+
+test('admin parsed session-detail cache follows the mail parser cache version', () => {
+  const source = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.match(source, /mailDetailSessionPrefix,\s*`v\$\{MAIL_LIST_CACHE_VERSION\}`/);
 });
 
 test('account mailbox data source supports inbox and sent without exposing global unknown mail', () => {

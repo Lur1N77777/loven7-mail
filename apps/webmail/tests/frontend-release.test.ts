@@ -78,6 +78,24 @@ test("webmail mail parsing applies the shared high-confidence verification filte
     raw: "From: OpenAI <news@example.com>\r\nSubject: OpenAI Built Codex\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nOpenAI\r\n1455 3rd Street\r\nSan Francisco, CA 94158\r\nGPT-5.6-Terra",
   });
   assert.equal(parsed.verificationCode, undefined);
+
+  const parsedHtmlOtp = await parseRawMail({
+    id: 2,
+    raw: [
+      "From: ChatGPT <noreply@example.com>",
+      "Subject: =?UTF-8?B?5L2g55qE5Li05pe2IENoYXRHUFQg55m75b2V5Luj56CB?=",
+      "MIME-Version: 1.0",
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      "<html><head><style>.code{font-family:monospace}</style></head><body>",
+      "<p>输入此临时验证码以继续：</p>",
+      "",
+      "<p class=\"code\"><!--[if mso]><span><![endif]-->956125<!--[if mso]></span><![endif]--></p>",
+      "<p>未请求验证码？你可以忽略此邮件。</p>",
+      "</body></html>",
+    ].join("\r\n"),
+  });
+  assert.deepEqual(parsedHtmlOtp.verificationCodes, ["956125"]);
 });
 
 test("webmail clipboard falls back to a temporary textarea and copies only trimmed code text", async () => {

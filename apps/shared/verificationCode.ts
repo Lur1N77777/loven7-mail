@@ -34,6 +34,7 @@ const CODE_CONTEXT_PATTERN = new RegExp(
 
 const TOKEN_PATTERN = /(?<![A-Za-z0-9])([A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*)(?![A-Za-z0-9])/g;
 const ADDRESS_LINE_PATTERN = /(invoice|receipt|order|tracking|shipment|phone|mobile|tel|amount|price|total|date|time|zip|postal|address|street|road|avenue|account|iban|card|账单|订单|快递|物流|电话|手机|金额|价格|合计|日期|时间|邮编|地址|账户|银行卡)/iu;
+const MAX_CONTEXT_PHYSICAL_LINES = 12;
 
 const BRAND_OR_PRODUCT_WORDS = new Set([
   'CHATGPT', 'OPENAI', 'NOTION', 'GITHUB', 'GOOGLE', 'GMAIL', 'APPLE', 'ICLOUD', 'MICROSOFT',
@@ -398,13 +399,15 @@ export function extractVerificationCodes(text = '', extraSources: string[] = [])
     // Next 1-2 lines: lone OTP after "Your code is" / "验证码" / Notion title.
     if (!lineCandidates.length) {
       let cursor = bounds.end + 1;
-      for (let hop = 0; hop < 2 && cursor < normalized.length; hop += 1) {
+      let inspectedLines = 0;
+      for (let scannedLines = 0; scannedLines < MAX_CONTEXT_PHYSICAL_LINES && inspectedLines < 2 && cursor < normalized.length; scannedLines += 1) {
         const nextBounds = lineBounds(normalized, cursor);
         const nextLine = normalized.slice(nextBounds.start, nextBounds.end).trim();
         if (!nextLine) {
           cursor = nextBounds.end + 1;
           continue;
         }
+        inspectedLines += 1;
         const tokens = tokenize(nextLine, nextBounds.start);
         const lone = tokens.length === 1 ? tokens[0] : null;
         const firstToken = tokens[0];
@@ -440,13 +443,15 @@ export function extractVerificationCodes(text = '', extraSources: string[] = [])
       const contextIndex = soft.index || 0;
       const bounds = lineBounds(normalized, contextIndex);
       let cursor = bounds.end + 1;
-      for (let hop = 0; hop < 2 && cursor < normalized.length; hop += 1) {
+      let inspectedLines = 0;
+      for (let scannedLines = 0; scannedLines < MAX_CONTEXT_PHYSICAL_LINES && inspectedLines < 2 && cursor < normalized.length; scannedLines += 1) {
         const nextBounds = lineBounds(normalized, cursor);
         const nextLine = normalized.slice(nextBounds.start, nextBounds.end).trim();
         if (!nextLine) {
           cursor = nextBounds.end + 1;
           continue;
         }
+        inspectedLines += 1;
         const tokens = tokenize(nextLine, nextBounds.start);
         if (tokens.length === 1) {
           const code = sanitizeVerificationCode(tokens[0].raw, { allowAlphaOnly: true });

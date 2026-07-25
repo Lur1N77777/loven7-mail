@@ -46,7 +46,7 @@ type MobileMailChromePaddingVars = CSSProperties & {
   '--mobile-mail-viewport-bottom-pad': string;
 };
 
-const MAIL_LIST_CACHE_VERSION = 5;
+const MAIL_LIST_CACHE_VERSION = 6;
 const MAIL_SEARCH_INDEX_PAGE_SIZE = 240;
 const MAIL_SEARCH_INDEX_MAX_PAGES = 240;
 const MAIL_STATE_CHANGED_EVENT = 'loven7-mail-state-changed';
@@ -392,7 +392,7 @@ function mailListCacheKey(scope: string, mode: MailMode, page: number, pageSize:
 }
 
 function mailDetailCacheKey(scope: string, mode: MailMode, id: number): string {
-  return scopedStorageKey(STORAGE_KEYS.mailDetailSessionPrefix, scope, mode, id);
+  return scopedStorageKey(STORAGE_KEYS.mailDetailSessionPrefix, `v${MAIL_LIST_CACHE_VERSION}`, scope, mode, id);
 }
 
 function stripForListCache(mail: AnyMail): AnyMail {

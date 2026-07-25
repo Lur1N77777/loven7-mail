@@ -2,7 +2,7 @@ import type { ParsedMail } from "./types";
 
 const DB_NAME = "cloudmail_webmail_cache_v1";
 const STORE_NAME = "mailboxes";
-export const MAILBOX_CACHE_VERSION = 2;
+export const MAILBOX_CACHE_VERSION = 3;
 const MAX_CACHED_MAILS = 300;
 export const MAX_MAILBOX_CACHE_BYTES = 4 * 1024 * 1024;
 const FALLBACK_MAILBOX_CACHE_BYTES = 512 * 1024;
