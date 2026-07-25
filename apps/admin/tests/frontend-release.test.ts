@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 
 import { activateWaitingServiceWorker, isChunkLoadError } from '../src/lib/appRecovery.ts';
 import { loadBoundedAddressIndex } from '../src/lib/addressIndex.ts';
@@ -410,7 +411,8 @@ test('confirmed admin refresh activates a waiting worker before reloading once',
   );
 
   assert.equal(requested, true);
-  assert.deepEqual(messages, [{ type: 'SKIP_WAITING' }]);
+  assert.equal(messages.length, 1);
+  assert.equal((messages[0] as { type?: unknown }).type, 'SKIP_WAITING');
   assert.equal(reloads, 0);
   assert.equal(fallbackDelay, 4_000);
   state = 'activated';
@@ -422,6 +424,101 @@ test('confirmed admin refresh activates a waiting worker before reloading once',
 
 test('admin refresh leaves normal reload handling to the caller without a waiting worker', () => {
   assert.equal(activateWaitingServiceWorker(undefined, () => assert.fail('must not reload'), () => assert.fail('must not schedule')), false);
+});
+
+test('network-fresh registrar upgrades a stranded old update page after user confirmation', async () => {
+  const registrarSource = readFileSync(new URL('../public/pwa-register-v2.js', import.meta.url), 'utf8');
+  let loadListener: (() => void) | undefined;
+  let clickListener: ((event: Record<string, unknown>) => void) | undefined;
+  let stateChange: (() => void) | undefined;
+  let fallback: (() => void) | undefined;
+  let state = 'installed';
+  let reloads = 0;
+  let updates = 0;
+  const messages: unknown[] = [];
+  class MockElement {
+    textContent = '';
+    closest(_selector: string): unknown { return null; }
+  }
+  const alert = {
+    querySelector(selector: string) {
+      assert.equal(selector, 'h1');
+      return { textContent: '检测到新版本' };
+    },
+  };
+  const button = new MockElement();
+  button.textContent = '刷新页面';
+  button.closest = (selector: string) => selector === 'button' ? button : selector === '[role="alert"]' ? alert : null;
+  const worker = {
+    get state() { return state; },
+    addEventListener(type: string, listener: () => void) {
+      assert.equal(type, 'statechange');
+      stateChange = listener;
+    },
+    postMessage(message: unknown) { messages.push(message); },
+  };
+  const registration = {
+    waiting: worker,
+    installing: null,
+    update() { updates += 1; },
+  };
+  runInNewContext(registrarSource, {
+    Element: MockElement,
+    console: { warn() {} },
+    document: {
+      addEventListener(type: string, listener: (event: Record<string, unknown>) => void, capture: boolean) {
+        assert.equal(type, 'click');
+        assert.equal(capture, true);
+        clickListener = listener;
+      },
+    },
+    navigator: { serviceWorker: { register: async () => registration } },
+    window: {
+      addEventListener(type: string, listener: () => void) {
+        assert.equal(type, 'load');
+        loadListener = listener;
+      },
+      location: { reload() { reloads += 1; } },
+      setTimeout(callback: () => void, delay: number) {
+        assert.equal(delay, 4_000);
+        fallback = callback;
+      },
+    },
+  });
+  assert.ok(loadListener);
+  assert.ok(clickListener);
+  loadListener();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(updates, 1);
+  const ordinaryButton = new MockElement();
+  ordinaryButton.textContent = '刷新';
+  ordinaryButton.closest = (selector: string) => selector === 'button' ? ordinaryButton : selector === '[role="alert"]' ? alert : null;
+  let ordinaryPrevented = false;
+  clickListener({
+    target: ordinaryButton,
+    preventDefault() { ordinaryPrevented = true; },
+    stopImmediatePropagation() { assert.fail('ordinary refresh must keep propagating'); },
+  });
+  assert.equal(ordinaryPrevented, false);
+  assert.equal(messages.length, 0);
+  let prevented = false;
+  let stopped = false;
+  clickListener({
+    target: button,
+    preventDefault() { prevented = true; },
+    stopImmediatePropagation() { stopped = true; },
+  });
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+  assert.equal(messages.length, 1);
+  assert.equal((messages[0] as { type?: unknown }).type, 'SKIP_WAITING');
+  assert.equal(reloads, 0);
+  state = 'activated';
+  stateChange?.();
+  assert.equal(reloads, 1);
+  fallback?.();
+  assert.equal(reloads, 1);
 });
 
 test('admin PWA migrates through a network-fresh registrar without force-activating old clients', () => {
@@ -438,7 +535,7 @@ test('admin PWA migrates through a network-fresh registrar without force-activat
   assert.match(viteSource, /skipWaiting:\s*false/);
   assert.match(htmlSource, /<script src="\/pwa-register-v2\.js" defer><\/script>/);
   assert.match(registrarSource, /serviceWorker[\s\S]*register\('\/sw-v2\.js',\s*\{\s*scope:\s*'\/'\s*\}\)/);
-  assert.match(registrarSource, /registration\.update\(\)/);
+  assert.match(registrarSource, /return\s+\w+\.update\(\)/);
   assert.match(errorBoundarySource, /navigator\.serviceWorker[\s\S]*getRegistration\('\/'\)/);
   assert.match(errorBoundarySource, /activateWaitingServiceWorker/);
   assert.match(headersSource, /\/pwa-register-v2\.js[\s\S]*Cache-Control: no-cache, no-store, must-revalidate/);

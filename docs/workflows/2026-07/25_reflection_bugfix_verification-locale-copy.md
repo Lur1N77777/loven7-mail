@@ -19,8 +19,8 @@
 - `apps/webmail/src/clipboard.ts`：增加 Clipboard API 失败后的临时 textarea 回退。
 - `apps/admin/src/App.tsx`、双端 `locale.ts`：移除语言切换对 API client、账号资料和邮件请求回调的重建影响。
 - 双端缓存与前端发布测试：升级缓存版本并补充真实问题回归样例。
-- `apps/admin/vite.config.ts`、`index.html`、`public/pwa-register-v2.js` 与 `_headers`：迁移到网络直取的版本化 PWA 注册器。
-- `apps/admin/src/components/AppErrorBoundary.tsx`、`src/lib/appRecovery.ts`：用户点击刷新时激活 waiting Worker，激活后只刷新一次。
+- `apps/admin/vite.config.ts`、`index.html`、`public/pwa-register-v2.js` 与 `_headers`：迁移到网络直取的版本化 PWA 注册器，并兼容接管旧主包更新提示的明确刷新点击。
+- `apps/admin/src/components/AppErrorBoundary.tsx`、`src/lib/appRecovery.ts`：新主包中由用户点击刷新时激活 waiting Worker，激活后只刷新一次。
 
 ### 主要变更
 
@@ -33,7 +33,7 @@
 - HTML 模板造成的连续空白行不再消耗跨行扫描额度；只计入最多两个非空候选行。
 - Admin 列表/详情缓存升级为 v6，Webmail 邮件缓存升级为 v3；详情会话缓存跟随解析器缓存版本，避免旧识别结果覆盖新列表结果。
 - PWA 注册器不再进入预缓存，主动检查 `sw-v2.js`，同时继续禁止对运行旧懒加载分块的客户端强制接管。
-- 检测到分块版本冲突后，仅在用户点击“刷新页面”时发送 `SKIP_WAITING`；等待激活后刷新，并保留超时与普通 reload 回退。
+- 检测到分块版本冲突后，仅在用户点击“刷新页面”时发送 `SKIP_WAITING`；网络注册器可桥接旧主包的更新面板，新主包也能直接处理，二者都等待激活后刷新，并保留超时与普通 reload 回退。
 
 ## 3. 遇到的错误
 
@@ -90,7 +90,7 @@
 - 迭代 4：修正发布测试域名，完整发布检查通过。
 - 迭代 5：用真实 EML 修复空白行扫描，并将详情缓存 key 与解析器版本绑定。
 - 迭代 6：将 PWA 更新入口移出 precache，以 `pwa-register-v2.js` 注册 `sw-v2.js`，保持 prompt/非强制接管策略。
-- 迭代 7：刷新按钮显式激活 waiting Worker，监听 `activated` 后 reload，并补充单次刷新和无 waiting Worker 回退测试。
+- 迭代 7：刷新按钮显式激活 waiting Worker；网络直取注册器兼容旧主包更新面板，新主包错误边界直接处理，并补充激活、单次刷新、普通按钮不拦截和无 waiting Worker 回退测试。
 
 ### 耗时统计
 
@@ -153,12 +153,13 @@
 - [x] 升级缓存版本，运行类型、测试、构建、Functions 和浏览器 smoke。
 - [x] 验证 PWA 生成 `sw-v2.js`、注册器不进入 precache，且不强制接管旧客户端。
 - [x] 验证用户确认后发送激活消息、等待 activated，并保证超时回退不会二次刷新。
+- [x] 验证网络注册器能解救旧主包更新页，且不会拦截普通刷新按钮。
 
 ## 8. 测试与验证
 
 ### 测试用例
 
-- Admin 前端测试 44/44 通过；Webmail 前端测试 15/15 通过。
+- Admin 前端测试 45/45 通过；Webmail 前端测试 15/15 通过。
 - Functions headers、CORS、图片代理、品牌图标、分享删除和 Pages 回归全部通过。
 - 回归覆盖 Notion 模板噪声、ChatGPT HTML-only 数字码、产品版本、州名邮编、登录提醒、HTML entity、追踪 URL、跨行自然语言、缓存失效和剪贴板回退。
 
