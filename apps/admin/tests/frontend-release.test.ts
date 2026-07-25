@@ -382,6 +382,23 @@ test('chunk load failures are recognized for recoverable update UI', () => {
   assert.equal(isChunkLoadError(new Error('ordinary validation failure')), false);
 });
 
+test('admin PWA migrates through a network-fresh registrar without force-activating old clients', () => {
+  const viteSource = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
+  const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const registrarSource = readFileSync(new URL('../public/pwa-register-v2.js', import.meta.url), 'utf8');
+  const headersSource = readFileSync(new URL('../public/_headers', import.meta.url), 'utf8');
+  assert.match(viteSource, /registerType:\s*'prompt'/);
+  assert.match(viteSource, /filename:\s*'sw-v2\.js'/);
+  assert.match(viteSource, /injectRegister:\s*false/);
+  assert.match(viteSource, /'\*\*\/pwa-register-\*\.js'/);
+  assert.match(viteSource, /clientsClaim:\s*false/);
+  assert.match(viteSource, /skipWaiting:\s*false/);
+  assert.match(htmlSource, /<script src="\/pwa-register-v2\.js" defer><\/script>/);
+  assert.match(registrarSource, /serviceWorker[\s\S]*register\('\/sw-v2\.js',\s*\{\s*scope:\s*'\/'\s*\}\)/);
+  assert.match(registrarSource, /registration\.update\(\)/);
+  assert.match(headersSource, /\/pwa-register-v2\.js[\s\S]*Cache-Control: no-cache, no-store, must-revalidate/);
+});
+
 test('mail frame messages require the exact iframe window and bounded payloads', () => {
   const trustedWindow = {};
   assert.deepEqual(readTrustedMailFrameMessage({ source: trustedWindow, data: { type: 'loven7-mail-iframe-swipe', direction: 'left' } }, trustedWindow), { type: 'loven7-mail-iframe-swipe', direction: 'left' });

@@ -16,6 +16,8 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'prompt',
+        filename: 'sw-v2.js',
+        injectRegister: false,
         manifest: {
           name: 'Loven7-Mail Admin',
           short_name: 'Loven7-Mail',
@@ -36,6 +38,7 @@ export default defineConfig(({ mode }) => {
           skipWaiting: false,
           globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,webmanifest,woff2}'],
           globIgnores: [
+            '**/pwa-register-*.js',
             '**/loven7-cover-*.png',
             '**/loven7-landscape-*.png',
             '**/loven7-designer-cover-*.png',

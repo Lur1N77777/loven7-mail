@@ -17,6 +17,12 @@
 /registerSW.js
   Cache-Control: no-cache, no-store, must-revalidate
 
+/sw-v2.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/pwa-register-v2.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
 /manifest.webmanifest
   Cache-Control: no-cache, no-store, must-revalidate
 
