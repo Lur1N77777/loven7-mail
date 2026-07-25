@@ -1,11 +1,13 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const isWindows = process.platform === 'win32';
 const port = Number(process.env.WEBMAIL_SMOKE_PORT || 4274);
 const cdpPort = Number(process.env.WEBMAIL_SMOKE_CDP_PORT || 9474);
 const baseUrl = process.env.WEBMAIL_SMOKE_URL || `http://127.0.0.1:${port}/`;
+const artifactDir = String(process.env.WEBMAIL_SMOKE_ARTIFACT_DIR || '').trim();
 const tempProfile = mkdtempSync(`${tmpdir()}/loven7-webmail-smoke-`);
 let previewProcess;
 let chromeProcess;
@@ -296,17 +298,94 @@ function mockFetchScript() {
   })()`;
 }
 
-async function openApp(pathname = '/', { width = 390, height = 844, locale = 'zh-CN' } = {}) {
+async function openApp(pathname = '/', { width = 390, height = 844, locale = 'zh-CN', colorScheme = 'light' } = {}) {
   const ws = await cdpNewPage('about:blank');
   await cdpSend(ws, 'Page.enable');
   await cdpSend(ws, 'Runtime.enable');
   await cdpSend(ws, 'Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 768 });
+  await cdpSend(ws, 'Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: colorScheme }] });
   await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: mockFetchScript() });
   await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('loven7.locale', ${JSON.stringify(locale)}); sessionStorage.clear();` });
   await cdpSend(ws, 'Page.navigate', { url: new URL(pathname, baseUrl).toString() });
   await cdpSend(ws, 'Page.loadEventFired').catch(() => undefined);
   await sleep(900);
   return ws;
+}
+
+async function captureScreenshot(ws, name) {
+  if (!artifactDir) return;
+  mkdirSync(artifactDir, { recursive: true });
+  const result = await cdpSend(ws, 'Page.captureScreenshot', {
+    format: 'png',
+    fromSurface: true,
+    captureBeyondViewport: false,
+  });
+  writeFileSync(join(artifactDir, `${name}.png`), Buffer.from(result.data, 'base64'));
+}
+
+async function loginWithMockMailbox(ws) {
+  await waitUntil(ws, `document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);
+  await setInput(ws, 'input[type="email"]', 'qa@example.test');
+  await setInput(ws, '.password-input-wrap input', 'good');
+  await click(ws, '.login-button');
+  await waitUntil(ws, `document.querySelectorAll('.mail-row').length >= 2`);
+  await waitUntil(ws, `document.querySelector('.mail-html-view')?.srcdoc?.includes('HTML rendered cleanly')`);
+}
+
+async function captureVisualSnapshots() {
+  if (!artifactDir) return [];
+
+  const captured = [];
+  const desktop = await openApp('/', { width: 1440, height: 960, colorScheme: 'light' });
+  await waitUntil(desktop, `document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);
+  await captureScreenshot(desktop, 'desktop-login-light');
+  captured.push('desktop-login-light.png');
+  await loginWithMockMailbox(desktop);
+  await captureScreenshot(desktop, 'desktop-inbox-light');
+  captured.push('desktop-inbox-light.png');
+  await click(desktop, '.webmail-locale-toggle');
+  await waitUntil(desktop, `!!document.querySelector('.webmail-locale-menu')`);
+  await captureScreenshot(desktop, 'desktop-language-menu-light');
+  captured.push('desktop-language-menu-light.png');
+  await evaluate(desktop, `document.querySelector('.webmail-locale-menu button.active')?.click()`);
+  await click(desktop, '.toolbar > .ghost-button');
+  await waitUntil(desktop, `!!document.querySelector('.webmail-modal-card')`);
+  await captureScreenshot(desktop, 'desktop-password-modal-light');
+  captured.push('desktop-password-modal-light.png');
+
+  const desktopDark = await openApp('/', { width: 1440, height: 960, colorScheme: 'dark' });
+  await waitUntil(desktopDark, `document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);
+  await captureScreenshot(desktopDark, 'desktop-login-dark');
+  captured.push('desktop-login-dark.png');
+  await loginWithMockMailbox(desktopDark);
+  await captureScreenshot(desktopDark, 'desktop-inbox-dark');
+  captured.push('desktop-inbox-dark.png');
+
+  const mobile = await openApp('/', { width: 390, height: 844, colorScheme: 'light' });
+  await waitUntil(mobile, `document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);
+  await captureScreenshot(mobile, 'mobile-login-light');
+  captured.push('mobile-login-light.png');
+  await loginWithMockMailbox(mobile);
+  await captureScreenshot(mobile, 'mobile-inbox-light');
+  captured.push('mobile-inbox-light.png');
+  await click(mobile, '.mail-row');
+  await waitUntil(mobile, `document.querySelector('.app-shell')?.classList.contains('pane-reader')`);
+  await captureScreenshot(mobile, 'mobile-reader-light');
+  captured.push('mobile-reader-light.png');
+
+  const mobileDark = await openApp('/', { width: 390, height: 844, colorScheme: 'dark' });
+  await waitUntil(mobileDark, `document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);
+  await captureScreenshot(mobileDark, 'mobile-login-dark');
+  captured.push('mobile-login-dark.png');
+  await loginWithMockMailbox(mobileDark);
+  await captureScreenshot(mobileDark, 'mobile-inbox-dark');
+  captured.push('mobile-inbox-dark.png');
+  await click(mobileDark, '.mail-row');
+  await waitUntil(mobileDark, `document.querySelector('.app-shell')?.classList.contains('pane-reader')`);
+  await captureScreenshot(mobileDark, 'mobile-reader-dark');
+  captured.push('mobile-reader-dark.png');
+
+  return captured;
 }
 
 async function run() {
@@ -468,6 +547,9 @@ async function run() {
   const noWorkerText = await evaluate(noWorker, `document.body.innerText`);
   assert(!noWorkerText.includes('MAIL_WORKER_BASE_URL is not configured'), 'MAIL_WORKER_BASE_URL 缺失时不应暴露底层英文原始报错');
   results.push({ name: 'webmail-friendly-config-error', cases: ['legacy-share', 'share-kv', 'share-secret', 'mail-worker'] });
+
+  const visualSnapshots = await captureVisualSnapshots();
+  if (visualSnapshots.length) results.push({ name: 'webmail-visual-snapshots', files: visualSnapshots });
 
   console.log(JSON.stringify({ ok: true, baseUrl, results }, null, 2));
 }

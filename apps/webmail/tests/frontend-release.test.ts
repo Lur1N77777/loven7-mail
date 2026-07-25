@@ -14,6 +14,34 @@ import { proxyMailImageSrcset, proxyMailImageUrl } from "../src/mailImageProxy.t
 import { extractVerificationCode, extractVerificationCodes } from "../../shared/verificationCode.ts";
 import { getFallbackAvatarColor } from "../../shared/avatarColor.ts";
 
+function readWebmailSource(relativePath: string) {
+  return readFileSync(new URL(relativePath, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+}
+
+function extractCssBlock(source: string, marker: string) {
+  const markerIndex = source.indexOf(marker);
+  assert.notEqual(markerIndex, -1, `missing CSS block: ${marker}`);
+  const openBraceIndex = source.indexOf("{", markerIndex);
+  assert.notEqual(openBraceIndex, -1, `missing opening brace for CSS block: ${marker}`);
+
+  let depth = 0;
+  for (let index = openBraceIndex; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    if (source[index] !== "}") continue;
+    depth -= 1;
+    if (depth === 0) return source.slice(openBraceIndex + 1, index);
+  }
+
+  assert.fail(`missing closing brace for CSS block: ${marker}`);
+}
+
+function readCssVariable(block: string, name: string) {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = block.match(new RegExp(`--${escapedName}\\s*:\\s*([^;]+);`));
+  assert.ok(match, `missing CSS variable --${name}`);
+  return match[1].trim().replace(/\s+/g, " ");
+}
+
 test("webmail sanitizer fails closed when DOMParser is unavailable", () => {
   const sanitized = sanitizeMailHtml(
     '<p>Hello</p><a href="javascript:alert(1)">Open</a><img src=x onerror=alert(1)><script>alert(1)</script>'
@@ -155,6 +183,103 @@ test("webmail uses white only for real brand icons and deterministic color for i
   assert.equal(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('letter@example.test'));
   assert.equal(getFallbackAvatarColor('letter@example.test', 'First label'), getFallbackAvatarColor('letter@example.test', 'Renamed label'));
   assert.notEqual(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('other@example.test'));
+});
+
+test("webmail loads its final theme after legacy styles and keeps browser chrome theme-aware", () => {
+  const app = readWebmailSource("../src/App.tsx");
+  const cssImports = [...app.matchAll(/import\s+["']([^"']+\.css)["'];/g)].map((match) => match[1]);
+  assert.deepEqual(cssImports.slice(-2), ["./styles.css", "./theme.css"]);
+  assert.equal(cssImports.at(-1), "./theme.css");
+
+  const html = readWebmailSource("../index.html");
+  assert.match(html, /<meta name="theme-color" content="#f6f5f3" media="\(prefers-color-scheme: light\)"\s*\/>/);
+  assert.match(html, /<meta name="theme-color" content="#121110" media="\(prefers-color-scheme: dark\)"\s*\/>/);
+});
+
+test("webmail theme stays aligned with the admin paper, ink, and sealing-wax tokens", () => {
+  const webmailTheme = readWebmailSource("../src/theme.css");
+  const adminTheme = readWebmailSource("../../admin/src/theme.css");
+  const webmailLight = extractCssBlock(webmailTheme, ":root");
+  const adminLight = extractCssBlock(adminTheme, ":root");
+  const webmailDarkMedia = extractCssBlock(webmailTheme, "@media (prefers-color-scheme: dark)");
+  const webmailDark = extractCssBlock(webmailDarkMedia, ":root");
+  const adminDark = extractCssBlock(adminTheme, ".theme-dark");
+
+  const coreMappings = [
+    ["bg", "bg"],
+    ["surface", "panel"],
+    ["surface-soft", "panel-soft"],
+    ["surface-muted", "panel-muted"],
+    ["surface-hover", "panel-hover"],
+    ["border", "border"],
+    ["divider", "divider"],
+    ["text-strong", "text-strong"],
+    ["text", "text"],
+    ["text-soft", "text-soft"],
+    ["muted", "muted"],
+    ["muted-soft", "muted-soft"],
+    ["ink", "ink"],
+    ["ink-hover", "ink-hover"],
+    ["ink-on", "ink-on"],
+    ["accent", "accent"],
+    ["accent-hover", "accent-hover"],
+    ["accent-soft", "accent-soft"],
+    ["accent-strong", "accent-strong"],
+    ["success", "success"],
+    ["success-soft", "success-soft"],
+    ["warning", "warning"],
+    ["warning-soft", "warning-soft"],
+    ["danger", "danger"],
+    ["danger-soft", "danger-soft"],
+  ] as const;
+
+  for (const [webmailName, adminName] of coreMappings) {
+    assert.equal(
+      readCssVariable(webmailLight, `lm-${webmailName}`),
+      readCssVariable(adminLight, `admin-${adminName}`),
+      `light token --lm-${webmailName} should match --admin-${adminName}`,
+    );
+    assert.equal(
+      readCssVariable(webmailDark, `lm-${webmailName}`),
+      readCssVariable(adminDark, `admin-${adminName}`),
+      `dark token --lm-${webmailName} should match --admin-${adminName}`,
+    );
+  }
+
+  for (const radius of ["panel", "card", "control", "control-sm", "pill"] as const) {
+    assert.equal(
+      readCssVariable(webmailLight, `lm-radius-${radius}`),
+      readCssVariable(adminLight, `admin-radius-${radius}`),
+      `radius --lm-radius-${radius} should match Admin`,
+    );
+  }
+});
+
+test("webmail mobile panes remain full-screen without desktop card gutters", () => {
+  const baseStyles = readWebmailSource("../src/styles.css");
+  const theme = readWebmailSource("../src/theme.css");
+  const baseMobile = extractCssBlock(baseStyles, "@media (max-width: 760px)");
+  const themeMobile = extractCssBlock(theme, "@media (max-width: 760px)");
+
+  assert.match(baseStyles, /html,\s*body,\s*#root\s*\{[^}]*height:\s*100%;[^}]*min-height:\s*100dvh;[^}]*overflow:\s*hidden;/s);
+  assert.match(baseStyles, /\.app-shell\s*\{[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/s);
+  assert.match(baseMobile, /\.app-shell\s*\{[^}]*grid-template-columns:\s*1fr;[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\);/s);
+  assert.match(baseMobile, /\.sidebar,\s*\.reader\s*\{[^}]*width:\s*100%;[^}]*height:\s*100%;/s);
+  assert.match(themeMobile, /\.app-shell\s*\{[^}]*padding:\s*0;[^}]*gap:\s*0;/s);
+  assert.match(themeMobile, /\.sidebar,\s*\.reader\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*0;/s);
+  assert.match(themeMobile, /\.reader\s*\{[^}]*padding:\s*0;[^}]*background:\s*var\(--lm-surface\);/s);
+  assert.match(themeMobile, /\.mail-detail\s*\{[^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*box-shadow:\s*none;/s);
+});
+
+test("HTML mail keeps a white rendering canvas in both light and dark themes", () => {
+  const theme = readWebmailSource("../src/theme.css");
+  const mailParser = readWebmailSource("../src/mailParser.ts");
+
+  assert.match(
+    theme,
+    /\.mail-body-shell\.mode-html,\s*\.mail-frame,\s*\.mail-html-view\s*\{[^}]*background:\s*#ffffff;/s,
+  );
+  assert.match(mailParser, /html\{[^}]*background:#fff;[^}]*\}body\{[^}]*background:#fff;/s);
 });
 
 test("mailbox cache key is isolated by API origin and mailbox identity", async () => {

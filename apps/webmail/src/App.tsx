@@ -12,6 +12,7 @@ import { applyRuntimeLocale, readInitialLocale, writeLocale, type AppLocale } fr
 import type { MailPage, ParsedMail, RemoteMailState, SafeSettings, ShareInfo, SharedMailbox, WebmailSession } from "./types";
 import { sanitizeVerificationCode } from "../../shared/verificationCode.ts";
 import "./styles.css";
+import "./theme.css";
 
 const PAGE_SIZE = 50;
 const AUTO_REFRESH_MS = 10_000;
