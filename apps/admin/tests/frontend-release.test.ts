@@ -456,6 +456,24 @@ test('a live credential clears its strike so intermittent rejections never accum
   }
 });
 
+test('cached pages paint from cache instead of reloading on every visit', () => {
+  const mailSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  const usersSource = readFileSync(new URL('../src/views/UsersView.tsx', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+
+  // The cache hydration and the list fetch both used to sit behind the remote
+  // read-state round trip, so a mailbox you had just read rendered empty until
+  // a skipCache request with a 6.5s timeout came back.
+  assert.doesNotMatch(mailSource, /if \(!remoteStateReady\) return;/, 'nothing may gate the cached first paint behind a network round trip');
+  assert.match(mailSource, /\}, \[currentListCacheKey, mode\]\);/, 'cache hydration must run on mount, not when the remote state settles');
+  assert.match(mailSource, /\}, \[mode, page, pageSize, address\]\);/, 'the list fetch must start immediately rather than queue behind the read state');
+  assert.match(mailSource, /mails\.length === 0 && !cacheHydratedRef\.current && !firstLoadSettledRef\.current \? <LoadingState \/>/, '"no mail" is a claim about the mailbox and must not stand in for "not looked yet"');
+  assert.doesNotMatch(usersSource, /Date\.now\(\) - cached\.savedAt > CACHE_TTL\.shortList\) return;/, 'discarding cached rows past 30s produced a blank spinner on every revisit');
+  assert.match(appSource, /visitedMenus\.forEach\(\(menu\) => rendered\.add\(menu\)\);/, 'visited swipe pages must stay mounted so returning to one does not refetch');
+  assert.match(indexCss, /\.mobile-swipe-page:not\(\.active\):not\(\.mobile-page-settling\)\s*\{[^}]*content-visibility:\s*auto;/s, 'keeping pages mounted must not cost paint while they sit offscreen');
+});
+
 test('a signed-in session survives closing the browser and only genuine idling expires it', () => {
   const storage = readFileSync(new URL('../src/lib/storage.ts', import.meta.url), 'utf8');
   const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');

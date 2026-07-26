@@ -143,7 +143,9 @@ export function UsersView({ request, notify, ask, globalQuery, cacheScope, onFil
   useEffect(() => {
     const cached = readJsonStorage<CachedUserList | null>(listCacheKey, null);
     if (!cached || cached.version !== USER_LIST_CACHE_VERSION || !Array.isArray(cached.users)) return;
-    if (!cached.savedAt || Date.now() - cached.savedAt > CACHE_TTL.shortList) return;
+    // Render the cached rows however old they are; fetchData below is already
+    // revalidating. Discarding them past 30s meant a blank spinner every time
+    // this page was revisited, unlike the address and mail lists next door.
     setUsers(cached.users);
     setCount(cached.count || cached.users.length);
     setRoles(Array.isArray(cached.roles) ? cached.roles : []);

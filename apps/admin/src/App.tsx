@@ -1097,12 +1097,17 @@ export default function App() {
   const isMailMenu = !useMobileSwipeDeck && (activeMenu === 'inbox' || activeMenu === 'sent');
   const visualActiveMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : mobileTransitionMenu || activeMenu;
   const swipeViewportWidth = typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360);
+  // Keep every visited swipe page mounted. Rendering only the adjacent three
+  // unmounted the rest, so swiping two pages away and back rebuilt the view
+  // from scratch and refetched everything. Five pages is a bounded cost, and
+  // the offscreen ones are already pushed out of view by transform.
   const mobileRenderedMenus = useMemo(() => {
     const rendered = new Set<MenuKey>(getAdjacentSwipeMenus(activeMenu));
+    visitedMenus.forEach((menu) => rendered.add(menu));
     if (pageSwipeTargetMenu) rendered.add(pageSwipeTargetMenu);
     if (mobileTransitionMenu) rendered.add(mobileTransitionMenu);
     return mobileSwipeMenus.filter((menu) => rendered.has(menu));
-  }, [activeMenu, mobileTransitionMenu, pageSwipeTargetMenu]);
+  }, [activeMenu, mobileTransitionMenu, pageSwipeTargetMenu, visitedMenus]);
   const mobileMailChromeMenu = (visualActiveMenu === 'inbox' || visualActiveMenu === 'sent')
     ? visualActiveMenu
     : (mobileTransitionMenu === 'inbox' || mobileTransitionMenu === 'sent')

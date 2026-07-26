@@ -486,6 +486,10 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   const deleteExitTimersRef = useRef<Record<string, number>>({});
   const fetchInFlightRef = useRef(false);
   const suppressNextFetchRef = useRef(false);
+  // "No mail" is a claim about the mailbox; before either the cache or the
+  // first response has spoken we only know we have not looked yet.
+  const cacheHydratedRef = useRef(false);
+  const firstLoadSettledRef = useRef(false);
   const addressDebounceRef = useRef<number | null>(null);
   const fetchAbortRef = useRef<AbortController | null>(null);
   const mobileLoadMoreSeqRef = useRef(0);
@@ -788,6 +792,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
       }
     } finally {
       if (seq === fetchSeqRef.current) {
+        firstLoadSettledRef.current = true;
         setLoading(false);
         setRefreshing(false);
         setRefreshCountdown(Math.max(15, autoSeconds));
@@ -912,23 +917,26 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     addressDebounceRef.current = id;
     return () => { window.clearTimeout(id); if (addressDebounceRef.current === id) addressDebounceRef.current = null; };
   }, [address, addressInput]);
+  // Show the cached list immediately. This used to wait for the remote read
+  // state - a skipCache request with a 6.5s timeout - so a mailbox you had just
+  // been reading rendered "no mail" until the network answered. Read marks are
+  // reapplied by the applyLocalState effect below as soon as they land.
   useEffect(() => {
-    if (!remoteStateReady) return;
     const cached = readJsonStorage<MailListCache | null>(currentListCacheKey, null);
     if (!cached || cached.version !== MAIL_LIST_CACHE_VERSION || !Array.isArray(cached.items)) return;
     setMails(applyLocalState(cached.items, mode, readIds, starredIds, readAllBefore));
     setCount(cached.count || cached.items.length);
     setMailListExhausted(cached.items.length < pageSize);
+    cacheHydratedRef.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentListCacheKey, mode, remoteStateReady]);
+  }, [currentListCacheKey, mode]);
   useEffect(() => {
-    if (!remoteStateReady) return;
     if (suppressNextFetchRef.current) {
       suppressNextFetchRef.current = false;
       return;
     }
     fetchData(false);
-  }, [mode, page, pageSize, address, remoteStateReady]);
+  }, [mode, page, pageSize, address]);
   useEffect(() => {
     if (mode !== 'inbox' || !addressRequest || consumedAddressRequestRef.current === addressRequest.requestId) return;
     consumedAddressRequestRef.current = addressRequest.requestId;
@@ -1720,7 +1728,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
           onScroll={handleMailListScroll}
           className="mail-list-viewport flex-1 overflow-y-auto px-2 pb-2 md:px-4 md:pb-4"
         >
-          {loading && mails.length === 0 ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={isSearchMode ? t('没有匹配结果', 'No matches') : t('暂无邮件', 'No mail')} /> : mailListEntries.map((entry) => (
+          {mails.length === 0 && !cacheHydratedRef.current && !firstLoadSettledRef.current ? <LoadingState /> : filtered.length === 0 ? <EmptyState title={isSearchMode ? t('没有匹配结果', 'No matches') : t('暂无邮件', 'No mail')} /> : mailListEntries.map((entry) => (
             entry.type === 'single' ? (
               <MailListItem
                 key={entry.key}

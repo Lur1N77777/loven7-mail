@@ -10925,6 +10925,16 @@ button.interface-preference-action:hover {
     pointer-events: auto;
   }
 
+  /* Visited pages now stay mounted so returning to one is instant. Skipping
+     rendering for the ones parked offscreen keeps that free; the active page
+     and any page being swiped toward must keep painting. */
+  @supports (content-visibility: auto) {
+    .mobile-swipe-page:not(.active):not(.mobile-page-settling) {
+      content-visibility: auto;
+      contain-intrinsic-size: 100vw 100vh;
+    }
+  }
+
   .mobile-swipe-page.mobile-mail-shell {
     padding-bottom: 0;
   }
