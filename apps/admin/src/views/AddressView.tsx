@@ -1892,7 +1892,7 @@ export function AddressView({
               <UserRound size={15} className="toolbar-icon" />
               <span className="user-filter-copy">
                 <span className="user-filter-label">{selectedUserRecord?.user_email || effectiveUserEmail || t('全部用户', 'All users')}</span>
-                <span className="user-filter-count">{effectiveUserFilter ? locale === 'en-US' ? `${selectedUserRecord?.address_count ?? count ?? 0} addresses` : `${selectedUserRecord?.address_count ?? count ?? 0} 个地址` : userTotalLabel}</span>
+                {(effectiveUserFilter || usersLoading || displayedUserTotal > 0) && <span className="user-filter-count">{effectiveUserFilter ? locale === 'en-US' ? `${selectedUserRecord?.address_count ?? count ?? 0} addresses` : `${selectedUserRecord?.address_count ?? count ?? 0} 个地址` : userTotalLabel}</span>}
               </span>
               <ChevronDown size={15} className={cls('user-filter-chevron', userDropdownOpen && 'rotate-180')} />
             </button>

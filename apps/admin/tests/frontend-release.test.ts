@@ -93,6 +93,19 @@ test('mobile pages clear the floating dock and mail chrome renders calm details'
   assert.match(productCss, /\.frontend-base-controls > \.btn-primary\s*\{[^}]*align-self:\s*flex-end;/s, 'the settings save action should sit compact at the row end instead of stretching full width');
 });
 
+test('the user filter trigger reads as one row inside its fixed-height control', () => {
+  const themeCss = readFileSync(new URL('../src/theme.css', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/views/AddressView.tsx', import.meta.url), 'utf8');
+
+  // A stacked label+count needed ~32px of line boxes in the 38px control's
+  // ~26px content box, so overflow:hidden sliced the count in half.
+  assert.match(themeCss, /\.user-filter-copy\s*\{[^}]*flex-direction:\s*row\s*!important;/s, 'label and count must share one line');
+  assert.match(themeCss, /\.user-filter-copy\s*\{[^}]*justify-content:\s*flex-start\s*!important;/s, 'on a row the old vertical-centering justify-content would centre the copy horizontally, away from the icon');
+  assert.match(themeCss, /\.user-filter-count\s*\{[^}]*flex:\s*0 0 auto;/s, 'the count must never shrink; the name truncates instead');
+  assert.match(themeCss, /@media \(max-width: 767px\)\s*\{\s*body \.address-view-shell \.address-toolbar \.user-filter-count\s*\{\s*display:\s*block\s*!important;/s, 'phones dropped the count only because it was a second line; one row fits both breakpoints');
+  assert.match(source, /\{\(effectiveUserFilter \|\| usersLoading \|\| displayedUserTotal > 0\) && <span className="user-filter-count">/, 'the count must not render when it would repeat the label verbatim');
+});
+
 test('the share manager modal styles its own portaled scope', () => {
   const source = readFileSync(new URL('../src/views/AddressView.tsx', import.meta.url), 'utf8');
   const workspaceCss = readFileSync(new URL('../src/workspace-pages.css', import.meta.url), 'utf8');

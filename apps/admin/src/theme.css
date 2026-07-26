@@ -940,6 +940,56 @@ html.theme-dark body .mobile-mail-detail .brand-avatar-fallback > span {
   color: #fff !important;
 }
 
+/* ---------------------------------------------------------------------------
+   Address toolbar user filter — one readable row.
+
+   The label and count used to stack: 4px block padding + a 15px label line
+   and a 13px count line need 32px, but the 38px control only offers ~26px of
+   content box, so `overflow: hidden` sliced the count through the middle.
+   Horizontal room is plentiful here, so the two read as one line: the name
+   truncates, the count never shrinks.
+   ------------------------------------------------------------------------- */
+
+body .address-view-shell .address-toolbar .user-filter-copy {
+  flex-direction: row !important;
+  /* the stacked layout used justify-content for vertical centering; on a row
+     that axis flips, so the copy must start at the icon and let the trigger's
+     own align-items do the vertical centering. */
+  justify-content: flex-start !important;
+  align-self: center !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+  padding-block: 0 !important;
+  line-height: normal !important;
+}
+
+body .address-view-shell .address-toolbar .user-filter-label {
+  min-width: 0;
+  flex: 0 1 auto;
+  line-height: 18px !important;
+}
+
+body .address-view-shell .address-toolbar .user-filter-count {
+  flex: 0 0 auto;
+  margin-top: 0 !important;
+  line-height: 18px !important;
+}
+
+body .address-view-shell .address-toolbar .user-filter-count::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--admin-muted-soft);
+}
+
+/* Phones dropped the count when it was a second line competing for height.
+   On one row it costs ~60px of a 360px control, so both breakpoints can read
+   the same thing. */
+@media (max-width: 767px) {
+  body .address-view-shell .address-toolbar .user-filter-count {
+    display: block !important;
+  }
+}
+
 /* keep every control inside buttons from wrapping when English labels grow */
 body :is(.product-button, .btn-primary, .btn-secondary, .btn-danger, .cap-state, .card-chip, .rules-nav-count) {
   white-space: nowrap !important;
