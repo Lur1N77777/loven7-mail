@@ -53,6 +53,17 @@ body :is(.address-workspace, .users-workspace, .compose-workspace) :is(.btn-prim
   line-height: 1.45;
 }
 
+.address-filter-status-copy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.address-filter-status .filter-inline-clear {
+  flex: 0 0 auto;
+}
+
 body .address-filter-status .filter-inline-clear {
   border: 0 !important;
   border-bottom: 1px solid color-mix(in srgb, var(--workspace-accent) 45%, transparent) !important;
@@ -375,17 +386,149 @@ body .address-workspace .mobile-address-more.active {
 }
 
 .address-mobile-list {
-  padding: 0 16px;
+  display: block;
+  padding: 0 10px 5px;
 }
 
 body .address-workspace .mobile-address-card {
   margin: 0 !important;
-  padding: 14px 0 !important;
+  padding: 12px 0 !important;
   border: 0 !important;
-  border-bottom: 1px solid var(--workspace-line-soft) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--workspace-line-soft) 58%, transparent) !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
+}
+
+body .address-workspace .mobile-address-card:last-child {
+  border-bottom: 0 !important;
+}
+
+body .address-workspace .mobile-address-head {
+  display: flex;
+  min-width: 0;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+body .address-workspace .mobile-address-copy {
+  flex: 1 1 auto;
+}
+
+body .address-workspace .mobile-address-card .address-strong {
+  width: 100%;
+  color: var(--workspace-ink) !important;
+  font-size: 14px !important;
+  font-weight: 560 !important;
+  line-height: 19px !important;
+}
+
+body .address-workspace .mobile-address-meta {
+  display: block !important;
+  min-width: 0;
+  margin-top: 3px !important;
+  color: var(--workspace-muted) !important;
+  font-size: 10.5px !important;
+  font-weight: 430 !important;
+  line-height: 15px !important;
+}
+
+body .address-workspace .mobile-address-meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .address-workspace .mobile-address-stats {
+  display: flex !important;
+  align-items: center;
+  gap: 14px !important;
+  margin-top: 7px !important;
+  border: 0 !important;
+  padding: 0 !important;
+  color: var(--workspace-muted) !important;
+  font-size: 11px !important;
+  line-height: 15px !important;
+}
+
+body .address-workspace .mobile-address-stats strong {
+  color: var(--workspace-ink-soft);
+  font-weight: 560;
+}
+
+body .address-workspace .mobile-address-stats span:last-child {
+  max-width: none !important;
+  margin-left: 0 !important;
+  text-align: left !important;
+}
+
+.mobile-address-action-menu.mobile-address-action-menu-portal {
+  position: fixed !important;
+  inset: auto 12px calc(76px + env(safe-area-inset-bottom)) 12px !important;
+  z-index: 140 !important;
+  width: auto !important;
+  max-height: min(440px, calc(100dvh - 100px - env(safe-area-inset-bottom))) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  border: 1px solid var(--admin-divider) !important;
+  border-radius: 12px !important;
+  background: var(--admin-panel) !important;
+  padding: 7px !important;
+  box-shadow: 0 18px 44px rgba(18, 20, 24, .16), 0 2px 8px rgba(18, 20, 24, .08) !important;
+  transform-origin: bottom center !important;
+}
+
+.mobile-address-action-head {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 1px 2px 6px 9px;
+}
+
+.mobile-address-action-head > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--admin-text);
+  font-size: 12px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body .mobile-address-action-menu .mobile-address-action-close {
+  width: 30px !important;
+  min-width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  flex: 0 0 30px;
+  justify-content: center !important;
+  border-radius: 7px !important;
+  padding: 0 !important;
+}
+
+.mobile-address-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+body .mobile-address-action-grid > button {
+  min-height: 38px;
+  border: 0 !important;
+  border-radius: 8px !important;
+  padding: 8px 9px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+body .mobile-address-action-grid > button.danger {
+  margin: 0 !important;
+  border: 0 !important;
+  background: color-mix(in srgb, var(--admin-danger) 8%, transparent) !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -833,10 +976,38 @@ body .compose-workspace .compose-send-btn {
 }
 
 @media (max-width: 767px) {
+  body .address-view-shell.address-workspace {
+    padding: 0 !important;
+  }
+
+  body .address-view-shell.address-workspace > .product-page {
+    width: 100%;
+    gap: 12px;
+    padding: 16px 20px calc(88px + env(safe-area-inset-bottom)) !important;
+  }
+
+  body .address-workspace .page-head {
+    padding-inline: 4px;
+  }
+
+  body .address-workspace .address-page-actions {
+    display: flex !important;
+    width: 100%;
+    justify-content: stretch;
+    grid-template-columns: none !important;
+  }
+
+  body .address-workspace .address-page-actions > button {
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
+  }
+
   body .address-workspace .address-toolbar {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) 36px !important;
     gap: 8px !important;
-    padding: 10px 14px 12px !important;
+    padding: 9px !important;
   }
 
   body .address-workspace .address-toolbar :where(.toolbar-field, .user-filter-trigger, .toolbar-action),
@@ -848,6 +1019,10 @@ body .compose-workspace .compose-send-btn {
 
   body .address-workspace .address-toolbar .user-filter-dropdown {
     grid-column: 1 / 4;
+  }
+
+  body .address-workspace .address-workspace-surface {
+    border-radius: var(--workspace-radius) !important;
   }
 
   body .address-workspace .address-toolbar .address-search-field {
@@ -932,7 +1107,7 @@ body .compose-workspace .compose-send-btn {
   }
 
   body .address-workspace .address-page-actions > button {
-    flex: 1;
+    flex: 1 1 0;
   }
 
   body .users-workspace .users-toolbar {
@@ -980,6 +1155,18 @@ body .address-workspace .user-filter-trigger {
   overflow: hidden !important;
 }
 
+body .address-workspace .user-filter-trigger.has-filter {
+  padding-right: 40px !important;
+}
+
+body .address-workspace .user-filter-trigger.has-filter .user-filter-chevron {
+  display: none !important;
+}
+
+body .address-workspace .user-filter-dropdown .user-filter-clear {
+  right: 7px !important;
+}
+
 body .address-workspace .user-filter-copy {
   align-self: stretch;
   justify-content: center !important;
@@ -1012,5 +1199,11 @@ body .address-workspace .user-filter-count {
   body .address-view-shell .address-toolbar .popover-select.address-sort-select .popover-select-trigger {
     min-height: 36px !important;
     height: 36px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .mobile-address-action-menu.mobile-address-action-menu-portal {
+    display: none !important;
   }
 }

@@ -1491,6 +1491,13 @@ export default function App() {
     }
   }, [assertRunActive, copy, getRunForSession, isRunActive, loading, mails, session, showRefreshFeedback, showToast, syncIncremental]);
 
+  const latestRefreshRef = useRef(refresh);
+  useEffect(() => {
+    latestRefreshRef.current = refresh;
+  }, [refresh]);
+
+  // The interval reads refresh through a ref so mail-list updates do not tear
+  // down and restart the timer, which kept drifting the 10s cadence.
   useEffect(() => {
     if (autoRefreshTimerRef.current) {
       window.clearInterval(autoRefreshTimerRef.current);
@@ -1500,7 +1507,7 @@ export default function App() {
 
     autoRefreshTimerRef.current = window.setInterval(() => {
       if (document.hidden) return;
-      void refresh({ silent: true });
+      void latestRefreshRef.current({ silent: true });
     }, AUTO_REFRESH_MS);
 
     return () => {
@@ -1509,7 +1516,7 @@ export default function App() {
         autoRefreshTimerRef.current = null;
       }
     };
-  }, [autoRefreshEnabled, refresh, refreshCycleKey, session]);
+  }, [autoRefreshEnabled, refreshCycleKey, session]);
 
   const loadMore = useCallback(async () => {
     if (!session || loading === "sync") return;

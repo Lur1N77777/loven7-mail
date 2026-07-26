@@ -1,20 +1,20 @@
 const FALLBACK_AVATAR_COLORS = [
-  '#64748B', // slate
-  '#58778A', // steel blue
-  '#5F7D75', // muted teal
-  '#687A5D', // sage
-  '#7C7659', // olive
-  '#8A6F68', // dusty rose
-  '#7B6F8E', // muted violet
-  '#6D788F', // blue gray
-  '#806B7A', // mauve
-  '#6D7C72', // eucalyptus
-  '#597B7E', // muted cyan
-  '#74805E', // moss
-  '#846B76', // muted berry
-  '#667390', // muted indigo
-  '#8B6E78', // dusty pink
-  '#627E68', // muted green
+  '#A95769', // raspberry macaron
+  '#527AA2', // powder blue
+  '#4B7F6B', // mint macaron
+  '#786397', // lavender
+  '#A35F6C', // peach macaron
+  '#56795E', // pistachio
+  '#98597F', // berry cream
+  '#417F8C', // aqua macaron
+  '#A65F6C', // rose cream
+  '#607796', // periwinkle
+  '#4D7F5E', // matcha cream
+  '#5D73A5', // blueberry macaron
+  '#9B6572', // mauve cream
+  '#70688F', // violet cream
+  '#467480', // blue mint
+  '#5E7D75', // eucalyptus
 ] as const;
 
 export function getFallbackAvatarColor(sender?: string, senderName?: string): string {

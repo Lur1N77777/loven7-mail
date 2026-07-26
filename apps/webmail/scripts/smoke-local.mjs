@@ -330,6 +330,7 @@ async function loginWithMockMailbox(ws) {
   await click(ws, '.login-button');
   await waitUntil(ws, `document.querySelectorAll('.mail-row').length >= 2`);
   await waitUntil(ws, `document.querySelector('.mail-html-view')?.srcdoc?.includes('HTML rendered cleanly')`);
+  await waitUntil(ws, `!!document.querySelector('.brand-avatar-fallback')`);
 }
 
 async function captureVisualSnapshots() {
@@ -424,6 +425,9 @@ async function run() {
   const inboxMetrics = JSON.parse(await evaluate(login, `JSON.stringify((() => {
     const address = document.querySelector('.address-copy-text');
     const addressStyle = address ? getComputedStyle(address) : null;
+    const addressButtonRect = document.querySelector('.address-copy-button')?.getBoundingClientRect();
+    const toolbarRect = document.querySelector('.mail-list-header .mail-toolbar')?.getBoundingClientRect();
+    const addressRect = address?.getBoundingClientRect();
     return {
     xOverflow: document.documentElement.scrollWidth > innerWidth + 1,
     rows: document.querySelectorAll('.mail-row').length,
@@ -438,6 +442,8 @@ async function run() {
     addressFits: !!address && address.scrollWidth <= address.clientWidth + 1,
     addressWhiteSpace: addressStyle?.whiteSpace || '',
     addressLines: address && addressStyle ? Math.round(address.getBoundingClientRect().height / Number.parseFloat(addressStyle.lineHeight)) : 0,
+    addressContentCenterDelta: addressButtonRect && addressRect ? Math.abs((addressButtonRect.top + addressButtonRect.height / 2) - (addressRect.top + addressRect.height / 2)) : 999,
+    controlCenterDelta: addressButtonRect && toolbarRect ? Math.abs((addressButtonRect.top + addressButtonRect.height / 2) - (toolbarRect.top + toolbarRect.height / 2)) : 999,
     emptyHuge: false
   }})())`));
   assert(!inboxMetrics.xOverflow, '用户站收件箱不应横向溢出');
@@ -450,6 +456,7 @@ async function run() {
   assert(!inboxMetrics.signedInBrandLogo, `登录后的邮箱左栏不应继续堆叠品牌 Logo: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.mapleFontReady && inboxMetrics.uiFontFamily.includes('Loven7 Maple Mono'), `Webmail 应实际加载并使用 Maple Mono 中英文字体: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.addressText === 'rj6ckfgq8lb@c.loven.qzz.io' && inboxMetrics.addressFits && inboxMetrics.addressWhiteSpace === 'nowrap' && inboxMetrics.addressLines === 1, `常见长度邮箱必须完整单行显示: ${JSON.stringify(inboxMetrics)}`);
+  assert(inboxMetrics.addressContentCenterDelta <= 1 && inboxMetrics.controlCenterDelta <= 1, `邮箱地址内容必须与右侧刷新控件垂直居中: ${JSON.stringify(inboxMetrics)}`);
   const initialTheme = await evaluate(login, `document.documentElement.dataset.theme`);
   assert(initialTheme === 'light' || initialTheme === 'dark', `页面应在首屏应用明确主题: ${initialTheme}`);
   await click(login, '.sidebar-header-actions .webmail-theme-toggle');
@@ -462,6 +469,22 @@ async function run() {
   })`));
   assert(themeToggleMetrics.stored === themeToggleMetrics.theme, `手动主题应立即持久化: ${JSON.stringify(themeToggleMetrics)}`);
   assert(themeToggleMetrics.label, `主题按钮必须提供清晰的辅助说明: ${JSON.stringify(themeToggleMetrics)}`);
+  const fallbackAvatarMetrics = JSON.parse(await evaluate(login, `JSON.stringify((() => {
+    const avatar = document.querySelector('.brand-avatar-fallback');
+    const style = avatar ? getComputedStyle(avatar) : null;
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = style?.getPropertyValue('--brand-avatar-fallback-bg') || '';
+    document.body.appendChild(probe);
+    const tokenBackground = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return {
+      exists: !!avatar,
+      background: style?.backgroundColor || '',
+      tokenBackground,
+      color: style?.color || ''
+    };
+  })())`));
+  assert(fallbackAvatarMetrics.exists && fallbackAvatarMetrics.background === fallbackAvatarMetrics.tokenBackground && fallbackAvatarMetrics.color === 'rgb(255, 255, 255)', `深浅色模式都必须保留发件人马卡龙头像与白色首字母: ${JSON.stringify(fallbackAvatarMetrics)}`);
   await click(login, '.sidebar-header-actions .webmail-theme-toggle');
   await waitUntil(login, `document.documentElement.dataset.theme === '${initialTheme}'`);
 
@@ -520,15 +543,22 @@ async function run() {
     const card = document.querySelector('.mail-detail-card');
     const header = document.querySelector('.mail-detail-header');
     const topbar = document.querySelector('.mail-detail-topbar');
+    const bodyShell = document.querySelector('.mail-detail-body.mode-html');
+    const htmlFrame = bodyShell?.querySelector('.mail-html-view');
     const cardRect = card?.getBoundingClientRect();
     const headerRect = header?.getBoundingClientRect();
+    const shellRect = bodyShell?.getBoundingClientRect();
+    const frameRect = htmlFrame?.getBoundingClientRect();
     return {
       topbarPosition: topbar ? getComputedStyle(topbar).position : '',
-      headerGap: cardRect && headerRect ? headerRect.top - cardRect.top : 999
+      headerGap: cardRect && headerRect ? headerRect.top - cardRect.top : 999,
+      framePosition: htmlFrame ? getComputedStyle(htmlFrame).position : '',
+      frameFillDelta: shellRect && frameRect ? Math.max(Math.abs(shellRect.height - frameRect.height), Math.abs(shellRect.bottom - frameRect.bottom)) : 999
     };
   })())`));
   assert(desktopReaderMetrics.topbarPosition === 'absolute' && desktopReaderMetrics.headerGap <= 32, `桌面详情工具栏不应占据标题上方整行空白: ${JSON.stringify(desktopReaderMetrics)}`);
-  results.push({ name: 'webmail-login-inbox', loginMetrics, inboxMetrics, themeToggleMetrics, codeButtonMetrics, mailInteractionMetrics, localeMenu, desktopReaderMetrics });
+  assert(desktopReaderMetrics.framePosition === 'absolute' && desktopReaderMetrics.frameFillDelta <= 2, `HTML 邮件 iframe 必须铺满整个剩余阅读区: ${JSON.stringify(desktopReaderMetrics)}`);
+  results.push({ name: 'webmail-login-inbox', loginMetrics, inboxMetrics, themeToggleMetrics, fallbackAvatarMetrics, codeButtonMetrics, mailInteractionMetrics, localeMenu, desktopReaderMetrics });
 
   const empty = await openApp('/');
   await setInput(empty, 'input[type="email"]', 'empty@example.test');

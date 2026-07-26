@@ -29,7 +29,40 @@ test('address management keeps floating controls visible and reports refresh pro
   assert.match(source, /aria-busy=\{loading\}/, 'refresh control must expose its active request state');
   assert.match(source, /className=\{cls\(loading && 'animate-spin'\)\}/, 'refresh icon must spin even when the current address list is empty');
   assert.doesNotMatch(source, /\(loading \|\| usersLoading\) && data\.length > 0 && 'animate-spin'/, 'refresh feedback must not depend on pre-existing rows');
+  assert.match(source, /mobile-address-action-menu mobile-address-action-menu-portal/, 'mobile address actions must render through the viewport-level portal');
+  assert.match(workspaceCss, /\.mobile-address-action-menu\.mobile-address-action-menu-portal\s*\{[^}]*position:\s*fixed\s*!important;[^}]*max-height:/s, 'mobile actions must stay inside short viewports');
+  assert.match(workspaceCss, /\.user-filter-trigger\.has-filter\s*\{[^}]*padding-right:\s*40px\s*!important;/s, 'selected user text must reserve space for its clear action');
   assert.match(workspaceCss, /body \.address-workspace :is\(\.address-workspace-surface, \.sender-access-shell\)\s*\{[^}]*border-radius:\s*var\(--workspace-radius\)\s*!important;/s, 'address data and sender access shells must share the workspace radius');
+  assert.match(workspaceCss, /body \.address-view-shell\.address-workspace > \.product-page\s*\{[^}]*width:\s*100%;[^}]*padding:\s*16px 20px/s, 'mobile address content should use the normal page flow with restrained side padding');
+  assert.match(workspaceCss, /body \.address-workspace \.address-page-actions > button\s*\{[^}]*flex:\s*1 1 0;[^}]*justify-content:\s*center;[^}]*text-align:\s*center;/s, 'mobile address actions should fill the row while centering their own labels');
+  assert.match(workspaceCss, /body \.address-workspace \.mobile-address-card\s*\{[^}]*border-radius:\s*0\s*!important;[^}]*background:\s*transparent\s*!important;[^}]*box-shadow:\s*none\s*!important;/s, 'mobile address rows should remain flat instead of becoming tinted cards');
+});
+
+test('mobile navigation uses one immediate active surface and statistics keeps refresh compact', () => {
+  const shellSource = readFileSync(new URL('../src/components/Shell.tsx', import.meta.url), 'utf8');
+  const statsSource = readFileSync(new URL('../src/views/DashboardView.tsx', import.meta.url), 'utf8');
+  const productCss = readFileSync(new URL('../src/product-pages.css', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(shellSource, /mobile-nav-progress-pill/, 'a second animated navigation pill would recreate the trailing ghost');
+  assert.match(statsSource, /className="stats-mobile-refresh"/, 'mobile statistics should retain refresh as a compact icon action');
+  assert.match(productCss, /\.admin-stats-view-shell \.stats-desktop-refresh\s*\{[^}]*display:\s*none;/s, 'the full-width statistics refresh action must be hidden on phones');
+});
+
+test('mobile chrome drops per-frame backdrop blur and clips offscreen mail work', () => {
+  const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const themeCss = readFileSync(new URL('../src/theme.css', import.meta.url), 'utf8');
+  const workspaceCss = readFileSync(new URL('../src/workspace-pages.css', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(indexCss, /\.mobile-nav[^{]*\{[^}]*backdrop-filter:\s*blur/s, 'the fixed bottom navigation must not re-blur the swiping deck on every frame');
+  assert.doesNotMatch(indexCss, /\.pagination-floating[^{]*\{[^}]*backdrop-filter:\s*blur/s, 'the floating pagination pill must not re-blur the scrolling table beneath it');
+  assert.doesNotMatch(indexCss, /\.mobile-detail-topbar[^{]*\{[^}]*backdrop-filter:\s*blur/s, 'the mobile mail detail topbar must not re-blur the scrolling message');
+  assert.doesNotMatch(indexCss, /\.address-bulk-(?:bar|menu-surface)[^{]*\{[^}]*backdrop-filter:\s*blur/s, 'floating bulk controls must not re-blur the scrolling address list');
+  assert.doesNotMatch(indexCss, /\.mobile-bulk-fab[^{]*\{[^}]*backdrop-filter:\s*blur/s, 'the bulk fab must not re-blur the scrolling address list');
+  assert.doesNotMatch(indexCss, /\.mobile-(?:more-menu|address-action-menu|detail-action-menu)[^{]*\{[^}]*backdrop-filter:\s*blur/s, 'mobile popover menus must stay blur-free over near-opaque surfaces');
+  assert.doesNotMatch(workspaceCss, /mobile-address-action-menu-portal[^{]*\{[^}]*backdrop-filter/s, 'the viewport-level address action portal must rely on its opaque panel instead of blur');
+  assert.match(themeCss, /body \.mobile-nav\s*\{[^}]*color-mix\(in srgb, var\(--admin-panel\) 96%, transparent\)/s, 'the bottom navigation compensates removed blur with a near-opaque panel');
+  assert.match(indexCss, /\.mobile-swipe-page\s*\{[^}]*contain:\s*layout paint;/s, 'swipe deck pages must isolate layout and paint so background refreshes stay off the gesture path');
+  assert.match(indexCss, /@supports \(content-visibility: auto\)\s*\{\s*@media \(max-width: 900px\)\s*\{\s*\.mail-list-item\s*\{[^}]*content-visibility:\s*auto;[^}]*contain-intrinsic-size:/s, 'offscreen mobile mail rows must skip layout and paint');
 });
 
 test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
@@ -200,12 +233,15 @@ test('admin locale changes stay outside account and mail request dependencies', 
 
 test('admin uses white only for real brand icons and deterministic color for initials', () => {
   const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const avatarColors = readFileSync(new URL('../../shared/avatarColor.ts', import.meta.url), 'utf8');
   const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const shellSource = readFileSync(new URL('../src/components/Shell.tsx', import.meta.url), 'utf8');
   const workspaceStyles = readFileSync(new URL('../src/workspace-pages.css', import.meta.url), 'utf8');
   assert.match(styles, /\.mobile-mail-detail \.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
   assert.match(styles, /\.brand-avatar-with-icon\s*\{[^}]*background:\s*#fff\s*!important;/s);
   assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#fff\s*!important;[^}]*font-size:\s*calc\(var\(--brand-avatar-size\) \* \.456\);[^}]*font-weight:\s*560/s);
+  assert.match(avatarColors, /#A95769[\s\S]*#527AA2[\s\S]*#4B7F6B[\s\S]*#786397/, 'fallback avatars should use the shared macaron palette');
+  assert.doesNotMatch(avatarColors, /#64748B|#58778A|#7C7659/, 'old gray and olive avatar colors should not return');
   assert.match(appSource, /globalRefreshing/);
   assert.match(shellSource, /className=\{cls\('sidebar-mini-btn sidebar-tool-btn', refreshing && 'is-refreshing'\)\}/);
   assert.match(shellSource, /<RefreshCw size=\{15\} className=\{cls\(refreshing && 'animate-spin'\)\}/);
@@ -289,9 +325,13 @@ test('one-click address links keep JWT out of the HTTP query', () => {
   assert.equal(new URL(url).search, '');
 });
 
-test('only explicit 401 and 403 responses invalidate an account session', () => {
+test('only authentication-specific 401 and 403 responses invalidate an account session', () => {
   assert.equal(isAuthenticationFailure(new UserApiError(401, 'expired')), true);
   assert.equal(isAuthenticationFailure(new UserApiError(403, 'forbidden')), true);
+  assert.equal(isAuthenticationFailure({ status: 403, body: JSON.stringify({ error: { code: 'invalid_admin_password' } }) }), true);
+  assert.equal(isAuthenticationFailure({ status: 403, body: JSON.stringify({ error: { code: 'not_admin' } }) }), true);
+  assert.equal(isAuthenticationFailure({ status: 403, body: JSON.stringify({ error: { code: 'webhook_disabled' } }) }), false);
+  assert.equal(isAuthenticationFailure({ status: 403, body: 'Webhook is disabled' }), false);
   assert.equal(isAuthenticationFailure(new UserApiError(500, 'temporary outage')), false);
   assert.equal(isAuthenticationFailure(new TypeError('Failed to fetch')), false);
 });
@@ -321,7 +361,7 @@ test('account login does not retry plaintext after a backend failure', async () 
   }
 });
 
-test('admin API boundaries report runtime 401/403 but preserve sessions for network and 5xx failures', async () => {
+test('admin API boundaries report only authentication failures and preserve sessions for business 403 responses', async () => {
   const originalFetch = globalThis.fetch;
   const observedStatuses: number[] = [];
   const unsubscribe = subscribeAuthenticationFailures((error) => {
@@ -330,12 +370,13 @@ test('admin API boundaries report runtime 401/403 but preserve sessions for netw
   globalThis.fetch = (async (input: string | URL | Request) => {
     const pathname = new URL(String(input), 'https://api.example').pathname;
     if (pathname === '/network-error') throw new TypeError('network unavailable');
-    const status = pathname === '/unauthorized'
-      ? 401
-      : pathname === '/forbidden' || pathname === '/user_api/settings'
-        ? 403
-        : 503;
-    return new Response(JSON.stringify({ message: `status ${status}` }), {
+    const status = pathname === '/unauthorized' ? 401 : pathname === '/server-error' ? 503 : 403;
+    const body = pathname === '/invalid-admin'
+      ? { error: { code: 'invalid_admin_password', message: 'invalid administrator credential' } }
+      : pathname === '/user_api/settings'
+        ? { message: 'account token expired' }
+        : { error: { code: 'webhook_disabled', message: 'Webhook is disabled' } };
+    return new Response(JSON.stringify(status === 401 || status === 503 ? { message: `status ${status}` } : body), {
       status,
       headers: { 'content-type': 'application/json' },
     });
@@ -344,6 +385,7 @@ test('admin API boundaries report runtime 401/403 but preserve sessions for netw
     const client = createApiClient(() => 'https://api.example', () => ({ userAccessToken: 'active-token' }));
     await assert.rejects(client.request('/unauthorized', { skipCache: true }), (error: any) => error?.status === 401);
     await assert.rejects(client.request('/forbidden', { skipCache: true }), (error: any) => error?.status === 403);
+    await assert.rejects(client.request('/invalid-admin', { skipCache: true }), (error: any) => error?.status === 403);
     await assert.rejects(client.request('/server-error', { skipCache: true }), (error: any) => error?.status === 503);
     await assert.rejects(client.request('/network-error', { skipCache: true }), /network unavailable/);
     await assert.rejects(fetchUserProfile('https://api.example', 'account-token'), (error: any) => error?.status === 403);

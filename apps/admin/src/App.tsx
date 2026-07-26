@@ -1098,12 +1098,6 @@ export default function App() {
   const isMailMenu = !useMobileSwipeDeck && (activeMenu === 'inbox' || activeMenu === 'sent');
   const visualActiveMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : mobileTransitionMenu || activeMenu;
   const swipeViewportWidth = typeof window === 'undefined' ? 390 : Math.max(window.innerWidth, 360);
-  const navSwipeTargetMenu = useMobileSwipeDeck ? (pageSwipeTargetMenu || mobileTransitionMenu) : null;
-  const navUsesLiveProgress = Boolean(useMobileSwipeDeck && pageSwipeTargetMenu);
-  const navSwipeDistance = navSwipeTargetMenu
-    ? Math.max(1, Math.abs(getCircularOffset(navSwipeTargetMenu, activeMenu))) * Math.max(swipeViewportWidth, 1)
-    : Math.max(swipeViewportWidth, 1);
-  const navSwipeProgress = navSwipeTargetMenu ? Math.min(1, Math.abs(pageDragX) / navSwipeDistance) : 0;
   const mobileRenderedMenus = useMemo(() => {
     const rendered = new Set<MenuKey>(getAdjacentSwipeMenus(activeMenu));
     if (pageSwipeTargetMenu) rendered.add(pageSwipeTargetMenu);
@@ -1112,8 +1106,8 @@ export default function App() {
   }, [activeMenu, mobileTransitionMenu, pageSwipeTargetMenu]);
   const mobileMailChromeMenu = (visualActiveMenu === 'inbox' || visualActiveMenu === 'sent')
     ? visualActiveMenu
-    : (navSwipeTargetMenu === 'inbox' || navSwipeTargetMenu === 'sent')
-      ? navSwipeTargetMenu
+    : (mobileTransitionMenu === 'inbox' || mobileTransitionMenu === 'sent')
+      ? mobileTransitionMenu
       : null;
   useLayoutEffect(() => {
     if (typeof document === 'undefined') return;
@@ -1227,11 +1221,6 @@ export default function App() {
             visualActiveMenu={visualActiveMenu}
             setActiveMenu={navigateMenu}
             locale={locale}
-            swipeTargetMenu={navSwipeTargetMenu}
-            swipeProgress={navSwipeProgress}
-            useLiveProgress={navUsesLiveProgress}
-            settling={pageSettling}
-            settleMs={pageSettleMs}
           />
         </main>
       </div>

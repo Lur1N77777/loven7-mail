@@ -107,22 +107,22 @@
 .mail-list-control-row {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   padding-bottom: 9px;
   border-bottom: 1px solid var(--lm-divider);
 }
 
 .mail-list-header .account-address-row {
-  min-height: 32px;
+  min-height: 34px;
   margin: 0;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .mail-list-header .address-copy-button {
-  min-height: 32px;
-  align-items: flex-start;
-  padding: 3px 5px;
+  min-height: 34px;
+  align-items: center;
+  padding: 0 5px;
   border-radius: var(--lm-radius-control-sm);
   color: var(--lm-text);
   font-size: 13px;
@@ -875,6 +875,20 @@
 .mail-detail-body .mail-html-view {
   background: #ffffff;
   color-scheme: light;
+}
+
+.mail-detail-body.mail-body-shell.mode-html {
+  position: relative;
+  overflow: hidden;
+}
+
+.mail-detail-body.mode-html .mail-frame,
+.mail-detail-body.mode-html .mail-html-view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
 }
 
 @media (min-width: 1440px) {

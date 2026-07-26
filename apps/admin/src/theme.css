@@ -594,7 +594,7 @@ html.theme-dark body #root .locale-mode-toggle:hover {
 
 body .mobile-nav {
   border-top: 1px solid var(--admin-divider) !important;
-  background: color-mix(in srgb, var(--admin-panel) 92%, transparent) !important;
+  background: color-mix(in srgb, var(--admin-panel) 96%, transparent) !important;
   box-shadow: 0 -12px 32px rgba(50, 38, 26, 0.07) !important;
 }
 
@@ -613,7 +613,7 @@ body .mobile-nav-item.active {
 }
 
 body .mobile-nav .mobile-nav-progress-pill {
-  background: var(--admin-accent-soft) !important;
+  display: none !important;
 }
 
 body .mobile-more-item {

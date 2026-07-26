@@ -1030,7 +1030,7 @@ export function AddressView({
     if (mobileActionMenuId === null) return undefined;
     const closeOnOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('.mobile-address-menu-root')) return;
+      if (target?.closest('.mobile-address-menu-root') || target?.closest('.mobile-address-action-menu')) return;
       closeMobileActionMenu();
     };
     const closeOnKey = (event: globalThis.KeyboardEvent) => {
@@ -1767,22 +1767,13 @@ export function AddressView({
   };
   const renderMobileAddressCard = (row: AddressRecord) => {
     const menuOpen = mobileActionMenuId === row.id;
-    const menuClosing = closingMobileActionMenuId === row.id;
-    const menuVisible = menuOpen || menuClosing;
-    const runMobileAction = (action: () => void | Promise<void>) => {
-      closeMobileActionMenu();
-      void action();
-    };
+    const owner = row.user_email || row.owner;
     return (
       <article key={row.id} className="mobile-address-card">
         <div className="mobile-address-head">
-          <div className="min-w-0">
+          <div className="mobile-address-copy min-w-0">
             <button type="button" className="address-strong block max-w-full truncate text-left" onClick={() => copyAddressValue(row.name, t("已复制邮箱地址", "Mailbox address copied"))} title={t("点击复制邮箱地址", "Copy mailbox address")}>{row.name}</button>
-            <p className="mobile-address-meta">
-              <span>#{row.id}</span>
-              {(row.user_email || row.owner) && <span>{row.user_email || row.owner}</span>}
-              {row.source_meta && <span>{row.source_meta}</span>}
-            </p>
+            {owner && <p className="mobile-address-meta"><span>{t('所属用户', 'Owner')} · {owner}</span></p>}
           </div>
           <div className="mobile-address-menu-root">
             <input className="row-check" type="checkbox" checked={selectedIds.has(row.id)} onChange={() => toggleSelected(row)} aria-label={locale === 'en-US' ? `Select ${row.name}` : `选择 ${row.name}`} />
@@ -1805,24 +1796,11 @@ export function AddressView({
             >
               <MoreHorizontal size={18} />
             </button>
-            {menuVisible && (
-              <div className={cls('mobile-address-action-menu', menuClosing && 'is-closing')} role="menu">
-                <button type="button" role="menuitem" disabled={addressActionBusy === `login:${row.id}`} onClick={() => runMobileAction(() => copyLoginUrl(row))}>{addressActionBusy === `login:${row.id}` ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}{t("复制登录链接", "Copy login link")}</button>
-                <button type="button" role="menuitem" disabled={addressActionBusy === `password:${row.id}`} onClick={() => runMobileAction(() => copyMailboxPassword(row))}>{addressActionBusy === `password:${row.id}` ? <Loader2 size={15} className="animate-spin" /> : <KeyRound size={15} />}{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
-                <button type="button" role="menuitem" onClick={() => runMobileAction(() => onOpenInbox?.(row.name))}><MailOpen size={15} />{t("查看收件箱", "View inbox")}</button>
-                <button type="button" role="menuitem" disabled={shareActionBusy === `create:${row.id}`} onClick={() => runMobileAction(() => createSingleShareLink(row))}><Share2 size={15} className={cls(shareActionBusy === `create:${row.id}` && 'animate-pulse')} />{t("创建分享", "Create share")}</button>
-                {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => { setResetTarget(row); setResetPassword(''); })}><Lock size={15} />{t("重置密码", "Reset password")}</button>}
-                {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => actionClearInbox(row))}><Inbox size={15} />{t("清空收件", "Clear inbox")}</button>}
-                {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => actionClearSent(row))}><Send size={15} />{t("清空发件", "Clear sent")}</button>}
-                {!isAccountScoped && <button type="button" role="menuitem" className="danger" onClick={() => runMobileAction(() => actionDelete(row))}><Trash2 size={15} />{t("删除地址", "Delete address")}</button>}
-              </div>
-            )}
           </div>
         </div>
         <div className="mobile-address-stats">
           <span>{t("收件", "In")} <strong>{row.mail_count ?? 0}</strong></span>
           <span>{t("发件", "Out")} <strong>{row.send_count ?? 0}</strong></span>
-          <span className="truncate">{formatDateTime(row.updated_at || row.created_at)}</span>
         </div>
       </article>
     );
@@ -1866,6 +1844,11 @@ export function AddressView({
       )}
     </div>
   ) : null;
+  const mobileActionMenuRow = data.find((row) => row.id === (mobileActionMenuId ?? closingMobileActionMenuId)) || null;
+  const runMobileAction = (action: () => void | Promise<void>) => {
+    closeMobileActionMenu();
+    void action();
+  };
 
   return (
     <div className="address-view-shell address-workspace h-full overflow-y-auto" onScrollCapture={() => { closeMobileActionMenu(); closeDesktopActionMenu(); }}>
@@ -1874,7 +1857,7 @@ export function AddressView({
         <div className="page-head-copy address-page-title">
           <span className="product-kicker">{t('邮箱资产', 'Mailbox assets')}</span>
           <h1 className="page-title">{t("地址管理", "Address management")}</h1>
-          {!isAccountScoped && effectiveUserFilter && <div className="address-filter-status">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="filter-inline-clear">{t('清除', 'Clear')}</button></div>}
+          {!isAccountScoped && effectiveUserFilter && <div className="address-filter-status"><span className="address-filter-status-copy">{t('正在筛选用户：', 'Filtering user: ')}{effectiveUserEmail}</span><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSelectedUserFilter(null); onClearUserFilter?.(); setPage(1); }} className="filter-inline-clear">{t('清除', 'Clear')}</button></div>}
         </div>
         <div className="page-head-actions address-page-actions"><button type="button" className="product-button product-button-primary" onClick={() => { setNewAddress((current) => ({ ...current, domain: current.domain || defaultDomain })); setCreateOpen(true); }}><Plus className="h-4 w-4" /> <span>{t("新建地址", "New address")}</span></button><button type="button" className="product-button product-button-quiet" onClick={openShareManager}><Share2 className="h-4 w-4" /> <span>{t("共享链接管理", "Share links")}</span></button></div>
       </header>
@@ -1894,7 +1877,7 @@ export function AddressView({
             <button
               ref={userDropdownTriggerRef}
               type="button"
-              className={cls('toolbar-field user-filter-trigger', userDropdownOpen && 'is-open')}
+              className={cls('toolbar-field user-filter-trigger', userDropdownOpen && 'is-open', effectiveUserFilter && 'has-filter')}
               onClick={() => setUserDropdownOpen((open) => !open)}
               aria-haspopup="listbox"
               aria-expanded={userDropdownOpen}
@@ -2071,6 +2054,25 @@ export function AddressView({
           {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearInbox(row); }}><Inbox size={15} />{t('清空收件箱', 'Clear inbox')}</button>}
           {!isAccountScoped && <button type="button" role="menuitem" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionClearSent(row); }}><Send size={15} />{t('清空发件箱', 'Clear sent')}</button>}
           {!isAccountScoped && <button type="button" role="menuitem" className="danger" onClick={() => { const row = desktopActionMenu.row; closeDesktopActionMenu(); actionDelete(row); }}><Trash2 size={15} />{t('删除', 'Delete')}</button>}
+        </div>
+      , document.body)}
+
+      {mobileActionMenuRow && typeof document !== 'undefined' && createPortal(
+        <div className={cls('mobile-address-action-menu mobile-address-action-menu-portal', closingMobileActionMenuId === mobileActionMenuRow.id && 'is-closing')} role="menu" aria-label={t(`${mobileActionMenuRow.name} 地址操作`, `${mobileActionMenuRow.name} address actions`)}>
+          <div className="mobile-address-action-head">
+            <span title={mobileActionMenuRow.name}>{mobileActionMenuRow.name}</span>
+            <button type="button" className="mobile-address-action-close" onClick={closeMobileActionMenu} aria-label={t('关闭地址操作', 'Close address actions')}><X size={16} /></button>
+          </div>
+          <div className="mobile-address-action-grid">
+            <button type="button" role="menuitem" disabled={addressActionBusy === `login:${mobileActionMenuRow.id}`} onClick={() => runMobileAction(() => copyLoginUrl(mobileActionMenuRow))}>{addressActionBusy === `login:${mobileActionMenuRow.id}` ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}{t("复制登录链接", "Copy login link")}</button>
+            <button type="button" role="menuitem" disabled={addressActionBusy === `password:${mobileActionMenuRow.id}`} onClick={() => runMobileAction(() => copyMailboxPassword(mobileActionMenuRow))}>{addressActionBusy === `password:${mobileActionMenuRow.id}` ? <Loader2 size={15} className="animate-spin" /> : <KeyRound size={15} />}{t("复制邮箱密码/JWT", "Copy mailbox password/JWT")}</button>
+            <button type="button" role="menuitem" onClick={() => runMobileAction(() => onOpenInbox?.(mobileActionMenuRow.name))}><MailOpen size={15} />{t("查看收件箱", "View inbox")}</button>
+            <button type="button" role="menuitem" disabled={shareActionBusy === `create:${mobileActionMenuRow.id}`} onClick={() => runMobileAction(() => createSingleShareLink(mobileActionMenuRow))}><Share2 size={15} className={cls(shareActionBusy === `create:${mobileActionMenuRow.id}` && 'animate-pulse')} />{t("创建分享", "Create share")}</button>
+            {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => { setResetTarget(mobileActionMenuRow); setResetPassword(''); })}><Lock size={15} />{t("重置密码", "Reset password")}</button>}
+            {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => actionClearInbox(mobileActionMenuRow))}><Inbox size={15} />{t("清空收件", "Clear inbox")}</button>}
+            {!isAccountScoped && <button type="button" role="menuitem" onClick={() => runMobileAction(() => actionClearSent(mobileActionMenuRow))}><Send size={15} />{t("清空发件", "Clear sent")}</button>}
+            {!isAccountScoped && <button type="button" role="menuitem" className="danger" onClick={() => runMobileAction(() => actionDelete(mobileActionMenuRow))}><Trash2 size={15} />{t("删除地址", "Delete address")}</button>}
+          </div>
         </div>
       , document.body)}
 

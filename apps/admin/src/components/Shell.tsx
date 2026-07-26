@@ -33,7 +33,6 @@ const flatMenuItems = menuGroups.flat();
 export const mobilePrimaryMenus: MenuKey[] = ['stats', 'address', 'inbox', 'sent'];
 export const mobileSwipeMenus: MenuKey[] = [...mobilePrimaryMenus, 'dashboard'];
 const mobileMoreItems = flatMenuItems.filter((item) => !mobilePrimaryMenus.includes(item.key));
-const mobileNavSlotCount = mobilePrimaryMenus.length + 1;
 const OFFICIAL_GITHUB_URL = 'https://github.com/Lur1N77777/loven7-mail-cloudflare-suite';
 
 const adminAvatarPresets = [
@@ -443,14 +442,9 @@ type MobileNavProps = {
   setActiveMenu: (menu: MenuKey) => void;
   locale: AppLocale;
   allowedMenus?: MenuKey[];
-  swipeTargetMenu?: MenuKey | null;
-  swipeProgress?: number;
-  useLiveProgress?: boolean;
-  settling?: boolean;
-  settleMs?: number;
 };
 
-export function MobileNav({ activeMenu, visualActiveMenu, setActiveMenu, locale, allowedMenus, swipeTargetMenu = null, swipeProgress = 0, useLiveProgress = false, settling = false, settleMs = 220 }: MobileNavProps) {
+export function MobileNav({ activeMenu, visualActiveMenu, setActiveMenu, locale, allowedMenus }: MobileNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const rootRef = useRef<HTMLElement | null>(null);
   const displayMenu = visualActiveMenu || activeMenu;
@@ -461,27 +455,7 @@ export function MobileNav({ activeMenu, visualActiveMenu, setActiveMenu, locale,
   const navMoreItems = allowedMenuSet
     ? flatMenuItems.filter((item) => allowedMenuSet.has(item.key) && !navPrimaryMenuSet.has(item.key))
     : mobileMoreItems;
-  const navSlotCount = navPrimaryItems.length + (navMoreItems.length ? 1 : 0);
-  const getNavSlotIndex = (menu: MenuKey) => {
-    const primaryIndex = navPrimaryMenus.indexOf(menu);
-    return primaryIndex >= 0 ? primaryIndex : navPrimaryItems.length;
-  };
   const isMoreActive = navMoreItems.length > 0 && (moreOpen || !navPrimaryMenuSet.has(displayMenu));
-  const clampedProgress = Math.max(0, Math.min(1, Number.isFinite(swipeProgress) ? swipeProgress : 0));
-  const sourceIndex = getNavSlotIndex(activeMenu);
-  const targetIndex = getNavSlotIndex(swipeTargetMenu || displayMenu);
-  const settledIndex = getNavSlotIndex(displayMenu);
-  const indicatorIndex = swipeTargetMenu ? sourceIndex + (targetIndex - sourceIndex) * clampedProgress : settledIndex;
-  const shouldUseLiveProgress = Boolean(swipeTargetMenu && useLiveProgress);
-  const liveIndicatorIndex = shouldUseLiveProgress
-    ? `calc(${sourceIndex} + ${targetIndex - sourceIndex} * var(--mobile-nav-live-progress, ${clampedProgress.toFixed(4)}))`
-    : indicatorIndex.toFixed(4);
-  const navStyle = {
-    '--mobile-nav-slot-count': String(navSlotCount || mobileNavSlotCount),
-    '--mobile-nav-indicator-index': liveIndicatorIndex,
-    '--mobile-nav-swipe-progress': shouldUseLiveProgress ? `var(--mobile-nav-live-progress, ${clampedProgress.toFixed(4)})` : clampedProgress.toFixed(4),
-    '--mobile-nav-settle-ms': `${settleMs}ms`,
-  } as React.CSSProperties;
 
   useEffect(() => {
     if (!moreOpen) return undefined;
@@ -507,11 +481,9 @@ export function MobileNav({ activeMenu, visualActiveMenu, setActiveMenu, locale,
   return (
     <nav
       ref={rootRef}
-      className={cls('mobile-nav fixed bottom-0 left-0 right-0 z-[80] flex h-[calc(62px+env(safe-area-inset-bottom))] items-center justify-around border-t px-2 pb-safe md:hidden', swipeTargetMenu && 'mobile-nav-tracking', settling && 'mobile-nav-settling')}
-      style={navStyle}
+      className="mobile-nav fixed bottom-0 left-0 right-0 z-[80] flex h-[calc(62px+env(safe-area-inset-bottom))] items-center justify-around border-t px-2 pb-safe md:hidden"
       aria-label={locale === 'en-US' ? 'Mobile navigation' : '移动端主导航'}
     >
-      <span className="mobile-nav-progress-pill" aria-hidden="true" />
       {navPrimaryItems.map((item) => {
         const Icon = item.icon;
         const active = displayMenu === item.key;

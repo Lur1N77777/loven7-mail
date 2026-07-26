@@ -245,13 +245,18 @@ export function StatsView({ stats, loading, openSettings, refresh }: { stats: St
   return (
     <div className="stats-view-shell admin-stats-view-shell h-full min-h-0 overflow-y-auto">
       <div className="product-page">
-        <header className="page-head">
+        <header className="page-head stats-page-head">
           <div className="page-head-copy">
             <span className="product-kicker">{t('数据分析', 'Data analysis')}</span>
-            <h1 className="page-title">{t('统计', 'Statistics')}</h1>
+            <div className="stats-title-row">
+              <h1 className="page-title">{t('统计', 'Statistics')}</h1>
+              <button type="button" className="stats-mobile-refresh" onClick={refresh} aria-label={loading ? t('正在刷新统计', 'Refreshing statistics') : t('刷新统计', 'Refresh statistics')} title={t('刷新统计', 'Refresh statistics')}>
+                <RefreshCw className={cls('h-4 w-4', loading && 'animate-spin')} />
+              </button>
+            </div>
             <p className="page-lede">{t('邮件构成、地址活跃覆盖与运营指标明细。', 'Mail composition, address activity coverage and operational measures.')}</p>
           </div>
-          <div className="page-head-actions">
+          <div className="page-head-actions stats-desktop-refresh">
             <button type="button" className="product-button product-button-quiet" onClick={refresh}>
               <RefreshCw className={cls('h-4 w-4', loading && 'animate-spin')} />
               {loading ? t('同步中', 'Syncing') : t('刷新统计', 'Refresh')}

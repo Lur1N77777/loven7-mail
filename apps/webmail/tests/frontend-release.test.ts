@@ -185,9 +185,15 @@ test("webmail exposes every high-confidence code as an individually copyable lis
 
 test("webmail uses white only for real brand icons and deterministic color for initials", () => {
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const theme = readFileSync(new URL("../src/theme.css", import.meta.url), "utf8");
+  const avatarColors = readFileSync(new URL("../../shared/avatarColor.ts", import.meta.url), "utf8");
   assert.match(styles, /\.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
   assert.match(styles, /\.brand-avatar-with-icon\s*\{[^}]*background:\s*#fff\s*!important;/s);
   assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#fff\s*!important;[^}]*font-size:\s*calc\(var\(--brand-avatar-size\) \* \.456\);[^}]*font-weight:\s*560/s);
+  assert.match(theme, /\.brand-avatar-with-icon,\s*:root\[data-theme="dark"\] \.brand-avatar-with-icon\s*\{[^}]*background:\s*#ffffff\s*!important;/s);
+  assert.match(theme, /\.brand-avatar-fallback,\s*:root\[data-theme="dark"\] \.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#ffffff\s*!important;/s);
+  assert.match(avatarColors, /#A95769[\s\S]*#527AA2[\s\S]*#4B7F6B[\s\S]*#786397/, "fallback avatars should use the shared macaron palette");
+  assert.doesNotMatch(avatarColors, /#64748B|#58778A|#7C7659/, "old gray and olive avatar colors should not return");
   assert.equal(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('letter@example.test'));
   assert.equal(getFallbackAvatarColor('letter@example.test', 'First label'), getFallbackAvatarColor('letter@example.test', 'Renamed label'));
   assert.notEqual(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('other@example.test'));
@@ -284,6 +290,8 @@ test("signed-in mail list uses calm hierarchy, visible row boundaries, and inlin
   assert.match(workspace, /\.mail-list-header \.copy-hint\s*\{[^}]*position:\s*absolute;[^}]*pointer-events:\s*none;/s);
   assert.match(workspace, /\.mail-list-header \.mail-toolbar\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*0;[^}]*overflow:\s*hidden;/s);
   assert.match(workspace, /\.mail-list-header \.mail-toolbar \.refresh-label\s*\{[^}]*clip:\s*rect\(0 0 0 0\);/s);
+  assert.match(workspace, /\.mail-list-control-row\s*\{[^}]*align-items:\s*center;/s);
+  assert.match(workspace, /\.mail-list-header \.address-copy-button\s*\{[^}]*min-height:\s*34px;[^}]*align-items:\s*center;[^}]*padding:\s*0 5px;/s);
 });
 
 test("webmail keeps read messages visibly interactive and removes the desktop reader spacer", () => {
@@ -295,6 +303,15 @@ test("webmail keeps read messages visibly interactive and removes the desktop re
   assert.match(workspace, /\.mail-detail-card\.mail-detail\s*\{[\s\S]*position:\s*relative/);
   assert.match(workspace, /\.mail-detail-topbar\s*\{[\s\S]*position:\s*absolute/);
   assert.match(workspace, /@media\s*\(max-width:\s*760px\)[\s\S]*\.mail-detail-topbar\s*\{[\s\S]*position:\s*static/);
+  assert.match(workspace, /\.mail-detail-body\.mail-body-shell\.mode-html\s*\{[^}]*position:\s*relative;[^}]*overflow:\s*hidden;/s);
+  assert.match(workspace, /\.mail-detail-body\.mode-html \.mail-frame,[\s\S]*?\.mail-detail-body\.mode-html \.mail-html-view\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*height:\s*100%;/s);
+});
+
+test("webmail auto refresh keeps one stable interval through mail-list updates", () => {
+  const appSource = readWebmailSource("../src/App.tsx");
+
+  assert.match(appSource, /void latestRefreshRef\.current\(\{ silent: true \}\)/, "the timer must call the latest refresh through a ref instead of a captured closure");
+  assert.match(appSource, /\}, \[autoRefreshEnabled, refreshCycleKey, session\]\);/, "the interval effect must not restart whenever the refresh callback identity changes");
 });
 
 test("webmail theme keeps Admin semantics with a Codex-inspired charcoal palette", () => {

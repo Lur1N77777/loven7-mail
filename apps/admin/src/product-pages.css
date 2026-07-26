@@ -124,6 +124,17 @@ body .page-lede {
   gap: 9px;
 }
 
+.stats-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-mobile-refresh {
+  display: none;
+}
+
 /* head action buttons */
 
 body :is(
@@ -1736,6 +1747,40 @@ body .settings-view-shell .rules-policy .check-row {
   .page-head-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .admin-stats-view-shell .stats-page-head {
+    gap: 0;
+  }
+
+  .admin-stats-view-shell .stats-title-row {
+    justify-content: space-between;
+  }
+
+  .admin-stats-view-shell .stats-desktop-refresh {
+    display: none;
+  }
+
+  body .admin-stats-view-shell .stats-mobile-refresh {
+    display: inline-flex;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--admin-radius-control-sm);
+    background: transparent;
+    color: var(--admin-muted);
+    padding: 0;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  body .admin-stats-view-shell .stats-mobile-refresh:hover,
+  body .admin-stats-view-shell .stats-mobile-refresh:active {
+    background: var(--admin-panel-hover);
+    color: var(--admin-text);
+    transform: none;
   }
 
   body :is(

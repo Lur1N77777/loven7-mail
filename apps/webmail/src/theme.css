@@ -1044,11 +1044,13 @@ body ::selection {
 }
 
 /* Avatar canvases keep their existing behavior while following the theme. */
-.brand-avatar-with-icon {
+.brand-avatar-with-icon,
+:root[data-theme="dark"] .brand-avatar-with-icon {
   background: #ffffff !important;
 }
 
-.brand-avatar-fallback {
+.brand-avatar-fallback,
+:root[data-theme="dark"] .brand-avatar-fallback {
   background: var(--brand-avatar-fallback-bg) !important;
   color: #ffffff !important;
 }
