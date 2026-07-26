@@ -132,14 +132,45 @@
 .mail-list-header .address-copy-text {
   width: 100%;
   overflow: visible;
-  overflow-wrap: anywhere;
   line-height: 1.45;
   text-overflow: clip;
+  white-space: nowrap;
+}
+
+.mail-list-header .address-copy-text.address-long {
+  font-size: 11.5px;
+}
+
+.mail-list-header .address-copy-text.address-extra-long {
+  overflow-wrap: anywhere;
+  font-size: 10.5px;
   white-space: normal;
 }
 
 .mail-list-header .address-copy-affordance {
   display: none;
+}
+
+.mail-list-header .copy-hint {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  right: 2px;
+  margin: 0;
+  padding: 3px 6px;
+  border-radius: var(--lm-radius-control-sm);
+  background: var(--lm-surface);
+  box-shadow: var(--lm-shadow-menu);
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-4px);
+}
+
+.mail-list-header .account-address-row.has-mailbox-menu .copy-hint {
+  right: 34px;
+}
+
+.mail-list-header .copy-hint.visible {
+  transform: translateY(-50%) translateX(0);
 }
 
 .mail-list-summary {

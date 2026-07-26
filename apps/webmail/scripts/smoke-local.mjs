@@ -278,10 +278,10 @@ function mockFetchScript() {
       if (path === '/api/share/share-token/settings') return json({ address: 'shared@example.test' });
       if (path === '/api/share/share-token/mails') return json({ results: shareDeleted ? [] : mailPages.populated.slice(0, 1), count: shareDeleted ? 0 : 1 });
       if (path === '/api/share/share-token/mail/101') { shareDeleted = true; return json({ ok: true }); }
-      if (path === '/api/share/race-token') return json({ ok: true, token: 'race-token', permissions: { hideMail: true }, addresses: [{ id: 'box-a', address: 'a@example.test' }, { id: 'box-b', address: 'b@example.test' }] });
+      if (path === '/api/share/race-token') return json({ ok: true, token: 'race-token', permissions: { hideMail: true }, addresses: [{ id: 'box-a', address: 'rj6ckfgq8lb@c.lmhzeq.fun' }, { id: 'box-b', address: 'b@example.test' }] });
       if (path === '/api/share/race-token/settings') {
         const mailbox = url.searchParams.get('mailbox') || 'box-a';
-        return json({ address: mailbox === 'box-b' ? 'b@example.test' : 'a@example.test' });
+        return json({ address: mailbox === 'box-b' ? 'b@example.test' : 'rj6ckfgq8lb@c.lmhzeq.fun' });
       }
       if (path === '/api/share/race-token/mails') {
         const mailbox = url.searchParams.get('mailbox') || 'box-a';
@@ -437,6 +437,7 @@ async function run() {
     addressText: address?.textContent || '',
     addressFits: !!address && address.scrollWidth <= address.clientWidth + 1,
     addressWhiteSpace: addressStyle?.whiteSpace || '',
+    addressLines: address && addressStyle ? Math.round(address.getBoundingClientRect().height / Number.parseFloat(addressStyle.lineHeight)) : 0,
     emptyHuge: false
   }})())`));
   assert(!inboxMetrics.xOverflow, '用户站收件箱不应横向溢出');
@@ -448,7 +449,7 @@ async function run() {
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
   assert(!inboxMetrics.signedInBrandLogo, `登录后的邮箱左栏不应继续堆叠品牌 Logo: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.mapleFontReady && inboxMetrics.uiFontFamily.includes('Loven7 Maple Mono'), `Webmail 应实际加载并使用 Maple Mono 中英文字体: ${JSON.stringify(inboxMetrics)}`);
-  assert(inboxMetrics.addressText === 'rj6ckfgq8lb@c.loven.qzz.io' && inboxMetrics.addressFits && inboxMetrics.addressWhiteSpace === 'normal', `长邮箱地址必须完整显示且允许换行: ${JSON.stringify(inboxMetrics)}`);
+  assert(inboxMetrics.addressText === 'rj6ckfgq8lb@c.loven.qzz.io' && inboxMetrics.addressFits && inboxMetrics.addressWhiteSpace === 'nowrap' && inboxMetrics.addressLines === 1, `常见长度邮箱必须完整单行显示: ${JSON.stringify(inboxMetrics)}`);
   const initialTheme = await evaluate(login, `document.documentElement.dataset.theme`);
   assert(initialTheme === 'light' || initialTheme === 'dark', `页面应在首屏应用明确主题: ${initialTheme}`);
   await click(login, '.sidebar-header-actions .webmail-theme-toggle');
@@ -587,6 +588,18 @@ async function run() {
 
   const raceShare = await openApp('/s/race-token');
   await waitUntil(raceShare, `document.body.innerText.includes('BOX_A_INITIAL')`);
+  const sharedLongAddressMetrics = JSON.parse(await evaluate(raceShare, `JSON.stringify((() => {
+    const address = document.querySelector('.address-copy-text');
+    const style = address ? getComputedStyle(address) : null;
+    return {
+      text: address?.textContent || '',
+      whiteSpace: style?.whiteSpace || '',
+      lines: address && style ? Math.round(address.getBoundingClientRect().height / Number.parseFloat(style.lineHeight)) : 0,
+      copyHintPosition: getComputedStyle(document.querySelector('.copy-hint')).position,
+      xOverflow: document.documentElement.scrollWidth > innerWidth + 1
+    };
+  })())`));
+  assert(sharedLongAddressMetrics.text === 'rj6ckfgq8lb@c.lmhzeq.fun' && sharedLongAddressMetrics.whiteSpace === 'nowrap' && sharedLongAddressMetrics.lines === 1 && sharedLongAddressMetrics.copyHintPosition === 'absolute' && !sharedLongAddressMetrics.xOverflow, `多邮箱场景应优先完整单行显示地址: ${JSON.stringify(sharedLongAddressMetrics)}`);
   await evaluate(raceShare, `window.__webmailSmokeRace.hold('share-mails:race-token:box-a')`);
   await click(raceShare, '.refresh-button');
   await waitUntil(raceShare, `window.__webmailSmokeRace.pending('share-mails:race-token:box-a') >= 1`);

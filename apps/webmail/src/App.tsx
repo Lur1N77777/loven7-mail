@@ -1817,7 +1817,7 @@ export default function App() {
               onClick={copyCurrentAddress}
               title={copy.copyAddressTitle}
             >
-              <span className="address-copy-text">{session.address}</span>
+              <span className={`address-copy-text ${session.address.length > 40 ? "address-extra-long" : session.address.length > 24 ? "address-long" : ""}`}>{session.address}</span>
               <span className="address-copy-affordance" aria-hidden="true">{copy.copyAddressAction}</span>
             </button>
             {isShareSession(session) && (shareInfo?.addresses.length || 0) > 1 ? (
