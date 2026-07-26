@@ -75,7 +75,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --lm-bg: #121110;
     --lm-surface: #1c1a18;
@@ -114,6 +114,41 @@
     --lm-shadow-lift: inset 0 1px 0 rgba(249, 244, 235, 0.05), 0 14px 40px rgba(0, 0, 0, 0.36);
     --lm-shadow-menu: 0 18px 44px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.32);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --lm-bg: #121110;
+  --lm-surface: #1c1a18;
+  --lm-surface-soft: #262421;
+  --lm-surface-muted: #33302c;
+  --lm-surface-hover: #242220;
+  --lm-border: rgba(236, 233, 227, 0.13);
+  --lm-border-strong: rgba(236, 233, 227, 0.2);
+  --lm-divider: rgba(236, 233, 227, 0.08);
+  --lm-text-strong: #f7f5f1;
+  --lm-text: #eceae5;
+  --lm-text-soft: #b6b2a9;
+  --lm-muted: #8b867d;
+  --lm-muted-soft: #605c55;
+  --lm-ink: #f1efea;
+  --lm-ink-hover: #faf8f4;
+  --lm-ink-on: #1f1d1a;
+  --lm-accent: #e57c55;
+  --lm-accent-hover: #ec8e69;
+  --lm-accent-soft: rgba(229, 124, 85, 0.16);
+  --lm-accent-strong: #f29d79;
+  --lm-selected: color-mix(in srgb, var(--lm-accent) 14%, var(--lm-surface));
+  --lm-selected-strong: color-mix(in srgb, var(--lm-accent) 20%, var(--lm-surface));
+  --lm-success: #7cb495;
+  --lm-success-soft: rgba(124, 180, 149, 0.16);
+  --lm-warning: #cda45f;
+  --lm-warning-soft: rgba(205, 164, 95, 0.16);
+  --lm-danger: #e5808f;
+  --lm-danger-soft: rgba(229, 128, 143, 0.16);
+  --lm-shadow-card: inset 0 1px 0 rgba(249, 244, 235, 0.045);
+  --lm-shadow-lift: inset 0 1px 0 rgba(249, 244, 235, 0.05), 0 14px 40px rgba(0, 0, 0, 0.36);
+  --lm-shadow-menu: 0 18px 44px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.32);
 }
 
 html,
@@ -305,6 +340,7 @@ body ::selection {
 .danger-button,
 .load-more,
 .auto-refresh-button,
+.webmail-theme-toggle,
 .webmail-locale-toggle,
 .mobile-back {
   min-height: 40px;
@@ -314,6 +350,48 @@ body ::selection {
   font-size: 13px;
   font-weight: var(--fw-strong) !important;
   box-shadow: none;
+}
+
+.account-panel-preferences {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.webmail-theme-toggle {
+  display: inline-grid;
+  width: 40px;
+  min-width: 40px;
+  place-items: center;
+  padding: 0;
+  color: var(--lm-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color .16s ease, background-color .16s ease, transform .12s ease;
+}
+
+.webmail-theme-toggle:hover {
+  color: var(--lm-text);
+  background: var(--lm-surface-hover);
+}
+
+.webmail-theme-toggle:active {
+  transform: scale(.95);
+}
+
+.webmail-theme-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--lm-accent) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.theme-toggle-glyph {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .primary-button {
@@ -1170,30 +1248,28 @@ body ::selection {
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .ghost-button,
-  .load-more,
-  .auto-refresh-button,
-  .webmail-locale-toggle,
-  .mobile-back {
-    border-color: transparent;
-    background: var(--lm-surface-soft);
-  }
+:root[data-theme="dark"] .ghost-button,
+:root[data-theme="dark"] .load-more,
+:root[data-theme="dark"] .auto-refresh-button,
+:root[data-theme="dark"] .webmail-locale-toggle,
+:root[data-theme="dark"] .mobile-back {
+  border-color: transparent;
+  background: var(--lm-surface-soft);
+}
 
-  .mail-view-tabs button.active,
-  .mail-view-tabs button.active:hover {
-    box-shadow: inset 0 1px 0 rgba(249, 244, 235, 0.045);
-  }
+:root[data-theme="dark"] .mail-view-tabs button.active,
+:root[data-theme="dark"] .mail-view-tabs button.active:hover {
+  box-shadow: inset 0 1px 0 rgba(249, 244, 235, 0.045);
+}
 
-  .mail-body-shell.mode-html {
-    border-color: rgba(236, 233, 227, 0.16);
-  }
+:root[data-theme="dark"] .mail-body-shell.mode-html {
+  border-color: rgba(236, 233, 227, 0.16);
+}
 
-  .account-portal-hero::after {
-    background:
-      linear-gradient(180deg, rgba(18, 16, 13, 0.24), transparent 38%, rgba(18, 16, 13, 0.44)),
-      linear-gradient(90deg, rgba(18, 16, 13, 0.3), transparent 46%);
-  }
+:root[data-theme="dark"] .account-portal-hero::after {
+  background:
+    linear-gradient(180deg, rgba(18, 16, 13, 0.24), transparent 38%, rgba(18, 16, 13, 0.44)),
+    linear-gradient(90deg, rgba(18, 16, 13, 0.3), transparent 46%);
 }
 
 @media (prefers-reduced-motion: reduce) {

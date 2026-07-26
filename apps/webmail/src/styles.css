@@ -1754,13 +1754,11 @@ input {
 .mail-list-brand-avatar { margin-top: 1px; }
 .mail-detail-brand-avatar { margin-top: 1px; }
 .detail-title-block { flex: 1 1 auto; }
-@media (prefers-color-scheme: dark) {
-  .brand-avatar {
-    border-color: rgba(255,255,255,.08);
-    background: rgba(255,255,255,.055);
-    color: #C8CBD2;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
-  }
+:root[data-theme="dark"] .brand-avatar {
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.055);
+  color: #C8CBD2;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
 }
 @media (max-width: 720px) {
   .mail-list-brand-avatar { --brand-avatar-size: 30px; }
@@ -1805,12 +1803,10 @@ input {
   border-radius: 999px !important;
   background: var(--lm-surface-soft) !important;
 }
-@media (prefers-color-scheme: dark) {
-  .brand-avatar,
-  .brand-avatar-fallback {
-    background: rgba(255,255,255,.07) !important;
-    border-color: rgba(255,255,255,.08) !important;
-  }
+:root[data-theme="dark"] .brand-avatar,
+:root[data-theme="dark"] .brand-avatar-fallback {
+  background: rgba(255,255,255,.07) !important;
+  border-color: rgba(255,255,255,.08) !important;
 }
 
 /* Auto-refresh progress ring: the refresh button shows the 10s cycle at a glance. */
@@ -2035,21 +2031,19 @@ input {
   animation: spin .78s linear infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  .login-card {
-    background: var(--lm-surface);
-  }
+:root[data-theme="dark"] .login-card {
+  background: var(--lm-surface);
+}
 
-  .login-button {
-    color: #ede7e4;
-    background: #393437;
-    box-shadow: none;
-  }
+:root[data-theme="dark"] .login-button {
+  color: #ede7e4;
+  background: #393437;
+  box-shadow: none;
+}
 
-  .login-button:hover {
-    color: #f5efec;
-    background: #474043;
-  }
+:root[data-theme="dark"] .login-button:hover {
+  color: #f5efec;
+  background: #474043;
 }
 
 /* Mail list top-edge fix: selected rows should tint, not move under the scroll clip. */
@@ -2388,12 +2382,10 @@ textarea {
     padding: 0 .5rem;
   }
 }
-@media (prefers-color-scheme: dark) {
-  .webmail-locale-menu {
-    background: color-mix(in srgb, var(--lm-surface) 94%, transparent);
-    border-color: var(--lm-border);
-    box-shadow: 0 18px 46px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.035);
-  }
+:root[data-theme="dark"] .webmail-locale-menu {
+  background: color-mix(in srgb, var(--lm-surface) 94%, transparent);
+  border-color: var(--lm-border);
+  box-shadow: 0 18px 46px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.035);
 }
 @media (prefers-reduced-motion: reduce) {
   .webmail-locale-menu {

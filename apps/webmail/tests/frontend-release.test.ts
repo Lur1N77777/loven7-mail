@@ -170,9 +170,16 @@ test("webmail clipboard falls back to a temporary textarea and copies only trimm
 
 test("webmail exposes every high-confidence code as an individually copyable list and detail action", () => {
   const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const workspace = readWebmailSource("../src/mailWorkspace.css");
   assert.match(source, /verificationCodes\.map\(\(code\)\s*=>/);
   assert.match(source, /selectedVerificationCodes\.map\(\(code\)\s*=>/);
   assert.match(source, /copyVerificationCode\(selectedMail, code\)/);
+  assert.match(source, /function VerificationCodeButton/);
+  assert.match(source, /className="verification-code-value"/);
+  assert.match(source, /name=\{copied \? "check" : "copy"\}/);
+  assert.match(workspace, /\.verification-code-button\s*\{[^}]*display:\s*inline-grid;[^}]*place-items:\s*center;[^}]*line-height:\s*1;/s);
+  assert.match(workspace, /\.verification-code-action\s*\{[^}]*position:\s*absolute;[^}]*right:\s*9px;[^}]*top:\s*50%;/s);
+  assert.match(workspace, /\.verification-code-button\.copied\s*\{[^}]*color:\s*var\(--lm-success\);/s);
 });
 
 test("webmail uses white only for real brand icons and deterministic color for initials", () => {
@@ -192,8 +199,24 @@ test("webmail loads theme tokens and the signed-in workspace layer after legacy 
   assert.ok(cssImports.indexOf("./theme.css") < cssImports.indexOf("./mailWorkspace.css"));
 
   const html = readWebmailSource("../index.html");
-  assert.match(html, /<meta name="theme-color" content="#f6f5f3" media="\(prefers-color-scheme: light\)"\s*\/>/);
-  assert.match(html, /<meta name="theme-color" content="#121110" media="\(prefers-color-scheme: dark\)"\s*\/>/);
+  assert.match(html, /<meta name="theme-color" content="#f6f5f3"\s*\/>/);
+  assert.match(html, /localStorage\.getItem\("loven7\.uiTheme"\)/);
+});
+
+test("webmail exposes an instant persistent light and dark theme toggle", () => {
+  const app = readWebmailSource("../src/App.tsx");
+  const appearance = readWebmailSource("../src/appearance.ts");
+  const styles = readWebmailSource("../src/styles.css");
+  const theme = readWebmailSource("../src/theme.css");
+
+  assert.match(app, /const \[theme, setTheme\] = useState<AppTheme>\(\(\) => readInitialTheme\(\)\)/);
+  assert.match(app, /<WebmailThemeToggle theme=\{theme\} setTheme=\{setTheme\}/);
+  assert.match(app, /useLayoutEffect\(\(\) => \{\s*writeTheme\(theme\);\s*applyRuntimeTheme\(theme\);/s);
+  assert.match(appearance, /const STORAGE_KEY = "loven7\.uiTheme"/);
+  assert.match(appearance, /document\.documentElement\.dataset\.theme = theme/);
+  assert.match(theme, /:root\[data-theme="dark"\]\s*\{[^}]*--lm-bg:\s*#121110;/s);
+  assert.equal((styles.match(/@media \(prefers-color-scheme: dark\)/g) || []).length, 0, "manual theme must own component dark styles");
+  assert.equal((theme.match(/@media \(prefers-color-scheme: dark\)/g) || []).length, 1, "only the no-script token fallback may follow the OS theme");
 });
 
 test("signed-in webmail uses Admin mail workspace semantics and exposes no password-management entry", () => {
@@ -255,7 +278,7 @@ test("webmail theme stays aligned with the admin paper, ink, and sealing-wax tok
   const webmailLight = extractCssBlock(webmailTheme, ":root");
   const adminLight = extractCssBlock(adminTheme, ":root");
   const webmailDarkMedia = extractCssBlock(webmailTheme, "@media (prefers-color-scheme: dark)");
-  const webmailDark = extractCssBlock(webmailDarkMedia, ":root");
+  const webmailDark = extractCssBlock(webmailDarkMedia, ":root:not([data-theme])");
   const adminDark = extractCssBlock(adminTheme, ".theme-dark");
 
   const coreMappings = [

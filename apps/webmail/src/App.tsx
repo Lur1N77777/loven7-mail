@@ -8,6 +8,7 @@ import { copyText } from "./clipboard";
 import { buildMailFrameSrcDoc, getMailBodyText, mergeMails, parseMailBatch } from "./mailParser";
 import { reconcileServerMailRange } from "./mailSync";
 import { BrandAvatar } from "./brandIdentity";
+import { applyRuntimeTheme, readInitialTheme, writeTheme, type AppTheme } from "./appearance";
 import { applyRuntimeLocale, readInitialLocale, writeLocale, type AppLocale } from "./locale";
 import type { MailPage, ParsedMail, RemoteMailState, SafeSettings, ShareInfo, SharedMailbox, WebmailSession } from "./types";
 import { sanitizeVerificationCode } from "../../shared/verificationCode.ts";
@@ -281,7 +282,7 @@ function MenuChevron() {
   );
 }
 
-type MailUiIconName = "back" | "copy" | "paperclip" | "trash";
+type MailUiIconName = "back" | "check" | "copy" | "paperclip" | "trash";
 
 function MailUiIcon({ name, size = 16 }: { name: MailUiIconName; size?: number }) {
   return (
@@ -295,10 +296,72 @@ function MailUiIcon({ name, size = 16 }: { name: MailUiIconName; size?: number }
       focusable="false"
     >
       {name === "back" ? <path d="m15 18-6-6 6-6M9 12h10" /> : null}
+      {name === "check" ? <path d="m5 12.5 4.2 4.2L19 7" /> : null}
       {name === "copy" ? <><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></> : null}
       {name === "paperclip" ? <path d="m20.5 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 1 1-2.8-2.8l8.3-8.3" /> : null}
       {name === "trash" ? <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /><path d="M10 11v5M14 11v5" /></> : null}
     </svg>
+  );
+}
+
+function ThemeGlyph({ theme }: { theme: AppTheme }) {
+  return (
+    <svg className="theme-toggle-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {theme === "dark" ? (
+        <>
+          <circle cx="12" cy="12" r="3.5" />
+          <path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4" />
+        </>
+      ) : (
+        <path d="M19.2 15.3A8 8 0 0 1 8.7 4.8 8 8 0 1 0 19.2 15.3Z" />
+      )}
+    </svg>
+  );
+}
+
+function WebmailThemeToggle({ theme, setTheme, label }: {
+  theme: AppTheme;
+  setTheme: (theme: AppTheme) => void;
+  label: string;
+}) {
+  const nextTheme = theme === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      className="webmail-theme-toggle"
+      aria-label={label}
+      title={label}
+      onClick={() => setTheme(nextTheme)}
+    >
+      <ThemeGlyph theme={theme} />
+    </button>
+  );
+}
+
+function VerificationCodeButton({ code, copied, disabled = false, label, copiedLabel, className = "", onCopy }: {
+  code: string;
+  copied: boolean;
+  disabled?: boolean;
+  label: string;
+  copiedLabel: string;
+  className?: string;
+  onCopy: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`verification-code-button ${copied ? "copied" : ""} ${className}`.trim()}
+      disabled={disabled}
+      onClick={onCopy}
+      aria-label={`${label} ${code}`}
+      title={`${label} ${code}`}
+    >
+      <span className="verification-code-value">{code}</span>
+      <span className="verification-code-action" aria-hidden="true">
+        <MailUiIcon name={copied ? "check" : "copy"} size={13} />
+      </span>
+      <span className="sr-only" aria-live="polite">{copied ? copiedLabel : ""}</span>
+    </button>
   );
 }
 
@@ -419,6 +482,8 @@ const UI_COPY = {
     loggingIn: "正在登录…",
     localeTitle: "切换到 English",
     languageLabel: "界面语言",
+    themeToggleLight: "切换到浅色模式",
+    themeToggleDark: "切换到深色模式",
     currentMailbox: "当前邮箱",
     sharedMailbox: "共享邮箱",
     selectMailbox: "选择邮箱",
@@ -514,6 +579,8 @@ const UI_COPY = {
     loggingIn: "Signing in…",
     localeTitle: "切换到中文",
     languageLabel: "Language",
+    themeToggleLight: "Switch to light mode",
+    themeToggleDark: "Switch to dark mode",
     currentMailbox: "Current mailbox",
     sharedMailbox: "Shared mailbox",
     selectMailbox: "Choose mailbox",
@@ -692,21 +759,18 @@ const MailListRow = React.memo(function MailListRow({
                 const copied = copiedCodeKey === verificationCopyKey(mail.id, code);
                 return (
                   <span className="code-copy-item" key={code}>
-                    <button
-                      type="button"
-                      className="code-pill code-copy-button"
+                    <VerificationCodeButton
+                      code={code}
+                      copied={copied}
+                      copiedLabel={copiedLabel}
                       disabled={inert}
-                      onClick={(event) => {
+                      label={verificationCodeLabel}
+                      onCopy={(event) => {
                         event.stopPropagation();
                         if (inert) return;
                         onCopyVerificationCode(mail, code);
                       }}
-                      aria-label={`${verificationCodeLabel} ${code}`}
-                      title={`${verificationCodeLabel} ${code}`}
-                    >
-                      {code}
-                    </button>
-                    <em className={`code-copy-hint ${copied ? "visible" : ""}`} aria-live="polite">{copiedLabel}</em>
+                    />
                   </span>
                 );
               })}
@@ -733,6 +797,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [locale, setLocale] = useState<AppLocale>(() => readInitialLocale());
+  const [theme, setTheme] = useState<AppTheme>(() => readInitialTheme());
   const [loginError, setLoginError] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1020,6 +1085,11 @@ export default function App() {
     copyRef.current = UI_COPY[locale];
     localeRef.current = locale;
   }, [locale]);
+
+  useLayoutEffect(() => {
+    writeTheme(theme);
+    applyRuntimeTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     if (session || !loginError || loading !== "idle") return undefined;
@@ -1644,7 +1714,10 @@ export default function App() {
           <div className="account-panel-inner mailbox-direct-panel-inner">
             <div className="account-panel-top mailbox-direct-panel-top">
               <BrandLogo variant="compact" />
-              <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
+              <div className="account-panel-preferences">
+                <WebmailThemeToggle theme={theme} setTheme={setTheme} label={theme === "dark" ? copy.themeToggleLight : copy.themeToggleDark} />
+                <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
+              </div>
             </div>
             <section className="account-auth-card mailbox-direct-card">
               <div className="account-title-block">
@@ -1713,6 +1786,7 @@ export default function App() {
         <div className="brand-row">
           <BrandLogo variant="compact" />
           <div className="sidebar-header-actions">
+            <WebmailThemeToggle theme={theme} setTheme={setTheme} label={theme === "dark" ? copy.themeToggleLight : copy.themeToggleDark} />
             <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
             <button type="button" className="ghost-button sidebar-logout-button" onClick={logout}>{copy.logout}</button>
           </div>
@@ -1931,16 +2005,14 @@ export default function App() {
                 <span>{copy.verificationCode}</span>
                 {selectedVerificationCodes.map((code) => (
                   <span className="detail-code-copy" key={code}>
-                    <button
-                      type="button"
-                      className="code-pill code-copy-button detail-code-button"
-                      onClick={() => copyVerificationCode(selectedMail, code)}
-                      aria-label={`${copy.copyCode} ${code}`}
-                      title={`${copy.copyCode} ${code}`}
-                    >
-                      {code}
-                    </button>
-                    <em className={`code-copy-hint ${copiedCodeKey === verificationCopyKey(selectedMail.id, code) ? "visible" : ""}`} aria-live="polite">{copy.copied}</em>
+                    <VerificationCodeButton
+                      code={code}
+                      copied={copiedCodeKey === verificationCopyKey(selectedMail.id, code)}
+                      copiedLabel={copy.copied}
+                      label={copy.copyCode}
+                      className="detail-code-button"
+                      onCopy={() => copyVerificationCode(selectedMail, code)}
+                    />
                   </span>
                 ))}
               </div>

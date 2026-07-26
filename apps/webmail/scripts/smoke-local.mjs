@@ -305,7 +305,7 @@ async function openApp(pathname = '/', { width = 390, height = 844, locale = 'zh
   await cdpSend(ws, 'Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 768 });
   await cdpSend(ws, 'Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: colorScheme }] });
   await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: mockFetchScript() });
-  await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('loven7.locale', ${JSON.stringify(locale)}); sessionStorage.clear();` });
+  await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('loven7.locale', ${JSON.stringify(locale)}); localStorage.setItem('loven7.uiTheme', ${JSON.stringify(colorScheme)}); sessionStorage.clear(); Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value) => { window.__webmailCopiedText = String(value); } } });` });
   await cdpSend(ws, 'Page.navigate', { url: new URL(pathname, baseUrl).toString() });
   await cdpSend(ws, 'Page.loadEventFired').catch(() => undefined);
   await sleep(900);
@@ -343,6 +343,10 @@ async function captureVisualSnapshots() {
   await loginWithMockMailbox(desktop);
   await captureScreenshot(desktop, 'desktop-inbox-light');
   captured.push('desktop-inbox-light.png');
+  await click(desktop, '.mail-list-item .verification-code-button');
+  await waitUntil(desktop, `document.querySelector('.mail-list-item .verification-code-button')?.classList.contains('copied')`);
+  await captureScreenshot(desktop, 'desktop-code-copied-light');
+  captured.push('desktop-code-copied-light.png');
   await click(desktop, '.webmail-locale-toggle');
   await waitUntil(desktop, `!!document.querySelector('.webmail-locale-menu')`);
   await captureScreenshot(desktop, 'desktop-language-menu-light');
@@ -436,6 +440,46 @@ async function run() {
   assert(!inboxMetrics.hasRemoteImageButton, '远程邮件图片应自动通过代理加载，不应再要求手动允许');
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
   assert(inboxMetrics.brandFontFamily.includes('Loven7 Brand Script') && inboxMetrics.brandFontReady, `顶部品牌字标应复用 Admin 手写字体: ${JSON.stringify(inboxMetrics)}`);
+  const initialTheme = await evaluate(login, `document.documentElement.dataset.theme`);
+  assert(initialTheme === 'light' || initialTheme === 'dark', `页面应在首屏应用明确主题: ${initialTheme}`);
+  await click(login, '.sidebar-header-actions .webmail-theme-toggle');
+  await waitUntil(login, `document.documentElement.dataset.theme === '${initialTheme === 'dark' ? 'light' : 'dark'}'`);
+  const themeToggleMetrics = JSON.parse(await evaluate(login, `JSON.stringify({
+    theme: document.documentElement.dataset.theme,
+    stored: localStorage.getItem('loven7.uiTheme'),
+    background: getComputedStyle(document.documentElement).backgroundColor,
+    label: document.querySelector('.sidebar-header-actions .webmail-theme-toggle')?.getAttribute('aria-label') || ''
+  })`));
+  assert(themeToggleMetrics.stored === themeToggleMetrics.theme, `手动主题应立即持久化: ${JSON.stringify(themeToggleMetrics)}`);
+  assert(themeToggleMetrics.label, `主题按钮必须提供清晰的辅助说明: ${JSON.stringify(themeToggleMetrics)}`);
+  await click(login, '.sidebar-header-actions .webmail-theme-toggle');
+  await waitUntil(login, `document.documentElement.dataset.theme === '${initialTheme}'`);
+
+  const codeButtonMetrics = JSON.parse(await evaluate(login, `JSON.stringify((() => {
+    const button = document.querySelector('.mail-list-item .verification-code-button');
+    const value = button?.querySelector('.verification-code-value');
+    const detail = document.querySelector('.mail-detail-code-strip .verification-code-button');
+    if (!button || !value || !detail) return { exists: false };
+    const buttonRect = button.getBoundingClientRect();
+    const valueRect = value.getBoundingClientRect();
+    const detailRect = detail.getBoundingClientRect();
+    const detailValueRect = detail.querySelector('.verification-code-value').getBoundingClientRect();
+    const detailStyle = getComputedStyle(detail);
+    return {
+      exists: true,
+      listCenterDelta: Math.abs((buttonRect.left + buttonRect.width / 2) - (valueRect.left + valueRect.width / 2)),
+      detailCenterDelta: detailRect.width ? Math.abs((detailRect.left + detailRect.width / 2) - (detailValueRect.left + detailValueRect.width / 2)) : 0,
+      listHeight: buttonRect.height,
+      detailHeight: detailRect.height || Number.parseFloat(detailStyle.height),
+      hasCopyIcon: !!button.querySelector('.verification-code-action .mail-ui-icon')
+    };
+  })())`));
+  assert(codeButtonMetrics.exists && codeButtonMetrics.hasCopyIcon, `验证码快捷复制组件应完整呈现: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.listCenterDelta <= 1 && codeButtonMetrics.detailCenterDelta <= 1, `验证码必须在按钮几何中心: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.listHeight >= 30 && codeButtonMetrics.detailHeight >= 36, `验证码控件触控高度不足: ${JSON.stringify(codeButtonMetrics)}`);
+  await click(login, '.mail-list-item .verification-code-button');
+  await waitUntil(login, `document.querySelector('.mail-list-item .verification-code-button')?.classList.contains('copied')`);
+  assert(await evaluate(login, `window.__webmailCopiedText === document.querySelector('.mail-list-item .verification-code-value')?.textContent?.trim()`), '验证码快捷复制应只写入验证码文本');
   await evaluate(login, `document.querySelectorAll('.mail-row')[1]?.click()`);
   await waitUntil(login, `document.querySelector('main h1')?.textContent?.includes('Security notice') && document.querySelectorAll('.mail-row')[1]?.classList.contains('selected') && document.querySelectorAll('.mail-row')[1]?.classList.contains('read')`);
   const mailInteractionMetrics = JSON.parse(await evaluate(login, `JSON.stringify((() => {
@@ -478,7 +522,7 @@ async function run() {
     };
   })())`));
   assert(desktopReaderMetrics.topbarPosition === 'absolute' && desktopReaderMetrics.headerGap <= 32, `桌面详情工具栏不应占据标题上方整行空白: ${JSON.stringify(desktopReaderMetrics)}`);
-  results.push({ name: 'webmail-login-inbox', loginMetrics, inboxMetrics, mailInteractionMetrics, localeMenu, desktopReaderMetrics });
+  results.push({ name: 'webmail-login-inbox', loginMetrics, inboxMetrics, themeToggleMetrics, codeButtonMetrics, mailInteractionMetrics, localeMenu, desktopReaderMetrics });
 
   const empty = await openApp('/');
   await setInput(empty, 'input[type="email"]', 'empty@example.test');
