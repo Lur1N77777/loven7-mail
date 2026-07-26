@@ -101,6 +101,9 @@ test('the share manager modal styles its own portaled scope', () => {
   assert.match(workspaceCss, /\.share-manager-modal \.share-search-field\s*\{[^}]*height:\s*40px;[^}]*border:\s*1px solid var\(--admin-border\);/s, 'the search field must carry real control styling inside the portal');
   assert.match(workspaceCss, /\.share-manager-modal \.share-mobile-card\s*\{[^}]*content-visibility:\s*auto;/s, 'long share lists must skip offscreen card rendering');
   assert.match(workspaceCss, /\.share-manager-modal \.share-mobile-actions\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/s, 'mobile share actions should sit in one compact row instead of a 2x2 block');
+  assert.match(workspaceCss, /@media \(max-width: 767px\)\s*\{\s*\.share-manager-modal \.share-mobile-list\s*\{\s*display:\s*grid;/s, 'the mobile share list display must live inside the phone media query');
+  assert.doesNotMatch(workspaceCss, /\n\.share-manager-modal \.share-mobile-list\s*\{[^}]*display:/s, 'an unscoped display on the mobile share list would outrank md:hidden and duplicate the desktop table');
+  assert.match(workspaceCss, /\.share-manager-modal \.share-admin-table th\s*\{[^}]*background:\s*var\(--admin-panel-soft\);/s, 'the desktop share table must speak the same token language as the mobile cards');
 });
 
 test('read state re-merges when a device resumes so cross-device marks arrive without a reload', () => {

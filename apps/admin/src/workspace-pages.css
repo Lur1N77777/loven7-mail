@@ -1317,9 +1317,35 @@ body .address-workspace .user-filter-count {
   font-weight: 560;
 }
 
-.share-manager-modal .share-mobile-list {
-  display: grid;
-  gap: 10px;
+/* the JSX md:hidden gate owns desktop hiding — display may only be set here,
+   inside the mobile media, or it outranks the gate by load order. */
+@media (max-width: 767px) {
+  .share-manager-modal .share-mobile-list {
+    display: grid;
+    gap: 10px;
+  }
+}
+
+.share-manager-modal .share-manager-table-wrap {
+  border-color: var(--admin-divider);
+  border-radius: var(--admin-radius-card);
+}
+
+.share-manager-modal .share-admin-table th {
+  background: var(--admin-panel-soft);
+  color: var(--admin-text-soft);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.share-manager-modal .share-admin-table td {
+  border-top: 1px solid var(--admin-divider);
+  color: var(--admin-text-soft);
+  font-size: 13px;
+}
+
+.share-manager-modal .share-admin-table tr:hover td {
+  background: var(--admin-panel-hover);
 }
 
 .share-manager-modal .share-mobile-card {
