@@ -91,6 +91,16 @@ test('mobile pages clear the floating dock and mail chrome renders calm details'
   assert.match(productCss, /\.frontend-base-controls > \.btn-primary\s*\{[^}]*align-self:\s*flex-end;/s, 'the settings save action should sit compact at the row end instead of stretching full width');
 });
 
+test('the share manager modal styles its own portaled scope', () => {
+  const source = readFileSync(new URL('../src/views/AddressView.tsx', import.meta.url), 'utf8');
+  const workspaceCss = readFileSync(new URL('../src/workspace-pages.css', import.meta.url), 'utf8');
+  assert.match(source, /cardClassName="share-manager-modal"/, 'the modal needs a scope class because it portals outside every workspace stylesheet scope');
+  assert.match(source, /className="share-list-error" role="alert"/, 'list failures must surface inline with a retry action, not only a transient toast');
+  assert.match(workspaceCss, /\.share-manager-modal \.share-search-field\s*\{[^}]*height:\s*40px;[^}]*border:\s*1px solid var\(--admin-border\);/s, 'the search field must carry real control styling inside the portal');
+  assert.match(workspaceCss, /\.share-manager-modal \.share-mobile-card\s*\{[^}]*content-visibility:\s*auto;/s, 'long share lists must skip offscreen card rendering');
+  assert.match(workspaceCss, /\.share-manager-modal \.share-mobile-actions\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/s, 'mobile share actions should sit in one compact row instead of a 2x2 block');
+});
+
 test('read state re-merges when a device resumes so cross-device marks arrive without a reload', () => {
   const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
   assert.match(workspaceSource, /document\.addEventListener\('visibilitychange', onVisibility\)/, 'returning to the foreground must trigger a remote read-state re-merge');

@@ -571,6 +571,7 @@ export function AddressView({
   const shareListCursorRef = useRef<string | null>(null);
   const [shareListHasMore, setShareListHasMore] = useState(false);
   const [shareListLoading, setShareListLoading] = useState(false);
+  const [shareListError, setShareListError] = useState<string | null>(null);
   const [shareListQuery, setShareListQuery] = useState('');
   const [shareStatusFilter, setShareStatusFilter] = useState<ShareStatusFilter>('all');
   const [shareActionBusy, setShareActionBusy] = useState<string | null>(null);
@@ -1282,6 +1283,7 @@ export function AddressView({
   }, [accountUserToken, adminAccessToken, isAccountScoped, locale]);
   const loadShareList = useCallback(async (reset = true) => {
     setShareListLoading(true);
+    setShareListError(null);
     try {
       const queryString = buildQuery({
         limit: 80,
@@ -1311,7 +1313,9 @@ export function AddressView({
       setShareListHasMore(Boolean(res.hasMore && res.cursor));
       setShareStatusNow(Date.now());
     } catch (error) {
-      notify('error', error instanceof Error ? error.message : t('共享链接列表加载失败', 'Failed to load share links'));
+      const message = error instanceof Error ? error.message : t('共享链接列表加载失败', 'Failed to load share links');
+      setShareListError(message);
+      notify('error', message);
     } finally {
       setShareListLoading(false);
     }
@@ -2159,25 +2163,33 @@ export function AddressView({
           )}
         </div>
       </Modal>}
-      {shareManageOpen && <Modal title={t('共享链接管理', 'Share link management')} onClose={() => setShareManageOpen(false)} wide>
+      {shareManageOpen && <Modal title={t('共享链接管理', 'Share link management')} onClose={() => setShareManageOpen(false)} wide cardClassName="share-manager-modal">
         <div className="space-y-4">
-          <div className="grid gap-2 md:grid-cols-[1fr_150px_auto_auto] md:items-center">
-            <label className="toolbar-field address-search-field min-w-0" aria-label={t('搜索当前共享列表', 'Search current share list')}>
-              <Search size={15} className="toolbar-icon" />
+          <div className="share-manager-toolbar">
+            <label className="share-search-field" aria-label={t('搜索当前共享列表', 'Search current share list')}>
+              <Search size={15} className="share-search-icon" />
               <input
                 value={shareListQuery}
                 onChange={(event) => setShareListQuery(event.target.value)}
                 placeholder={t('实时搜索邮箱 / 链接后缀', 'Search mailbox / link suffix')}
               />
             </label>
-            <PopoverSelect ariaLabel={t('共享链接状态筛选', 'Share link status filter')} value={shareStatusFilter} options={shareStatusFilterOptions} onChange={(value) => { setShareStatusFilter(value as ShareStatusFilter); setShareStatusNow(Date.now()); }} />
-            <button type="button" className="btn-secondary compact" disabled={shareListLoading} onClick={() => loadShareList(true)}>
-              <RefreshCw size={15} className={cls(shareListLoading && 'animate-spin')} /> {t('刷新', 'Refresh')}
-            </button>
-            <button type="button" className="btn-secondary compact" disabled={visibleInactiveShares.length === 0 || shareActionBusy === 'cleanup:visible'} onClick={() => cleanupInactiveShares(visibleShareList, 'visible')}>
-              <Trash2 size={15} /> {t('清理失效', 'Clean inactive')}
-            </button>
+            <div className="share-toolbar-actions">
+              <PopoverSelect ariaLabel={t('共享链接状态筛选', 'Share link status filter')} value={shareStatusFilter} options={shareStatusFilterOptions} onChange={(value) => { setShareStatusFilter(value as ShareStatusFilter); setShareStatusNow(Date.now()); }} />
+              <button type="button" className="btn-secondary compact" disabled={shareListLoading} onClick={() => loadShareList(true)}>
+                <RefreshCw size={15} className={cls(shareListLoading && 'animate-spin')} /> {t('刷新', 'Refresh')}
+              </button>
+              <button type="button" className="btn-secondary compact" disabled={visibleInactiveShares.length === 0 || shareActionBusy === 'cleanup:visible'} onClick={() => cleanupInactiveShares(visibleShareList, 'visible')}>
+                <Trash2 size={15} /> {t('清理失效', 'Clean inactive')}
+              </button>
+            </div>
           </div>
+          {shareListError && !shareListLoading && (
+            <div className="share-list-error" role="alert">
+              <span>{shareListError}</span>
+              <button type="button" onClick={() => loadShareList(true)}><RefreshCw size={14} /> {t('重试', 'Retry')}</button>
+            </div>
+          )}
           {selectedShares.length > 0 && (
             <div className="share-bulk-bar">
               <strong>{locale === 'en-US' ? `${selectedShares.length} share links selected` : `已选择 ${selectedShares.length} 条共享链接`}</strong>
@@ -2195,11 +2207,11 @@ export function AddressView({
             <EmptyState icon={Search} title={t('没有匹配结果', 'No matches')} />
           ) : (
             <div className="space-y-3">
-              <div className="space-y-3 md:hidden">
+              <div className="share-mobile-list md:hidden">
                 {visibleShareList.map((row) => (
-                  <article key={row.token} className={cls("rounded-2xl border border-slate-100 bg-white p-3 shadow-sm", effectiveShareStatus(row, shareStatusNow) !== 'active' && "share-row-revoked")}>
-                    <div className="flex items-start gap-3">
-                      <input className="row-check mt-1" type="checkbox" checked={selectedShareTokens.has(row.token)} onChange={() => toggleShareSelected(row)} aria-label={locale === 'en-US' ? `Select share link ${row.token}` : `选择共享链接 ${row.token}`} />
+                  <article key={row.token} className={cls('share-mobile-card', effectiveShareStatus(row, shareStatusNow) !== 'active' && 'share-row-revoked')}>
+                    <div className="share-mobile-head">
+                      <input className="row-check" type="checkbox" checked={selectedShareTokens.has(row.token)} onChange={() => toggleShareSelected(row)} aria-label={locale === 'en-US' ? `Select share link ${row.token}` : `选择共享链接 ${row.token}`} />
                       <div className="min-w-0 flex-1">
                         <div className="share-mobile-title">
                           <div className="share-mobile-addresses">
@@ -2212,17 +2224,14 @@ export function AddressView({
                             <b>{t('创建', 'Created')} {formatDateTime(row.createdAt)}</b>
                           </span>
                         </div>
-                        <p className="share-range-summary mt-2">
-                          <em>{shareMailboxCountText(row)}</em>
-                        </p>
+                        <p className="share-mobile-meta"><em>{shareMailboxCountText(row)}</em><code>{shareLinkSuffix(row)}</code></p>
                       </div>
                     </div>
-                    <p className="mt-2 truncate font-mono text-[11px] text-slate-400">{shareLinkSuffix(row)}</p>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button type="button" className="btn-secondary compact" onClick={() => copyShareUrl(row.url)}><Copy size={14} /> {t('复制', 'Copy')}</button>
-                      <a className="btn-secondary compact" href={row.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {t('打开', 'Open')}</a>
-                      <button type="button" className="btn-secondary compact" onClick={() => { setShareEditTarget(row); setShareEditExpiry('30d'); setShareEditVisibility(row.mailVisibility || 'all'); }}><Save size={14} /> {t('改期限', 'Edit expiry')}</button>
-                      <button type="button" className="btn-danger compact" disabled={effectiveShareStatus(row, shareStatusNow) === 'revoked' || shareActionBusy === `revoke:${row.token}`} onClick={() => revokeShareLink(row)}><Trash2 size={14} /> {t('撤销', 'Revoke')}</button>
+                    <div className="share-mobile-actions">
+                      <button type="button" onClick={() => copyShareUrl(row.url)}><Copy size={14} /> {t('复制', 'Copy')}</button>
+                      <a href={row.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {t('打开', 'Open')}</a>
+                      <button type="button" onClick={() => { setShareEditTarget(row); setShareEditExpiry('30d'); setShareEditVisibility(row.mailVisibility || 'all'); }}><Save size={14} /> {t('改期限', 'Edit expiry')}</button>
+                      <button type="button" className="danger" disabled={effectiveShareStatus(row, shareStatusNow) === 'revoked' || shareActionBusy === `revoke:${row.token}`} onClick={() => revokeShareLink(row)}><Trash2 size={14} /> {t('撤销', 'Revoke')}</button>
                     </div>
                   </article>
                 ))}
