@@ -429,6 +429,8 @@ async function run() {
     hasRemoteImageButton: [...document.querySelectorAll('button')].some((button) => /显示远程图片|Show remote images/.test(button.textContent || '')),
     hasLoadingText: document.body.innerText.includes('正在优化') || document.body.innerText.includes('Loading images'),
     signedInBrandLogo: !!document.querySelector('.mail-list-header .brand-logo'),
+    uiFontFamily: getComputedStyle(document.querySelector('.mail-title-heading')).fontFamily,
+    mapleFontReady: document.fonts.check('16px "Loven7 Maple Mono"'),
     emptyHuge: false
   })`));
   assert(!inboxMetrics.xOverflow, '用户站收件箱不应横向溢出');
@@ -439,6 +441,7 @@ async function run() {
   assert(!inboxMetrics.hasRemoteImageButton, '远程邮件图片应自动通过代理加载，不应再要求手动允许');
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
   assert(!inboxMetrics.signedInBrandLogo, `登录后的邮箱左栏不应继续堆叠品牌 Logo: ${JSON.stringify(inboxMetrics)}`);
+  assert(inboxMetrics.mapleFontReady && inboxMetrics.uiFontFamily.includes('Loven7 Maple Mono'), `Webmail 应实际加载并使用 Maple Mono 中英文字体: ${JSON.stringify(inboxMetrics)}`);
   const initialTheme = await evaluate(login, `document.documentElement.dataset.theme`);
   assert(initialTheme === 'light' || initialTheme === 'dark', `页面应在首屏应用明确主题: ${initialTheme}`);
   await click(login, '.sidebar-header-actions .webmail-theme-toggle');

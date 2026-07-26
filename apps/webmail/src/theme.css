@@ -6,15 +6,27 @@
    other's accumulated layout CSS.
    ========================================================================== */
 
+@font-face {
+  font-family: "Loven7 Maple Mono";
+  src:
+    local("Maple Mono NF CN"),
+    local("MapleMono NF CN"),
+    url("/fonts/maple-mono-nf-cn-web.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
 
-  /* Admin typography contract */
-  --apple-cn-font-ui: ui-serif, Georgia, Cambria, "Times New Roman", Times, "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Microsoft YaHei UI", serif;
-  --apple-cn-font-display: ui-serif, Georgia, Cambria, "Times New Roman", Times, "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Microsoft YaHei UI", serif;
-  --font-code: "JetBrainsMono NFM", "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /* One family for Chinese, Latin and code keeps the mailbox rhythm coherent. */
+  --apple-cn-font-ui: "Loven7 Maple Mono", "Maple Mono NF CN", "Maple Mono", "Noto Sans Mono CJK SC", "Microsoft YaHei UI", monospace;
+  --apple-cn-font-display: var(--apple-cn-font-ui);
+  --font-code: var(--apple-cn-font-ui);
   --font-ui: var(--apple-cn-font-ui);
   --font-display: var(--apple-cn-font-display);
+  --font-mono: var(--font-code);
   --font-ui-readable: var(--apple-cn-font-ui);
   --font-display-readable: var(--apple-cn-font-display);
   --mail-ui-font: var(--apple-cn-font-ui);
@@ -70,7 +82,7 @@
 }
 
 :root[data-font-mode="en"] {
-  --font-ui: ui-serif, Georgia, Cambria, "Times New Roman", Times, "Songti SC", "STSong", "Noto Serif SC", "Microsoft YaHei UI", serif;
+  --font-ui: var(--apple-cn-font-ui);
   --font-display: var(--font-ui);
   --mail-ui-font: var(--font-ui);
 }
