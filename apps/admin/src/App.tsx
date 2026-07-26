@@ -405,7 +405,6 @@ export default function App() {
   const pageDragXStateRef = useRef(0);
   const pageDragXStateAtRef = useRef(0);
   const pageAnimationFrameRef = useRef<number | null>(null);
-  const pageAnimationSecondFrameRef = useRef<number | null>(null);
   const pageTransitionTimerRef = useRef<number | null>(null);
   const themeTransitionTimerRef = useRef<number | null>(null);
   const pageTransitionSeqRef = useRef(0);
@@ -421,39 +420,28 @@ export default function App() {
     swipeViewportWidthRef.current = Math.max(width, 360);
     return swipeViewportWidthRef.current;
   }, []);
-  const applyMobilePageTransforms = useCallback((value = pageDragXValueRef.current) => {
-    const width = getSwipeViewportWidth();
+  const applyMobilePageTransforms = useCallback((value = pageDragXValueRef.current, width = swipeViewportWidthRef.current) => {
     const currentMenu = activeMenuRef.current;
     const targetMenu = pageSwipeTargetMenuRef.current;
     mobilePageRefs.current.forEach((node, menu) => {
+      if (value !== 0 && targetMenu && menu !== currentMenu && menu !== targetMenu) return;
       const offset = getPageRenderOffset(menu, currentMenu, targetMenu, value);
       node.style.transform = `translate3d(${Math.round((offset * width + value) * 100) / 100}px, 0, 0)`;
     });
-  }, [getSwipeViewportWidth]);
+  }, []);
   const commitPageDragX = useCallback((value: number, forceState = false) => {
     pageDragXValueRef.current = value;
-    if (mobileSwipeCacheRef.current) {
-      mobileSwipeCacheRef.current.style.setProperty('--mobile-page-drag-x', `${value}px`);
-    }
-    applyMobilePageTransforms(value);
-    if (typeof document !== 'undefined') {
-      const width = getSwipeViewportWidth();
-      document.documentElement.style.setProperty('--mobile-nav-live-progress', `${Math.min(1, Math.abs(value) / width).toFixed(4)}`);
-    }
+    applyMobilePageTransforms(value, swipeViewportWidthRef.current);
     if (!forceState) return;
     pageDragXStateRef.current = value;
     pageDragXStateAtRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now();
     setPageDragX(value);
-  }, [applyMobilePageTransforms, getSwipeViewportWidth]);
+  }, [applyMobilePageTransforms]);
   const cancelPendingPageAnimation = useCallback(() => {
     if (typeof window === 'undefined') return;
     if (pageAnimationFrameRef.current !== null) {
       window.cancelAnimationFrame(pageAnimationFrameRef.current);
       pageAnimationFrameRef.current = null;
-    }
-    if (pageAnimationSecondFrameRef.current !== null) {
-      window.cancelAnimationFrame(pageAnimationSecondFrameRef.current);
-      pageAnimationSecondFrameRef.current = null;
     }
   }, []);
   const updateMobileTransitionMenu = useCallback((menu: MenuKey | null) => {
@@ -479,9 +467,6 @@ export default function App() {
   }, [applyPreservedMobileMailChrome]);
   const settleMobilePageAt = useCallback((menu: MenuKey) => {
     cancelPendingPageAnimation();
-    if (typeof document !== 'undefined') {
-      document.documentElement.style.setProperty('--mobile-nav-live-progress', '0');
-    }
     activeMenuRef.current = menu;
     syncMobileChromeForMenu(menu);
     pageSwipeTargetMenuRef.current = null;
@@ -508,10 +493,7 @@ export default function App() {
     cancelPendingPageAnimation();
     pageAnimationFrameRef.current = window.requestAnimationFrame(() => {
       pageAnimationFrameRef.current = null;
-      pageAnimationSecondFrameRef.current = window.requestAnimationFrame(() => {
-        pageAnimationSecondFrameRef.current = null;
-        commitPageDragX(value, forceState);
-      });
+      commitPageDragX(value, forceState);
     });
   }, [cancelPendingPageAnimation, commitPageDragX]);
   const resetAuthenticationState = useCallback((reason: 'expired' | 'manual') => {
@@ -984,7 +966,7 @@ export default function App() {
       const touch = event.touches[0];
       if (pageSwipeRef.current.rafId) window.cancelAnimationFrame(pageSwipeRef.current.rafId);
       pageSwipeRef.current = { ...createPageSwipeState(), active: true, startX: touch.clientX, startY: touch.clientY, lastX: touch.clientX, lastY: touch.clientY };
-      document.documentElement.style.setProperty('--mobile-nav-live-progress', '0');
+      getSwipeViewportWidth();
     };
     const handleNativeTouchMove = (event: TouchEvent) => {
       const swipe = pageSwipeRef.current;
@@ -1008,7 +990,7 @@ export default function App() {
       if (swipe.lock === 'page') {
         event.preventDefault();
         setPageSettling(false);
-        const width = getSwipeViewportWidth();
+        const width = swipeViewportWidthRef.current;
         const visualDx = getLockedSwipeDelta(dx, swipe.direction);
         const visibleTargetMenu = Math.abs(visualDx) > 2 ? swipe.targetMenu : null;
         if (visibleTargetMenu) applyPreservedMobileMailChrome(visibleTargetMenu);
@@ -1023,7 +1005,7 @@ export default function App() {
       if (swipe.lock !== 'page') return;
       const dx = swipe.lastX - swipe.startX;
       const dy = Math.abs(swipe.lastY - swipe.startY);
-      const width = getSwipeViewportWidth();
+      const width = swipeViewportWidthRef.current;
       const direction = swipe.direction || (dx < 0 ? 1 : -1);
       const lockedDx = getLockedSwipeDelta(dx, direction);
       const dragX = getPageDragX(lockedDx, width);
@@ -1049,7 +1031,7 @@ export default function App() {
     };
     const handleNativeTouchCancel = () => {
       resetPageSwipe(false);
-      const settleMs = getPageSettleMs(pageDragXValueRef.current, 0, getSwipeViewportWidth());
+      const settleMs = getPageSettleMs(pageDragXValueRef.current, 0, swipeViewportWidthRef.current);
       pageTransitionSeqRef.current += 1;
       setPageSettling(true);
       setPageSettleMs(settleMs);
@@ -1169,7 +1151,6 @@ export default function App() {
               <div
                 ref={mobileSwipeCacheRef}
                 className="mobile-swipe-cache h-full min-h-0 min-w-0"
-                style={{ '--mobile-page-drag-x': `${pageDragX}px` } as CSSProperties}
               >
                 {mobileRenderedMenus.map((menu) => {
                   const offset = getPageRenderOffset(menu, activeMenu, pageSwipeTargetMenu, pageDragX);

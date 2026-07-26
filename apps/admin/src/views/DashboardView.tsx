@@ -149,7 +149,7 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
             <h1 className="page-title">{t('运营概览', 'Operations overview')}</h1>
             <p className="page-lede">{t('站点的邮件流量、地址活跃与能力状态，尽在一页。', 'Mail traffic, address activity and site capabilities at a glance.')}</p>
           </div>
-          <div className="page-head-actions">
+          <div className="page-head-actions dashboard-page-actions">
             <button type="button" onClick={refresh} className="product-button product-button-quiet">
               <RefreshCw className={cls('h-4 w-4', loading && 'animate-spin')} />
               {loading ? t('同步中', 'Syncing') : t('刷新', 'Refresh')}

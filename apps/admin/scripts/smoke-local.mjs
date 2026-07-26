@@ -1033,11 +1033,12 @@ async function main() {
     await sleep(250);
     const fallbackAvatars = JSON.parse(await evaluate(mobile, `JSON.stringify([...document.querySelectorAll('.mail-list-item .brand-avatar-fallback')].map((avatar) => {
       const style = getComputedStyle(avatar);
-      return { backgroundColor: style.backgroundColor, color: style.color, fontSize: style.fontSize, fontWeight: style.fontWeight };
+      const letter = avatar.querySelector('span');
+      return { backgroundColor: style.backgroundColor, color: style.color, letterColor: letter ? getComputedStyle(letter).color : '', fontSize: style.fontSize, fontWeight: style.fontWeight };
     }))`));
     extraResults.push({ name: 'mobile-mail-fallback-avatars', avatars: fallbackAvatars });
     assert(fallbackAvatars.length >= 2, `mock inbox should render multiple initial fallback avatars: ${JSON.stringify(fallbackAvatars)}`);
-    assert(fallbackAvatars.every((avatar) => avatar.backgroundColor !== 'rgb(255, 255, 255)' && avatar.color === 'rgb(255, 255, 255)'), `fallback avatars should use colored backgrounds with white initials: ${JSON.stringify(fallbackAvatars)}`);
+    assert(fallbackAvatars.every((avatar) => avatar.backgroundColor !== 'rgb(255, 255, 255)' && avatar.color === 'rgb(255, 255, 255)' && avatar.letterColor === 'rgb(255, 255, 255)'), `fallback avatars should use colored backgrounds with white initials: ${JSON.stringify(fallbackAvatars)}`);
     assert(new Set(fallbackAvatars.map((avatar) => avatar.backgroundColor)).size >= 2, `different fallback senders should receive varied muted colors: ${JSON.stringify(fallbackAvatars)}`);
     await clickSelector(mobile, '.mail-list-item');
     const mobileMailDetail = await collect(mobile, 'mobile-mail-detail-open');
@@ -1439,6 +1440,24 @@ async function main() {
   mobileAdminPages.close();
 
   const narrowMobile = await openApp({ width: 320, height: 720 });
+  const narrowDashboard = await collect(narrowMobile, 'narrow-mobile-dashboard');
+  extraResults.push(narrowDashboard);
+  const narrowDashboardActions = JSON.parse(await evaluate(narrowMobile, `JSON.stringify((() => {
+    const buttons = [...document.querySelectorAll('.dashboard-page-actions .product-button')];
+    const rects = buttons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left };
+    });
+    return {
+      name: 'narrow-mobile-dashboard-actions',
+      count: buttons.length,
+      oneRow: rects.length === 3 && Math.max(...rects.map((rect) => rect.top)) - Math.min(...rects.map((rect) => rect.top)) <= 1,
+      clipped: buttons.some((button) => button.scrollWidth > button.clientWidth + 1),
+      insideViewport: rects.every((rect) => rect.left >= 0 && rect.right <= innerWidth),
+    };
+  })())`));
+  extraResults.push(narrowDashboardActions);
+  assert(!narrowDashboard.xOverflow && narrowDashboardActions.oneRow && !narrowDashboardActions.clipped && narrowDashboardActions.insideViewport, `320px dashboard actions should stay in one compact row: ${JSON.stringify(narrowDashboardActions)}`);
   await clickText(narrowMobile, '地址');
   const narrowAddress = await collect(narrowMobile, 'narrow-mobile-address');
   extraResults.push(narrowAddress);

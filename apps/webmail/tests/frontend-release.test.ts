@@ -192,7 +192,8 @@ test("webmail uses white only for real brand icons and deterministic color for i
   assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#fff\s*!important;[^}]*font-size:\s*calc\(var\(--brand-avatar-size\) \* \.456\);[^}]*font-weight:\s*560/s);
   assert.match(theme, /\.brand-avatar-with-icon,\s*:root\[data-theme="dark"\] \.brand-avatar-with-icon\s*\{[^}]*background:\s*#ffffff\s*!important;/s);
   assert.match(theme, /\.brand-avatar-fallback,\s*:root\[data-theme="dark"\] \.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#ffffff\s*!important;/s);
-  assert.match(avatarColors, /#A95769[\s\S]*#527AA2[\s\S]*#4B7F6B[\s\S]*#786397/, "fallback avatars should use the shared macaron palette");
+  assert.match(theme, /\.brand-avatar-fallback > span,\s*:root\[data-theme="dark"\] \.brand-avatar-fallback > span\s*\{[^}]*color:\s*#ffffff\s*!important;/s);
+  assert.match(avatarColors, /#D26F7C[\s\S]*#6F91C9[\s\S]*#58A38A[\s\S]*#8D7BC2/, "fallback avatars should use the shared bright macaron palette");
   assert.doesNotMatch(avatarColors, /#64748B|#58778A|#7C7659/, "old gray and olive avatar colors should not return");
   assert.equal(getFallbackAvatarColor('letter@example.test'), getFallbackAvatarColor('letter@example.test'));
   assert.equal(getFallbackAvatarColor('letter@example.test', 'First label'), getFallbackAvatarColor('letter@example.test', 'Renamed label'));

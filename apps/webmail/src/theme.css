@@ -1055,6 +1055,11 @@ body ::selection {
   color: #ffffff !important;
 }
 
+.brand-avatar-fallback > span,
+:root[data-theme="dark"] .brand-avatar-fallback > span {
+  color: #ffffff !important;
+}
+
 /* Responsive --------------------------------------------------------------- */
 
 @media (max-width: 1040px) {

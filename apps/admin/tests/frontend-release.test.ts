@@ -30,6 +30,7 @@ test('address management keeps floating controls visible and reports refresh pro
   assert.match(source, /className=\{cls\(loading && 'animate-spin'\)\}/, 'refresh icon must spin even when the current address list is empty');
   assert.doesNotMatch(source, /\(loading \|\| usersLoading\) && data\.length > 0 && 'animate-spin'/, 'refresh feedback must not depend on pre-existing rows');
   assert.match(source, /mobile-address-action-menu mobile-address-action-menu-portal/, 'mobile address actions must render through the viewport-level portal');
+  assert.match(source, /className="mobile-address-secondary"/, 'mobile address metadata and counts should share one compact secondary row');
   assert.match(workspaceCss, /\.mobile-address-action-menu\.mobile-address-action-menu-portal\s*\{[^}]*position:\s*fixed\s*!important;[^}]*max-height:/s, 'mobile actions must stay inside short viewports');
   assert.match(workspaceCss, /\.user-filter-trigger\.has-filter\s*\{[^}]*padding-right:\s*40px\s*!important;/s, 'selected user text must reserve space for its clear action');
   assert.match(workspaceCss, /body \.address-workspace :is\(\.address-workspace-surface, \.sender-access-shell\)\s*\{[^}]*border-radius:\s*var\(--workspace-radius\)\s*!important;/s, 'address data and sender access shells must share the workspace radius');
@@ -40,12 +41,18 @@ test('address management keeps floating controls visible and reports refresh pro
 
 test('mobile navigation uses one immediate active surface and statistics keeps refresh compact', () => {
   const shellSource = readFileSync(new URL('../src/components/Shell.tsx', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const statsSource = readFileSync(new URL('../src/views/DashboardView.tsx', import.meta.url), 'utf8');
   const productCss = readFileSync(new URL('../src/product-pages.css', import.meta.url), 'utf8');
+  const themeCss = readFileSync(new URL('../src/theme.css', import.meta.url), 'utf8');
 
   assert.doesNotMatch(shellSource, /mobile-nav-progress-pill/, 'a second animated navigation pill would recreate the trailing ghost');
   assert.match(statsSource, /className="stats-mobile-refresh"/, 'mobile statistics should retain refresh as a compact icon action');
   assert.match(productCss, /\.admin-stats-view-shell \.stats-desktop-refresh\s*\{[^}]*display:\s*none;/s, 'the full-width statistics refresh action must be hidden on phones');
+  assert.match(productCss, /\.admin-dashboard-view-shell \.dashboard-page-actions\s*\{[^}]*flex-wrap:\s*nowrap;/s, 'dashboard actions must remain on one compact mobile row');
+  assert.doesNotMatch(appSource, /--mobile-(?:page-drag-x|nav-live-progress)/, 'page swipes must not invalidate global styles on every animation frame');
+  assert.doesNotMatch(appSource, /pageAnimationSecondFrameRef/, 'page settling should not add a second animation-frame delay');
+  assert.match(themeCss, /body \.mobile-mail-shell \.mail-list-item\s*\{[^}]*transform:\s*none\s*!important;[^}]*will-change:\s*auto\s*!important;/s, 'mail rows must not each reserve a compositor layer');
 });
 
 test('mobile chrome drops per-frame backdrop blur and clips offscreen mail work', () => {
@@ -233,6 +240,7 @@ test('admin locale changes stay outside account and mail request dependencies', 
 
 test('admin uses white only for real brand icons and deterministic color for initials', () => {
   const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const theme = readFileSync(new URL('../src/theme.css', import.meta.url), 'utf8');
   const avatarColors = readFileSync(new URL('../../shared/avatarColor.ts', import.meta.url), 'utf8');
   const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const shellSource = readFileSync(new URL('../src/components/Shell.tsx', import.meta.url), 'utf8');
@@ -240,7 +248,8 @@ test('admin uses white only for real brand icons and deterministic color for ini
   assert.match(styles, /\.mobile-mail-detail \.brand-avatar img\s*\{[^}]*width:\s*85%\s*!important;[^}]*height:\s*85%\s*!important;[^}]*object-fit:\s*contain\s*!important;[^}]*clip-path:\s*none\s*!important;/s);
   assert.match(styles, /\.brand-avatar-with-icon\s*\{[^}]*background:\s*#fff\s*!important;/s);
   assert.match(styles, /\.brand-avatar-fallback\s*\{[^}]*background:\s*var\(--brand-avatar-fallback-bg\)\s*!important;[^}]*color:\s*#fff\s*!important;[^}]*font-size:\s*calc\(var\(--brand-avatar-size\) \* \.456\);[^}]*font-weight:\s*560/s);
-  assert.match(avatarColors, /#A95769[\s\S]*#527AA2[\s\S]*#4B7F6B[\s\S]*#786397/, 'fallback avatars should use the shared macaron palette');
+  assert.match(theme, /\.mobile-mail-shell \.brand-avatar-fallback > span,[\s\S]*color:\s*#fff\s*!important;/, 'the rendered fallback letter must stay white on mobile');
+  assert.match(avatarColors, /#D26F7C[\s\S]*#6F91C9[\s\S]*#58A38A[\s\S]*#8D7BC2/, 'fallback avatars should use the shared bright macaron palette');
   assert.doesNotMatch(avatarColors, /#64748B|#58778A|#7C7659/, 'old gray and olive avatar colors should not return');
   assert.match(appSource, /globalRefreshing/);
   assert.match(shellSource, /className=\{cls\('sidebar-mini-btn sidebar-tool-btn', refreshing && 'is-refreshing'\)\}/);

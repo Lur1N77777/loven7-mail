@@ -1749,6 +1749,22 @@ body .settings-view-shell .rules-policy .check-row {
     justify-content: flex-start;
   }
 
+  .admin-dashboard-view-shell .dashboard-page-actions {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  body .admin-dashboard-view-shell .dashboard-page-actions .product-button {
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    flex: 1 1 0;
+    gap: 5px;
+    padding: 0 8px !important;
+    font-size: 12px !important;
+  }
+
   .admin-stats-view-shell .stats-page-head {
     gap: 0;
   }

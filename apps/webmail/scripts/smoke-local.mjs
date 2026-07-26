@@ -481,10 +481,11 @@ async function run() {
       exists: !!avatar,
       background: style?.backgroundColor || '',
       tokenBackground,
-      color: style?.color || ''
+      color: style?.color || '',
+      letterColor: avatar?.querySelector('span') ? getComputedStyle(avatar.querySelector('span')).color : ''
     };
   })())`));
-  assert(fallbackAvatarMetrics.exists && fallbackAvatarMetrics.background === fallbackAvatarMetrics.tokenBackground && fallbackAvatarMetrics.color === 'rgb(255, 255, 255)', `深浅色模式都必须保留发件人马卡龙头像与白色首字母: ${JSON.stringify(fallbackAvatarMetrics)}`);
+  assert(fallbackAvatarMetrics.exists && fallbackAvatarMetrics.background === fallbackAvatarMetrics.tokenBackground && fallbackAvatarMetrics.color === 'rgb(255, 255, 255)' && fallbackAvatarMetrics.letterColor === 'rgb(255, 255, 255)', `深浅色模式都必须保留发件人马卡龙头像与白色首字母: ${JSON.stringify(fallbackAvatarMetrics)}`);
   await click(login, '.sidebar-header-actions .webmail-theme-toggle');
   await waitUntil(login, `document.documentElement.dataset.theme === '${initialTheme}'`);
 

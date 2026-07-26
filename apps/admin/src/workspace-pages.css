@@ -425,8 +425,9 @@ body .address-workspace .mobile-address-card .address-strong {
 
 body .address-workspace .mobile-address-meta {
   display: block !important;
+  flex: 1 1 auto;
   min-width: 0;
-  margin-top: 3px !important;
+  margin: 0 !important;
   color: var(--workspace-muted) !important;
   font-size: 10.5px !important;
   font-weight: 430 !important;
@@ -442,9 +443,10 @@ body .address-workspace .mobile-address-meta span {
 
 body .address-workspace .mobile-address-stats {
   display: flex !important;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 14px !important;
-  margin-top: 7px !important;
+  gap: 10px !important;
+  margin: 0 !important;
   border: 0 !important;
   padding: 0 !important;
   color: var(--workspace-muted) !important;
@@ -461,6 +463,18 @@ body .address-workspace .mobile-address-stats span:last-child {
   max-width: none !important;
   margin-left: 0 !important;
   text-align: left !important;
+}
+
+body .address-workspace .mobile-address-secondary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+body .address-workspace .mobile-address-card:active {
+  background: color-mix(in srgb, var(--workspace-surface-hover) 58%, transparent) !important;
 }
 
 .mobile-address-action-menu.mobile-address-action-menu-portal {

@@ -917,6 +917,26 @@ body .sidebar-reference-shell .sidebar-compose-btn span {
   }
 }
 
+@media (max-width: 900px) {
+  body .mobile-mail-shell .mail-list-item {
+    transform: none !important;
+    will-change: auto !important;
+  }
+
+  body .mobile-mail-shell .mail-list-item:active {
+    transform: scale(.992) !important;
+  }
+}
+
+html body .brand-avatar-fallback > span,
+html.theme-dark body .brand-avatar-fallback > span,
+html body .mobile-mail-shell .brand-avatar-fallback > span,
+html.theme-dark body .mobile-mail-shell .brand-avatar-fallback > span,
+html body .mobile-mail-detail .brand-avatar-fallback > span,
+html.theme-dark body .mobile-mail-detail .brand-avatar-fallback > span {
+  color: #fff !important;
+}
+
 /* keep every control inside buttons from wrapping when English labels grow */
 body :is(.product-button, .btn-primary, .btn-secondary, .btn-danger, .cap-state, .card-chip, .rules-nav-count) {
   white-space: nowrap !important;

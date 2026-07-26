@@ -1773,7 +1773,13 @@ export function AddressView({
         <div className="mobile-address-head">
           <div className="mobile-address-copy min-w-0">
             <button type="button" className="address-strong block max-w-full truncate text-left" onClick={() => copyAddressValue(row.name, t("已复制邮箱地址", "Mailbox address copied"))} title={t("点击复制邮箱地址", "Copy mailbox address")}>{row.name}</button>
-            {owner && <p className="mobile-address-meta"><span>{t('所属用户', 'Owner')} · {owner}</span></p>}
+            <div className="mobile-address-secondary">
+              {owner && <p className="mobile-address-meta"><span>{t('所属用户', 'Owner')} · {owner}</span></p>}
+              <div className="mobile-address-stats" aria-label={`${t('收件', 'Inbox')} ${row.mail_count ?? 0}, ${t('发件', 'Sent')} ${row.send_count ?? 0}`}>
+                <span>{t("收件", "In")} <strong>{row.mail_count ?? 0}</strong></span>
+                <span>{t("发件", "Out")} <strong>{row.send_count ?? 0}</strong></span>
+              </div>
+            </div>
           </div>
           <div className="mobile-address-menu-root">
             <input className="row-check" type="checkbox" checked={selectedIds.has(row.id)} onChange={() => toggleSelected(row)} aria-label={locale === 'en-US' ? `Select ${row.name}` : `选择 ${row.name}`} />
@@ -1797,10 +1803,6 @@ export function AddressView({
               <MoreHorizontal size={18} />
             </button>
           </div>
-        </div>
-        <div className="mobile-address-stats">
-          <span>{t("收件", "In")} <strong>{row.mail_count ?? 0}</strong></span>
-          <span>{t("发件", "Out")} <strong>{row.send_count ?? 0}</strong></span>
         </div>
       </article>
     );
