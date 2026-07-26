@@ -1,6 +1,6 @@
 import { sha256Hex } from './crypto.ts';
 import { normalizeFrontendBaseUrl } from './frontendBase.ts';
-import { isAuthenticationFailureStatus, reportAuthenticationFailure } from './authFailure.ts';
+import { isAuthenticationFailureStatus, noteAuthenticationSuccess, reportAuthenticationFailure } from './authFailure.ts';
 
 export type OAuthClientInfo = {
   clientID: string;
@@ -174,6 +174,7 @@ async function apiRequest<T>(apiBase: string, path: string, init: RequestInitLit
     reportAuthenticationFailure(error);
     throw error;
   }
+  noteAuthenticationSuccess();
   return data as T;
 }
 

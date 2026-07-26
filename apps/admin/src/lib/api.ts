@@ -1,5 +1,5 @@
 import { getRuntimeLocale, localeText } from './locale.ts';
-import { reportAuthenticationFailure } from './authFailure.ts';
+import { noteAuthenticationSuccess, reportAuthenticationFailure } from './authFailure.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -210,6 +210,8 @@ export function createApiClient(getBaseUrl: () => string, getCredentials: () => 
           if (options.reportAuthFailure !== false) reportAuthenticationFailure(error);
           throw error;
         }
+        // Reaching an authenticated 2xx proves the credential still works.
+        if (adminPassword || userAccessToken || accountUserToken || addressJwt) noteAuthenticationSuccess();
         if (!raw) return undefined as T;
         if (contentType.includes('application/json')) {
           try {

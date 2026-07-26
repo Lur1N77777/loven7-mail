@@ -160,11 +160,17 @@ function cacheAdminResult(key: string, isAdmin: boolean) {
   });
 }
 
-async function verifyAdminAccount(env: AdminProxyEnv, token: string, signal: AbortSignal) {
-  if (!token) return false;
+// "This token is not an admin" and "the upstream could not tell us" must stay
+// distinguishable: the first is a real credential verdict, the second is a
+// transient outage. Collapsing them into `false` made every upstream hiccup
+// look like an expired login and signed the operator out.
+type AdminVerdict = "admin" | "not-admin" | "unknown";
+
+async function verifyAdminAccount(env: AdminProxyEnv, token: string, signal: AbortSignal): Promise<AdminVerdict> {
+  if (!token) return "not-admin";
   const cacheKey = await verificationCacheKey(env, token);
   const cached = adminVerificationCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.isAdmin;
+  if (cached && cached.expiresAt > Date.now()) return cached.isAdmin ? "admin" : "not-admin";
   if (cached) adminVerificationCache.delete(cacheKey);
   const url = new URL(`${workerBase(env)}/user_api/settings`);
   const headers: Record<string, string> = {
@@ -175,27 +181,38 @@ async function verifyAdminAccount(env: AdminProxyEnv, token: string, signal: Abo
   if (env.SITE_PASSWORD) headers["x-custom-auth"] = env.SITE_PASSWORD;
   const response = await fetch(url.toString(), { headers, signal });
   if (!response.ok) {
-    cacheAdminResult(cacheKey, false);
-    return false;
+    // Only the upstream's own auth verdicts describe the credential. Anything
+    // else (429, 5xx, gateway noise) says nothing about it, so it must not be
+    // cached or reported as a rejection.
+    if (response.status === 401 || response.status === 403) {
+      cacheAdminResult(cacheKey, false);
+      return "not-admin";
+    }
+    return "unknown";
   }
   const raw = await response.json().catch(() => null) as unknown;
   const profile = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as UserSettings : {};
   const isAdmin = profileIsAdmin(profile);
   cacheAdminResult(cacheKey, isAdmin);
-  return isAdmin;
+  return isAdmin ? "admin" : "not-admin";
 }
 
-async function verifyAnyAdminAccount(env: AdminProxyEnv, tokens: string[], signal: AbortSignal) {
+async function verifyAnyAdminAccount(env: AdminProxyEnv, tokens: string[], signal: AbortSignal): Promise<AdminVerdict> {
+  let sawUnknown = false;
   for (const token of tokens) {
     try {
-      if (await verifyAdminAccount(env, token, signal)) return true;
+      const verdict = await verifyAdminAccount(env, token, signal);
+      if (verdict === "admin") return "admin";
+      if (verdict === "unknown") sawUnknown = true;
     } catch {
       if (signal.aborted) throw new DOMException("Request timed out", "AbortError");
       // A selected mailbox often supplies an address JWT in Authorization.
       // One invalid candidate must not mask another valid user/admin token.
+      sawUnknown = true;
     }
   }
-  return false;
+  // A token we never managed to check is not a token we know to be invalid.
+  return sawUnknown ? "unknown" : "not-admin";
 }
 
 function upstreamHeaders(request: Request, env: AdminProxyEnv, hasBody: boolean) {
@@ -249,8 +266,13 @@ export async function proxyToWorker(context: PagesContext, prefix: string, optio
         if (providedAdminPassword !== adminPassword) return jsonError(403, "管理员凭据无效。", "invalid_admin_password");
         headers.set("x-admin-auth", adminPassword);
       } else {
-        const isAdmin = await verifyAnyAdminAccount(context.env, tokensFromRequest(request), controller.signal);
-        if (!isAdmin) return jsonError(403, "当前账号不是管理员或登录已失效。", "not_admin");
+        const verdict = await verifyAnyAdminAccount(context.env, tokensFromRequest(request), controller.signal);
+        if (verdict === "unknown") {
+          // 503 keeps the client's session intact; a 403 here would read as
+          // "your login died" and wipe it over a passing upstream blip.
+          return jsonError(503, "暂时无法校验管理员身份，请稍后重试。", "admin_verification_unavailable");
+        }
+        if (verdict !== "admin") return jsonError(403, "当前账号不是管理员或登录已失效。", "not_admin");
         headers.set("x-admin-auth", adminPassword);
       }
     }

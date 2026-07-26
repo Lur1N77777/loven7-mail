@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 
 import { activateWaitingServiceWorker, isChunkLoadError } from '../src/lib/appRecovery.ts';
 import { loadBoundedAddressIndex } from '../src/lib/addressIndex.ts';
-import { subscribeAuthenticationFailures } from '../src/lib/authFailure.ts';
+import { noteAuthenticationSuccess, reportAuthenticationFailure, subscribeAuthenticationFailures } from '../src/lib/authFailure.ts';
 import { createApiClient } from '../src/lib/api.ts';
 import { buildCacheScope, scopedStorageKey } from '../src/lib/cacheScope.ts';
 import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
@@ -437,6 +437,34 @@ test('account login does not retry plaintext after a backend failure', async () 
   }
 });
 
+test('a live credential clears its strike so intermittent rejections never accumulate into a logout', () => {
+  const seen: number[] = [];
+  const unsubscribe = subscribeAuthenticationFailures((error) => seen.push(Number((error as { status?: unknown }).status)));
+  try {
+    noteAuthenticationSuccess();
+    // A blip an hour ago must not team up with a blip today.
+    assert.equal(reportAuthenticationFailure({ status: 401 }), false);
+    noteAuthenticationSuccess();
+    assert.equal(reportAuthenticationFailure({ status: 401 }), false);
+    assert.deepEqual(seen, [], 'a success between two rejections proves the credential is alive');
+    // Two rejections with no success between them is a real verdict.
+    assert.equal(reportAuthenticationFailure({ status: 401 }), true);
+    assert.deepEqual(seen, [401]);
+  } finally {
+    unsubscribe();
+    noteAuthenticationSuccess();
+  }
+});
+
+test('the admin proxy separates "not an admin" from "upstream could not answer"', () => {
+  const proxy = readFileSync(new URL('../functions/_lib/admin-proxy.ts', import.meta.url), 'utf8');
+
+  assert.match(proxy, /type AdminVerdict = "admin" \| "not-admin" \| "unknown"/, 'the verdict must carry the unknown case, not collapse it into false');
+  assert.match(proxy, /if \(response\.status === 401 \|\| response\.status === 403\) \{\s*cacheAdminResult\(cacheKey, false\);\s*return "not-admin";\s*\}\s*return "unknown";/s, 'only the upstream own auth verdicts describe the credential; 429/5xx must stay unknown and uncached');
+  assert.match(proxy, /if \(verdict === "unknown"\) \{[^}]*jsonError\(503,[^}]*"admin_verification_unavailable"\)/s, 'an unverifiable identity is a 503, because a 403 here reads to the client as an expired login');
+  assert.doesNotMatch(proxy, /if \(!response\.ok\) \{\s*cacheAdminResult\(cacheKey, false\);\s*return false;/s, 'treating every non-2xx as "not an admin" is what signed operators out on upstream hiccups');
+});
+
 test('admin API boundaries report only authentication failures and preserve sessions for business 403 responses', async () => {
   const originalFetch = globalThis.fetch;
   const observedStatuses: number[] = [];
@@ -458,14 +486,18 @@ test('admin API boundaries report only authentication failures and preserve sess
     });
   }) as typeof fetch;
   try {
+    noteAuthenticationSuccess();
     const client = createApiClient(() => 'https://api.example', () => ({ userAccessToken: 'active-token' }));
     await assert.rejects(client.request('/unauthorized', { skipCache: true }), (error: any) => error?.status === 401);
+    assert.deepEqual(observedStatuses, [], 'one rejection is a blip, not a verdict: it must not end the session');
     await assert.rejects(client.request('/forbidden', { skipCache: true }), (error: any) => error?.status === 403);
+    assert.deepEqual(observedStatuses, [], 'a business 403 describes a capability, never the credential');
     await assert.rejects(client.request('/invalid-admin', { skipCache: true }), (error: any) => error?.status === 403);
+    assert.deepEqual(observedStatuses, [403], 'a second credential rejection confirms the session is gone');
     await assert.rejects(client.request('/server-error', { skipCache: true }), (error: any) => error?.status === 503);
     await assert.rejects(client.request('/network-error', { skipCache: true }), /network unavailable/);
     await assert.rejects(fetchUserProfile('https://api.example', 'account-token'), (error: any) => error?.status === 403);
-    assert.deepEqual(observedStatuses, [401, 403, 403]);
+    assert.deepEqual(observedStatuses, [403], 'neither 5xx, offline nor a fresh single strike may invalidate a session');
   } finally {
     unsubscribe();
     globalThis.fetch = originalFetch;

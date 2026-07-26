@@ -5,7 +5,7 @@ import type {
   SessionResponse,
   ShareInfo,
 } from "./types";
-import { reportAuthenticationFailure } from "./authFailure.ts";
+import { noteAuthenticationSuccess, reportAuthenticationFailure } from "./authFailure.ts";
 
 export class ApiError extends Error {
   status: number;
@@ -76,6 +76,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
     reportAuthenticationFailure(error);
     throw error;
   }
+  noteAuthenticationSuccess();
   return data as T;
 }
 

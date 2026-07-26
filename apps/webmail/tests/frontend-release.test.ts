@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { buildSessionCacheKey, clearJwtFromHref, readJwtFromHref } from "../src/auth.ts";
-import { subscribeAuthenticationFailures } from "../src/authFailure.ts";
+import { noteAuthenticationSuccess, subscribeAuthenticationFailures } from "../src/authFailure.ts";
 import { ApiError, fetchSafeSettings } from "../src/api.ts";
 import { MAILBOX_CACHE_VERSION, prepareMailboxCachePayload } from "../src/cache.ts";
 import { copyText } from "../src/clipboard.ts";
@@ -472,26 +472,34 @@ test("webmail keeps HTTP status and invalidates only runtime 401/403 responses",
   const originalFetch = globalThis.fetch;
   const observedStatuses: number[] = [];
   const unsubscribe = subscribeAuthenticationFailures((error) => observedStatuses.push(error.status));
-  let mode: "401" | "403" | "503" | "network" = "401";
+  let mode: "401" | "403-share" | "403-credential" | "503" | "network" = "401";
   globalThis.fetch = (async () => {
     if (mode === "network") throw new TypeError("network unavailable");
-    const status = Number(mode);
-    return new Response(JSON.stringify({ message: `status ${status}` }), {
+    const status = Number(mode.slice(0, 3));
+    const code = mode === "403-share" ? "share_permission_denied" : mode === "403-credential" ? "invalid_jwt" : "";
+    return new Response(JSON.stringify({ error: { code, message: `status ${status}` } }), {
       status,
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
   try {
+    noteAuthenticationSuccess();
     await assert.rejects(fetchSafeSettings("active-token"), (error: unknown) => error instanceof ApiError && error.status === 401);
-    mode = "403";
+    assert.deepEqual(observedStatuses, [], "one rejection is a blip - a sleeping phone or a network handover - not a verdict");
+    mode = "403-share";
     await assert.rejects(fetchSafeSettings("active-token"), (error: unknown) => error instanceof ApiError && error.status === 403);
+    assert.deepEqual(observedStatuses, [], "a share link forbidding an action says nothing about the mailbox credential");
     mode = "503";
     await assert.rejects(fetchSafeSettings("active-token"), (error: unknown) => error instanceof ApiError && error.status === 503);
     mode = "network";
     await assert.rejects(fetchSafeSettings("active-token"), /network unavailable/);
-    assert.deepEqual(observedStatuses, [401, 403]);
+    assert.deepEqual(observedStatuses, [], "neither 5xx nor offline may end a session");
+    mode = "403-credential";
+    await assert.rejects(fetchSafeSettings("active-token"), (error: unknown) => error instanceof ApiError && error.status === 403);
+    assert.deepEqual(observedStatuses, [403], "a second rejection that names the credential confirms the session is gone");
   } finally {
     unsubscribe();
+    noteAuthenticationSuccess();
     globalThis.fetch = originalFetch;
   }
 });
