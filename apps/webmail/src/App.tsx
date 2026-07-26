@@ -1805,12 +1805,12 @@ export default function App() {
         </div>
 
         <div className="mail-list-control-row">
-        <div className="account-card">
-          <div
-            className={`account-address-row ${(isShareSession(session) && (shareInfo?.addresses.length || 0) > 1) ? "has-mailbox-menu" : ""}`}
-            ref={mailboxMenuRef}
-            data-current-mailbox-id={isShareSession(session) ? session.shareMailboxId : ""}
-          >
+          <div className="account-card">
+            <div
+              className={`account-address-row ${(isShareSession(session) && (shareInfo?.addresses.length || 0) > 1) ? "has-mailbox-menu" : ""}`}
+              ref={mailboxMenuRef}
+              data-current-mailbox-id={isShareSession(session) ? session.shareMailboxId : ""}
+            >
             <button
               className="address-copy-button"
               type="button"
@@ -1859,8 +1859,8 @@ export default function App() {
                 })}
               </div>
             ) : null}
+            </div>
           </div>
-        </div>
 
         <div className="toolbar mail-toolbar">
           <button type="button"
@@ -1880,7 +1880,7 @@ export default function App() {
                 <circle className="refresh-ring-progress" cx="10" cy="10" r="7" />
               </svg>
             </span>
-            <span>{refreshFeedback || copy.refresh}</span>
+            <span className="refresh-label" aria-live="polite">{refreshFeedback || copy.refresh}</span>
           </button>
           <button
             className={`auto-refresh-button ${autoRefreshEnabled ? "active" : ""}`}

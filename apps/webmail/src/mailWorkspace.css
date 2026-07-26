@@ -107,8 +107,8 @@
 .mail-list-control-row {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 8px;
   padding-bottom: 9px;
   border-bottom: 1px solid var(--lm-divider);
 }
@@ -116,10 +116,12 @@
 .mail-list-header .account-address-row {
   min-height: 32px;
   margin: 0;
+  align-items: flex-start;
 }
 
 .mail-list-header .address-copy-button {
   min-height: 32px;
+  align-items: flex-start;
   padding: 3px 5px;
   border-radius: var(--lm-radius-control-sm);
   color: var(--lm-text);
@@ -128,9 +130,12 @@
 }
 
 .mail-list-header .address-copy-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .mail-list-header .address-copy-affordance {
@@ -172,12 +177,15 @@
 .mail-list-header .mail-toolbar {
   position: relative;
   z-index: 30;
-  display: grid;
+  display: inline-flex;
   flex: 0 0 auto;
-  grid-template-columns: auto auto;
-  gap: 3px;
+  align-items: stretch;
+  gap: 0;
   margin: 0;
-  overflow: visible;
+  overflow: hidden;
+  border: 1px solid var(--lm-divider);
+  border-radius: var(--lm-radius-control);
+  background: var(--lm-surface);
   contain: none;
 }
 
@@ -188,8 +196,8 @@
   min-width: 0;
   min-height: 32px;
   border: 0;
-  border-radius: var(--lm-radius-control);
-  padding-inline: 8px;
+  border-radius: 0;
+  padding-inline: 7px;
   color: var(--lm-text-soft);
   background: transparent;
   font-size: 11.5px;
@@ -201,6 +209,29 @@
 .mail-list-header .mail-toolbar .auto-refresh-button:hover:not(:disabled) {
   color: var(--lm-text);
   background: var(--lm-surface-hover);
+}
+
+.mail-list-header .mail-toolbar .refresh-button {
+  width: 31px;
+  padding: 0;
+}
+
+.mail-list-header .mail-toolbar .auto-refresh-button {
+  border-left: 1px solid var(--lm-divider);
+}
+
+.mail-list-header .mail-toolbar .refresh-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.mail-list-header .mail-toolbar .refresh-button[aria-busy="true"] .refresh-icon {
+  animation: spin .75s linear infinite;
 }
 
 .mail-list-header .mail-toolbar .auto-refresh-button.active {

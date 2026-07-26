@@ -325,7 +325,7 @@ async function captureScreenshot(ws, name) {
 
 async function loginWithMockMailbox(ws) {
   await waitUntil(ws, `document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);
-  await setInput(ws, 'input[type="email"]', 'qa@example.test');
+  await setInput(ws, 'input[type="email"]', 'rj6ckfgq8lb@c.loven.qzz.io');
   await setInput(ws, '.password-input-wrap input', 'good');
   await click(ws, '.login-button');
   await waitUntil(ws, `document.querySelectorAll('.mail-row').length >= 2`);
@@ -412,7 +412,7 @@ async function run() {
   assert(loginMetrics.loginButtonHeight >= 44, '登录按钮触控高度不足');
   await click(login, '.password-toggle');
   assert(await evaluate(login, `document.querySelector('.password-input-wrap input')?.type === 'text'`), '密码眼睛按钮应切换到明文');
-  await setInput(login, 'input[type="email"]', 'qa@example.test');
+  await setInput(login, 'input[type="email"]', 'rj6ckfgq8lb@c.loven.qzz.io');
   await setInput(login, '.password-input-wrap input', 'bad');
   await click(login, '.login-button');
   await waitUntil(login, `document.body.innerText.includes('邮箱或密码错误')`);
@@ -421,7 +421,10 @@ async function run() {
   await click(login, '.login-button');
   await waitUntil(login, `document.querySelectorAll('.mail-row').length >= 2`);
   await waitUntil(login, `document.querySelector('.mail-html-view')?.srcdoc?.includes('HTML rendered cleanly')`);
-  const inboxMetrics = JSON.parse(await evaluate(login, `JSON.stringify({
+  const inboxMetrics = JSON.parse(await evaluate(login, `JSON.stringify((() => {
+    const address = document.querySelector('.address-copy-text');
+    const addressStyle = address ? getComputedStyle(address) : null;
+    return {
     xOverflow: document.documentElement.scrollWidth > innerWidth + 1,
     rows: document.querySelectorAll('.mail-row').length,
     hasRawMime: /Content-Type:|MIME-Version:/.test(document.body.innerText),
@@ -431,8 +434,11 @@ async function run() {
     signedInBrandLogo: !!document.querySelector('.mail-list-header .brand-logo'),
     uiFontFamily: getComputedStyle(document.querySelector('.mail-title-heading')).fontFamily,
     mapleFontReady: document.fonts.check('16px "Loven7 Maple Mono"'),
+    addressText: address?.textContent || '',
+    addressFits: !!address && address.scrollWidth <= address.clientWidth + 1,
+    addressWhiteSpace: addressStyle?.whiteSpace || '',
     emptyHuge: false
-  })`));
+  }})())`));
   assert(!inboxMetrics.xOverflow, '用户站收件箱不应横向溢出');
   assert(inboxMetrics.rows >= 2, '登录后应显示邮件列表');
   assert(!inboxMetrics.hasRawMime, '邮件正文不应暴露 MIME 头');
@@ -442,6 +448,7 @@ async function run() {
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
   assert(!inboxMetrics.signedInBrandLogo, `登录后的邮箱左栏不应继续堆叠品牌 Logo: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.mapleFontReady && inboxMetrics.uiFontFamily.includes('Loven7 Maple Mono'), `Webmail 应实际加载并使用 Maple Mono 中英文字体: ${JSON.stringify(inboxMetrics)}`);
+  assert(inboxMetrics.addressText === 'rj6ckfgq8lb@c.loven.qzz.io' && inboxMetrics.addressFits && inboxMetrics.addressWhiteSpace === 'normal', `长邮箱地址必须完整显示且允许换行: ${JSON.stringify(inboxMetrics)}`);
   const initialTheme = await evaluate(login, `document.documentElement.dataset.theme`);
   assert(initialTheme === 'light' || initialTheme === 'dark', `页面应在首屏应用明确主题: ${initialTheme}`);
   await click(login, '.sidebar-header-actions .webmail-theme-toggle');

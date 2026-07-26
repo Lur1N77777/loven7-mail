@@ -279,6 +279,9 @@ test("signed-in mail list uses calm hierarchy, visible row boundaries, and inlin
   assert.doesNotMatch(workspace, /\.mail-list-header \.brand-logo-compact/);
   assert.doesNotMatch(readWebmailSource("../src/App.tsx"), /mail-list-recipient-inline/);
   assert.match(readWebmailSource("../src/App.tsx"), /formatListDate\(mail\.date \|\| mail\.createdAt, locale\)/);
+  assert.match(workspace, /\.mail-list-header \.address-copy-text\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*white-space:\s*normal;/s);
+  assert.match(workspace, /\.mail-list-header \.mail-toolbar\s*\{[^}]*display:\s*inline-flex;[^}]*gap:\s*0;[^}]*overflow:\s*hidden;/s);
+  assert.match(workspace, /\.mail-list-header \.mail-toolbar \.refresh-label\s*\{[^}]*clip:\s*rect\(0 0 0 0\);/s);
 });
 
 test("webmail keeps read messages visibly interactive and removes the desktop reader spacer", () => {
