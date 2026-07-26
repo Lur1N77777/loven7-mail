@@ -224,7 +224,7 @@
   width: 100%;
   margin: 0;
   padding: 11px 12px;
-  border: 1px solid var(--lm-divider);
+  border: 1px solid var(--lm-border);
   border-radius: 10px;
   color: var(--lm-text);
   background: var(--lm-surface);
@@ -257,7 +257,7 @@
 .mail-list-item.mail-row-selected,
 .mail-list-item.mail-row-selected:hover,
 .mail-list-item.mail-row-unread.mail-row-selected {
-  border-color: color-mix(in srgb, var(--lm-accent) 28%, var(--lm-border));
+  border-color: color-mix(in srgb, var(--lm-accent) 46%, var(--lm-border));
   background: var(--lm-selected);
   box-shadow: none;
 }
@@ -424,13 +424,13 @@
   height: 27px;
   place-items: center;
   margin: 0;
-  border: 1px solid var(--lm-border);
+  border: 1px solid color-mix(in srgb, var(--lm-accent) 28%, var(--lm-border));
   border-radius: 8px;
   padding: 0 10px;
-  color: var(--lm-text-strong);
-  background: var(--lm-bg);
+  color: var(--lm-accent-strong);
+  background: var(--lm-surface-soft);
   box-shadow: none;
-  font-family: var(--mail-ui-font, var(--font-ui)) !important;
+  font-family: var(--font-code) !important;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   font-weight: 600 !important;

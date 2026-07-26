@@ -2,8 +2,8 @@ export type AppTheme = "light" | "dark";
 
 const STORAGE_KEY = "loven7.uiTheme";
 const THEME_COLORS: Record<AppTheme, string> = {
-  light: "#f6f5f3",
-  dark: "#121110",
+  light: "#efeee9",
+  dark: "#141413",
 };
 
 function normalizeTheme(value: unknown): AppTheme | null {

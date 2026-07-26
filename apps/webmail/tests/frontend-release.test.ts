@@ -201,7 +201,7 @@ test("webmail loads theme tokens and the signed-in workspace layer after legacy 
   assert.ok(cssImports.indexOf("./theme.css") < cssImports.indexOf("./mailWorkspace.css"));
 
   const html = readWebmailSource("../index.html");
-  assert.match(html, /<meta name="theme-color" content="#f6f5f3"\s*\/>/);
+  assert.match(html, /<meta name="theme-color" content="#efeee9"\s*\/>/);
   assert.match(html, /localStorage\.getItem\("loven7\.uiTheme"\)/);
 });
 
@@ -216,7 +216,7 @@ test("webmail exposes an instant persistent light and dark theme toggle", () => 
   assert.match(app, /useLayoutEffect\(\(\) => \{\s*writeTheme\(theme\);\s*applyRuntimeTheme\(theme\);/s);
   assert.match(appearance, /const STORAGE_KEY = "loven7\.uiTheme"/);
   assert.match(appearance, /document\.documentElement\.dataset\.theme = theme/);
-  assert.match(theme, /:root\[data-theme="dark"\]\s*\{[^}]*--lm-bg:\s*#121110;/s);
+  assert.match(theme, /:root\[data-theme="dark"\]\s*\{[^}]*--lm-bg:\s*#141413;/s);
   assert.equal((styles.match(/@media \(prefers-color-scheme: dark\)/g) || []).length, 0, "manual theme must own component dark styles");
   assert.equal((theme.match(/@media \(prefers-color-scheme: dark\)/g) || []).length, 1, "only the no-script token fallback may follow the OS theme");
 });
@@ -255,16 +255,17 @@ test("signed-in webmail uses Admin mail workspace semantics and exposes no passw
   assert.doesNotMatch(app.slice(signedHeaderStart, signedAccountStart), /<BrandLogo/);
 });
 
-test("webmail mail typography follows Admin's locale-aware Apple-style font contract", () => {
+test("webmail uses the Codex-inspired serif UI and monospaced verification contract", () => {
   const theme = readWebmailSource("../src/theme.css");
   const workspace = readWebmailSource("../src/mailWorkspace.css");
 
-  assert.match(theme, /--apple-cn-font-ui:[^;]*Noto Sans SC[^;]*PingFang SC[^;]*Microsoft YaHei UI/s);
-  assert.match(theme, /--apple-cn-font-display:[^;]*SF Pro Display[^;]*Noto Sans SC/s);
+  assert.match(theme, /--apple-cn-font-ui:[^;]*ui-serif[^;]*Georgia[^;]*Noto Serif SC[^;]*Microsoft YaHei UI/s);
+  assert.match(theme, /--font-code:[^;]*JetBrainsMono NFM[^;]*JetBrains Mono[^;]*SFMono-Regular/s);
   assert.match(theme, /:root\[data-font-mode="en"\][\s\S]*--mail-ui-font:\s*var\(--font-ui\)/);
   assert.match(workspace, /\.mail-workspace,[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important/);
   assert.match(workspace, /\.mail-title-heading\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*600\s*!important/);
   assert.match(workspace, /\.mail-subject\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*600\s*!important/);
+  assert.match(workspace, /\.verification-code-button\s*\{[\s\S]*font-family:\s*var\(--font-code\)\s*!important/);
   assert.match(workspace, /\.mail-detail-subject,[\s\S]*font-weight:\s*550\s*!important/);
 });
 
@@ -272,7 +273,7 @@ test("signed-in mail list uses calm hierarchy, visible row boundaries, and inlin
   const workspace = readWebmailSource("../src/mailWorkspace.css");
 
   assert.match(workspace, /\.mail-list-topbar\s*\{[^}]*justify-content:\s*space-between;[^}]*margin-bottom:\s*12px;/s);
-  assert.match(workspace, /\.mail-list-item\.mail-row\s*\{[^}]*border:\s*1px solid var\(--lm-divider\);[^}]*border-radius:\s*10px;[^}]*background:\s*var\(--lm-surface\);/s);
+  assert.match(workspace, /\.mail-list-item\.mail-row\s*\{[^}]*border:\s*1px solid var\(--lm-border\);[^}]*border-radius:\s*10px;[^}]*background:\s*var\(--lm-surface\);/s);
   assert.match(workspace, /\.mail-list-viewport\.mail-list\s*\{[^}]*gap:\s*8px;/s);
   assert.doesNotMatch(workspace, /\.mail-count-badge/);
   assert.doesNotMatch(workspace, /\.mail-list-header \.brand-logo-compact/);
@@ -289,7 +290,7 @@ test("webmail keeps read messages visibly interactive and removes the desktop re
   assert.match(workspace, /@media\s*\(max-width:\s*760px\)[\s\S]*\.mail-detail-topbar\s*\{[\s\S]*position:\s*static/);
 });
 
-test("webmail theme stays aligned with the admin paper, ink, and sealing-wax tokens", () => {
+test("webmail theme keeps Admin semantics with a Codex-inspired charcoal palette", () => {
   const webmailTheme = readWebmailSource("../src/theme.css");
   const adminTheme = readWebmailSource("../../admin/src/theme.css");
   const webmailLight = extractCssBlock(webmailTheme, ":root");
@@ -327,17 +328,15 @@ test("webmail theme stays aligned with the admin paper, ink, and sealing-wax tok
   ] as const;
 
   for (const [webmailName, adminName] of coreMappings) {
-    assert.equal(
-      readCssVariable(webmailLight, `lm-${webmailName}`),
-      readCssVariable(adminLight, `admin-${adminName}`),
-      `light token --lm-${webmailName} should match --admin-${adminName}`,
-    );
-    assert.equal(
-      readCssVariable(webmailDark, `lm-${webmailName}`),
-      readCssVariable(adminDark, `admin-${adminName}`),
-      `dark token --lm-${webmailName} should match --admin-${adminName}`,
-    );
+    assert.ok(readCssVariable(webmailLight, `lm-${webmailName}`), `missing light semantic token --lm-${webmailName}`);
+    assert.ok(readCssVariable(webmailDark, `lm-${webmailName}`), `missing dark semantic token --lm-${webmailName}`);
+    assert.ok(readCssVariable(adminLight, `admin-${adminName}`), `missing Admin semantic token --admin-${adminName}`);
+    assert.ok(readCssVariable(adminDark, `admin-${adminName}`), `missing Admin dark semantic token --admin-${adminName}`);
   }
+
+  assert.equal(readCssVariable(webmailDark, "lm-bg"), "#141413");
+  assert.equal(readCssVariable(webmailDark, "lm-text-strong"), "#f5f4ee");
+  assert.equal(readCssVariable(webmailDark, "lm-accent"), "#da7756");
 
   for (const radius of ["panel", "card", "control", "control-sm", "pill"] as const) {
     assert.equal(

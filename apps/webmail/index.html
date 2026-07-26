@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="theme-color" content="#f6f5f3" />
+    <meta name="theme-color" content="#efeee9" />
     <script>
       (() => {
         try {
@@ -14,7 +14,7 @@
             : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
           document.documentElement.dataset.theme = theme;
           document.documentElement.style.colorScheme = theme;
-          document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#121110" : "#f6f5f3");
+          document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#141413" : "#efeee9");
         } catch {}
       })();
     </script>

@@ -10,43 +10,44 @@
   color-scheme: light;
 
   /* Admin typography contract */
-  --apple-cn-font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans GB", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Segoe UI Variable", "Segoe UI", Arial, sans-serif;
-  --apple-cn-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans GB", "MiSans", "HarmonyOS Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Segoe UI Variable Display", "Segoe UI", Arial, sans-serif;
+  --apple-cn-font-ui: ui-serif, Georgia, Cambria, "Times New Roman", Times, "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Microsoft YaHei UI", serif;
+  --apple-cn-font-display: ui-serif, Georgia, Cambria, "Times New Roman", Times, "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "Microsoft YaHei UI", serif;
+  --font-code: "JetBrainsMono NFM", "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-ui: var(--apple-cn-font-ui);
   --font-display: var(--apple-cn-font-display);
   --font-ui-readable: var(--apple-cn-font-ui);
   --font-display-readable: var(--apple-cn-font-display);
   --mail-ui-font: var(--apple-cn-font-ui);
 
-  /* paper surfaces */
-  --lm-bg: #f6f5f3;
-  --lm-surface: #ffffff;
-  --lm-surface-soft: #f4f3f0;
-  --lm-surface-muted: #e9e7e3;
-  --lm-surface-hover: #f0efec;
-  --lm-border: rgba(45, 40, 34, 0.13);
-  --lm-border-strong: rgba(45, 40, 34, 0.2);
-  --lm-divider: rgba(45, 40, 34, 0.08);
+  /* warm paper counterpart to the Codex charcoal palette */
+  --lm-bg: #efeee9;
+  --lm-surface: #f8f7f2;
+  --lm-surface-soft: #e9e7df;
+  --lm-surface-muted: #dcd9cf;
+  --lm-surface-hover: #e4e1d8;
+  --lm-border: rgba(38, 36, 31, 0.16);
+  --lm-border-strong: rgba(38, 36, 31, 0.26);
+  --lm-divider: rgba(38, 36, 31, 0.1);
 
   /* ink text */
-  --lm-text-strong: #1b1916;
-  --lm-text: #2a2723;
-  --lm-text-soft: #5a564f;
-  --lm-muted: #8a857d;
-  --lm-muted-soft: #b5b1a9;
+  --lm-text-strong: #1d1c19;
+  --lm-text: #302e29;
+  --lm-text-soft: #5d5951;
+  --lm-muted: #817c72;
+  --lm-muted-soft: #aaa59a;
 
   /* primary ink action */
-  --lm-ink: #24211d;
-  --lm-ink-hover: #38342e;
-  --lm-ink-on: #faf9f7;
+  --lm-ink: #1d1c19;
+  --lm-ink-hover: #302e29;
+  --lm-ink-on: #f5f4ee;
 
   /* sealing-wax accent */
-  --lm-accent: #b14a33;
-  --lm-accent-hover: #993d28;
-  --lm-accent-soft: rgba(177, 74, 51, 0.1);
-  --lm-accent-strong: #9c3c26;
-  --lm-selected: color-mix(in srgb, var(--lm-accent) 9%, var(--lm-surface));
-  --lm-selected-strong: color-mix(in srgb, var(--lm-accent) 14%, var(--lm-surface));
+  --lm-accent: #c66545;
+  --lm-accent-hover: #ac5034;
+  --lm-accent-soft: rgba(198, 101, 69, 0.11);
+  --lm-accent-strong: #a8472d;
+  --lm-selected: color-mix(in srgb, var(--lm-accent) 8%, var(--lm-surface));
+  --lm-selected-strong: color-mix(in srgb, var(--lm-accent) 12%, var(--lm-surface));
 
   /* status */
   --lm-success: #3d7c5b;
@@ -57,9 +58,9 @@
   --lm-danger-soft: rgba(194, 68, 87, 0.11);
 
   /* elevation and geometry */
-  --lm-shadow-card: 0 1px 2px rgba(61, 46, 32, 0.04), 0 10px 30px rgba(61, 46, 32, 0.06);
-  --lm-shadow-lift: 0 2px 6px rgba(61, 46, 32, 0.06), 0 18px 44px rgba(61, 46, 32, 0.1);
-  --lm-shadow-menu: 0 18px 44px rgba(50, 38, 26, 0.14), 0 2px 8px rgba(50, 38, 26, 0.06);
+  --lm-shadow-card: 0 1px 2px rgba(20, 20, 19, 0.04), 0 10px 30px rgba(20, 20, 19, 0.055);
+  --lm-shadow-lift: 0 2px 6px rgba(20, 20, 19, 0.06), 0 18px 44px rgba(20, 20, 19, 0.11);
+  --lm-shadow-menu: 0 18px 44px rgba(20, 20, 19, 0.16), 0 2px 8px rgba(20, 20, 19, 0.07);
   --lm-shadow: var(--lm-shadow-card);
   --lm-radius-panel: 18px;
   --lm-radius-card: 14px;
@@ -69,39 +70,39 @@
 }
 
 :root[data-font-mode="en"] {
-  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", Arial, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", "Aptos Display", "Aptos", "Inter", Roboto, "PingFang SC", "Microsoft YaHei UI", Arial, sans-serif;
+  --font-ui: ui-serif, Georgia, Cambria, "Times New Roman", Times, "Songti SC", "STSong", "Noto Serif SC", "Microsoft YaHei UI", serif;
+  --font-display: var(--font-ui);
   --mail-ui-font: var(--font-ui);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
-    --lm-bg: #121110;
-    --lm-surface: #1c1a18;
-    --lm-surface-soft: #262421;
-    --lm-surface-muted: #33302c;
-    --lm-surface-hover: #242220;
-    --lm-border: rgba(236, 233, 227, 0.13);
-    --lm-border-strong: rgba(236, 233, 227, 0.2);
-    --lm-divider: rgba(236, 233, 227, 0.08);
+    --lm-bg: #141413;
+    --lm-surface: #1b1b19;
+    --lm-surface-soft: #232321;
+    --lm-surface-muted: #2d2c29;
+    --lm-surface-hover: #292825;
+    --lm-border: rgba(245, 244, 238, 0.13);
+    --lm-border-strong: rgba(245, 244, 238, 0.22);
+    --lm-divider: rgba(245, 244, 238, 0.085);
 
-    --lm-text-strong: #f7f5f1;
-    --lm-text: #eceae5;
-    --lm-text-soft: #b6b2a9;
-    --lm-muted: #8b867d;
-    --lm-muted-soft: #605c55;
+    --lm-text-strong: #f5f4ee;
+    --lm-text: #e4e2da;
+    --lm-text-soft: #aaa69d;
+    --lm-muted: #817c73;
+    --lm-muted-soft: #57544e;
 
-    --lm-ink: #f1efea;
-    --lm-ink-hover: #faf8f4;
-    --lm-ink-on: #1f1d1a;
+    --lm-ink: #f5f4ee;
+    --lm-ink-hover: #ffffff;
+    --lm-ink-on: #141413;
 
-    --lm-accent: #e57c55;
-    --lm-accent-hover: #ec8e69;
-    --lm-accent-soft: rgba(229, 124, 85, 0.16);
-    --lm-accent-strong: #f29d79;
-    --lm-selected: color-mix(in srgb, var(--lm-accent) 14%, var(--lm-surface));
-    --lm-selected-strong: color-mix(in srgb, var(--lm-accent) 20%, var(--lm-surface));
+    --lm-accent: #da7756;
+    --lm-accent-hover: #e68b69;
+    --lm-accent-soft: rgba(218, 119, 86, 0.15);
+    --lm-accent-strong: #ed9a7c;
+    --lm-selected: color-mix(in srgb, var(--lm-accent) 12%, var(--lm-surface));
+    --lm-selected-strong: color-mix(in srgb, var(--lm-accent) 17%, var(--lm-surface));
 
     --lm-success: #7cb495;
     --lm-success-soft: rgba(124, 180, 149, 0.16);
@@ -118,28 +119,28 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --lm-bg: #121110;
-  --lm-surface: #1c1a18;
-  --lm-surface-soft: #262421;
-  --lm-surface-muted: #33302c;
-  --lm-surface-hover: #242220;
-  --lm-border: rgba(236, 233, 227, 0.13);
-  --lm-border-strong: rgba(236, 233, 227, 0.2);
-  --lm-divider: rgba(236, 233, 227, 0.08);
-  --lm-text-strong: #f7f5f1;
-  --lm-text: #eceae5;
-  --lm-text-soft: #b6b2a9;
-  --lm-muted: #8b867d;
-  --lm-muted-soft: #605c55;
-  --lm-ink: #f1efea;
-  --lm-ink-hover: #faf8f4;
-  --lm-ink-on: #1f1d1a;
-  --lm-accent: #e57c55;
-  --lm-accent-hover: #ec8e69;
-  --lm-accent-soft: rgba(229, 124, 85, 0.16);
-  --lm-accent-strong: #f29d79;
-  --lm-selected: color-mix(in srgb, var(--lm-accent) 14%, var(--lm-surface));
-  --lm-selected-strong: color-mix(in srgb, var(--lm-accent) 20%, var(--lm-surface));
+  --lm-bg: #141413;
+  --lm-surface: #1b1b19;
+  --lm-surface-soft: #232321;
+  --lm-surface-muted: #2d2c29;
+  --lm-surface-hover: #292825;
+  --lm-border: rgba(245, 244, 238, 0.13);
+  --lm-border-strong: rgba(245, 244, 238, 0.22);
+  --lm-divider: rgba(245, 244, 238, 0.085);
+  --lm-text-strong: #f5f4ee;
+  --lm-text: #e4e2da;
+  --lm-text-soft: #aaa69d;
+  --lm-muted: #817c73;
+  --lm-muted-soft: #57544e;
+  --lm-ink: #f5f4ee;
+  --lm-ink-hover: #ffffff;
+  --lm-ink-on: #141413;
+  --lm-accent: #da7756;
+  --lm-accent-hover: #e68b69;
+  --lm-accent-soft: rgba(218, 119, 86, 0.15);
+  --lm-accent-strong: #ed9a7c;
+  --lm-selected: color-mix(in srgb, var(--lm-accent) 12%, var(--lm-surface));
+  --lm-selected-strong: color-mix(in srgb, var(--lm-accent) 17%, var(--lm-surface));
   --lm-success: #7cb495;
   --lm-success-soft: rgba(124, 180, 149, 0.16);
   --lm-warning: #cda45f;
@@ -969,21 +970,21 @@ body ::selection {
   border: 1px solid transparent;
   border-radius: var(--lm-radius-control);
   color: var(--lm-ink-on);
-  background: var(--lm-ink);
+  background: var(--lm-accent);
   box-shadow: none;
 }
 
 .account-primary-button:hover:not(:disabled),
 .login-button:hover:not(:disabled) {
   color: var(--lm-ink-on);
-  background: var(--lm-ink-hover);
+  background: var(--lm-accent-hover);
   box-shadow: none;
 }
 
 .account-primary-button[aria-busy="true"],
 .login-button[aria-busy="true"] {
   color: color-mix(in srgb, var(--lm-ink-on) 82%, transparent);
-  background: var(--lm-ink);
+  background: var(--lm-accent);
   box-shadow: none;
 }
 
@@ -1264,6 +1265,16 @@ body ::selection {
 
 :root[data-theme="dark"] .mail-body-shell.mode-html {
   border-color: rgba(236, 233, 227, 0.16);
+}
+
+:root[data-theme="dark"] :is(.account-primary-button, .login-button) {
+  color: var(--lm-ink-on);
+  background: var(--lm-accent);
+}
+
+:root[data-theme="dark"] :is(.account-primary-button, .login-button):hover:not(:disabled) {
+  color: var(--lm-ink-on);
+  background: var(--lm-accent-hover);
 }
 
 :root[data-theme="dark"] .account-portal-hero::after {
