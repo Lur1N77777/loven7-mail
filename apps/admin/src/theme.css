@@ -76,6 +76,9 @@
   --admin-radius-control-sm: 8px;
   --admin-radius-pill: 999px;
 
+  /* floating mobile dock: nav height + breathing room + safe area */
+  --admin-dock-clearance: calc(74px + max(8px, env(safe-area-inset-bottom)));
+
   /* re-point the generic color tokens used by scattered legacy rules */
   --color-bg: var(--admin-bg);
   --color-surface: var(--admin-panel);

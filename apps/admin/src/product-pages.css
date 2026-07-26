@@ -1738,6 +1738,12 @@ body .settings-view-shell .rules-policy .check-row {
     gap: 13px;
   }
 
+  body .settings-view-shell .frontend-base-controls > .btn-primary {
+    width: auto;
+    align-self: flex-end;
+    padding-inline: 18px;
+  }
+
   .page-head {
     align-items: flex-start;
     flex-direction: column;

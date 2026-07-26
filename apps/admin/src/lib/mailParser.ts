@@ -1,13 +1,13 @@
 import type { ParsedAttachment, ParsedMail, ParsedSendbox, RawMailRecord, SendboxRecord } from '../types/api';
-import { PREVIEW_LEN } from './constants';
-import { humanBytes, safeJsonParse } from './format';
-import { mailImageAssetOrigin, proxyMailImageCss, proxyMailImageSrcset, proxyMailImageUrl } from './mailImageProxy';
-import { sanitizeMailHtmlWithoutDom } from './mailSanitizerFallback';
+import { PREVIEW_LEN } from './constants.ts';
+import { humanBytes, safeJsonParse } from './format.ts';
+import { mailImageAssetOrigin, proxyMailImageCss, proxyMailImageSrcset, proxyMailImageUrl } from './mailImageProxy.ts';
+import { sanitizeMailHtmlWithoutDom } from './mailSanitizerFallback.ts';
 import {
   extractVerificationCode as extractSharedVerificationCode,
   extractVerificationCodes as extractSharedVerificationCodes,
   sanitizeVerificationCode as sanitizeSharedVerificationCode,
-} from '../../../shared/verificationCode';
+} from '../../../shared/verificationCode.ts';
 
 const DANGEROUS_PROTOCOL = /^\s*(?:javascript|vbscript|data|file|blob|jar):/i;
 const SCRIPTABLE_PROTOCOL = /^\s*(?:javascript|vbscript|file|jar):/i;
@@ -190,6 +190,7 @@ export function buildMailHtmlDocument(html: string, _theme: 'light' | 'dark' = '
     #loven7-mail-root { display: flow-root; width: 100%; max-width: 100%; min-height: 0; background: transparent; color: inherit; }
     *, *::before, *::after { box-sizing: border-box; max-width: 100%; }
     img, video, canvas, svg { max-width: 100% !important; height: auto !important; }
+    img[data-blocked-src], img[data-blocked-srcset]:not([src]) { display: inline-block; min-width: 130px; padding: 13px 15px; border: 1px dashed #d8d2c8; border-radius: 10px; background: #faf9f7; color: #8a857d; font-size: 12px; line-height: 1.5; }
     table { width: auto !important; max-width: 100% !important; border-collapse: collapse; table-layout: auto; }
     pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
     a { color: var(--mail-frame-link); }
@@ -293,7 +294,9 @@ function escapeHtmlText(value: string): string {
 function parseAddress(value = ''): { name: string; address: string; full: string } {
   const match = value.match(/^(.*?)<([^>]+)>/);
   if (match) {
-    const name = match[1].replace(/^"|"$/g, '').trim();
+    const trimmed = match[1].trim();
+    const quoted = trimmed.match(/^"([\s\S]*)"$/);
+    const name = (quoted ? quoted[1].replace(/\\(["\\])/g, '$1') : trimmed.replace(/^"+|"+$/g, '')).trim();
     const address = match[2].trim();
     return { name: name || address.split('@')[0], address, full: name ? `${name} <${address}>` : address };
   }

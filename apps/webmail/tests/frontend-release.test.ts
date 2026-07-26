@@ -308,6 +308,11 @@ test("webmail keeps read messages visibly interactive and removes the desktop re
   assert.match(workspace, /\.mail-detail-body\.mode-html \.mail-frame,[\s\S]*?\.mail-detail-body\.mode-html \.mail-html-view\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*height:\s*100%;/s);
 });
 
+test("webmail renders blocked remote images as a calm placeholder", () => {
+  const parser = readWebmailSource("../src/mailParser.ts");
+  assert.match(parser, /img\[data-blocked-src\],img\[data-blocked-srcset\]:not\(\[src\]\)\{display:inline-block;/, "the mail frame must style blocked images (src or srcset-only) instead of showing a broken glyph");
+});
+
 test("webmail auto refresh keeps one stable interval through mail-list updates", () => {
   const appSource = readWebmailSource("../src/App.tsx");
 

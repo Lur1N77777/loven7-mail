@@ -997,7 +997,7 @@ body .compose-workspace .compose-send-btn {
   body .address-view-shell.address-workspace > .product-page {
     width: 100%;
     gap: 12px;
-    padding: 16px 20px calc(88px + env(safe-area-inset-bottom)) !important;
+    padding: 16px 20px var(--admin-dock-clearance) !important;
   }
 
   body .address-workspace .page-head {
@@ -1184,6 +1184,7 @@ body .address-workspace .user-filter-dropdown .user-filter-clear {
 body .address-workspace .user-filter-copy {
   align-self: stretch;
   justify-content: center !important;
+  text-align: left !important;
   min-width: 0;
   min-height: 0;
   overflow: hidden !important;

@@ -1,4 +1,4 @@
-import { getRuntimeLocale } from './locale';
+import { getRuntimeLocale } from './locale.ts';
 
 export function cls(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(' ');

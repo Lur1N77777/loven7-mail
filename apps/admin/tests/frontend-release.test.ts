@@ -11,6 +11,7 @@ import { buildCacheScope, scopedStorageKey } from '../src/lib/cacheScope.ts';
 import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
 import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, loginAccountUser, registerAccountUser } from '../src/lib/userAuth.ts';
 import { readTrustedMailFrameMessage } from '../src/lib/mailFrameMessages.ts';
+import { parseRawMailListItem } from '../src/lib/mailParser.ts';
 import { adminMailStateEndpoint } from '../src/lib/mailStateEndpoint.ts';
 import { proxyMailImageSrcset, proxyMailImageUrl } from '../src/lib/mailImageProxy.ts';
 import { sanitizeMailHtmlWithoutDom } from '../src/lib/mailSanitizerFallback.ts';
@@ -72,6 +73,35 @@ test('mobile chrome drops per-frame backdrop blur and clips offscreen mail work'
   assert.match(themeCss, /body \.mobile-nav\s*\{[^}]*color-mix\(in srgb, var\(--admin-panel\) 96%, transparent\)/s, 'the bottom navigation compensates removed blur with a near-opaque panel');
   assert.match(indexCss, /\.mobile-swipe-page\s*\{[^}]*contain:\s*layout paint;/s, 'swipe deck pages must isolate layout and paint so background refreshes stay off the gesture path');
   assert.match(indexCss, /@supports \(content-visibility: auto\)\s*\{\s*@media \(max-width: 900px\)\s*\{\s*\.mail-list-item\s*\{[^}]*content-visibility:\s*auto;[^}]*contain-intrinsic-size:/s, 'offscreen mobile mail rows must skip layout and paint');
+});
+
+test('mobile pages clear the floating dock and mail chrome renders calm details', () => {
+  const themeCss = readFileSync(new URL('../src/theme.css', import.meta.url), 'utf8');
+  const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const productCss = readFileSync(new URL('../src/product-pages.css', import.meta.url), 'utf8');
+  const workspaceCss = readFileSync(new URL('../src/workspace-pages.css', import.meta.url), 'utf8');
+  const parserSource = readFileSync(new URL('../src/lib/mailParser.ts', import.meta.url), 'utf8');
+
+  assert.match(themeCss, /--admin-dock-clearance:\s*calc\(74px \+ max\(8px, env\(safe-area-inset-bottom\)\)\);/, 'the dock clearance token must cover nav height, breathing room and the safe area');
+  assert.match(indexCss, /body \.settings-view-shell,\s*body \.maintenance-view-shell\s*\{[^}]*calc\(82px \+ env\(safe-area-inset-bottom\)\)\s*!important;/s, 'view shells own the dock clearance so pages must not add their own');
+  assert.doesNotMatch(productCss, /\.product-page\s*\{[^}]*padding-bottom:\s*var\(--admin-dock-clearance\)/s, 'page-level clearance would stack on the shell clearance and leave dead space');
+  assert.match(workspaceCss, /body \.address-view-shell\.address-workspace > \.product-page\s*\{[^}]*var\(--admin-dock-clearance\)/s, 'the address page must reuse the shared dock clearance token');
+  assert.match(parserSource, /img\[data-blocked-src\], img\[data-blocked-srcset\]:not\(\[src\]\)\s*\{\s*display:\s*inline-block;/, 'blocked remote images (src or srcset-only) must render as a styled placeholder instead of a broken glyph');
+  assert.match(workspaceCss, /body \.address-workspace \.user-filter-copy\s*\{[^}]*text-align:\s*left\s*!important;/s, 'the user filter text must escape the button default centering and left-align like its sibling fields');
+  assert.match(productCss, /\.frontend-base-controls > \.btn-primary\s*\{[^}]*align-self:\s*flex-end;/s, 'the settings save action should sit compact at the row end instead of stretching full width');
+});
+
+test('sender display names drop MIME quoting artifacts', () => {
+  const plain = parseRawMailListItem({ id: 1, raw: 'From: "Nihon App" <no-reply@nihon.example>\r\nSubject: Code\r\n\r\nBody' } as never);
+  assert.equal(plain.senderName, 'Nihon App');
+  const escaped = parseRawMailListItem({ id: 2, raw: 'From: "Quote \\"Inner\\"" <q@example.test>\r\nSubject: Hi\r\n\r\nBody' } as never);
+  assert.equal(escaped.senderName, 'Quote "Inner"');
+  const bare = parseRawMailListItem({ id: 3, raw: 'From: plain@example.test\r\nSubject: Hi\r\n\r\nBody' } as never);
+  assert.equal(bare.senderName, 'plain');
+  const unbalanced = parseRawMailListItem({ id: 4, raw: 'From: "Unbalanced <a@b.test>\r\nSubject: Hi\r\n\r\nBody' } as never);
+  assert.equal(unbalanced.senderName, 'Unbalanced');
+  const backslash = parseRawMailListItem({ id: 5, raw: 'From: C:\\path <c@x.test>\r\nSubject: Hi\r\n\r\nBody' } as never);
+  assert.equal(backslash.senderName, 'C:\\path');
 });
 
 test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
