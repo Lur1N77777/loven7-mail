@@ -49,6 +49,8 @@ test('mobile navigation uses one immediate active surface and statistics keeps r
   assert.doesNotMatch(shellSource, /mobile-nav-progress-pill/, 'a second animated navigation pill would recreate the trailing ghost');
   assert.match(statsSource, /className="stats-mobile-refresh"/, 'mobile statistics should retain refresh as a compact icon action');
   assert.match(productCss, /\.admin-stats-view-shell \.stats-desktop-refresh\s*\{[^}]*display:\s*none;/s, 'the full-width statistics refresh action must be hidden on phones');
+  assert.match(productCss, /\.admin-stats-view-shell \.stats-page-head \.page-head-copy\s*\{[^}]*align-self:\s*stretch;/s, 'the statistics title row must span the full page width so the refresh icon docks at the right edge');
+  assert.match(productCss, /body \.admin-stats-view-shell \.stats-mobile-refresh\s*\{[^}]*margin-right:\s*-7px;/s, 'the refresh glyph should optically align with the right text edge instead of floating mid-page');
   assert.match(productCss, /\.admin-dashboard-view-shell \.dashboard-page-actions\s*\{[^}]*flex-wrap:\s*nowrap;/s, 'dashboard actions must remain on one compact mobile row');
   assert.doesNotMatch(appSource, /--mobile-(?:page-drag-x|nav-live-progress)/, 'page swipes must not invalidate global styles on every animation frame');
   assert.doesNotMatch(appSource, /pageAnimationSecondFrameRef/, 'page settling should not add a second animation-frame delay');

@@ -1769,6 +1769,10 @@ body .settings-view-shell .rules-policy .check-row {
     gap: 0;
   }
 
+  .admin-stats-view-shell .stats-page-head .page-head-copy {
+    align-self: stretch;
+  }
+
   .admin-stats-view-shell .stats-title-row {
     justify-content: space-between;
   }
@@ -1782,6 +1786,7 @@ body .settings-view-shell .rules-policy .check-row {
     width: 34px;
     min-width: 34px;
     height: 34px;
+    margin-right: -7px;
     align-items: center;
     justify-content: center;
     border: 0;
