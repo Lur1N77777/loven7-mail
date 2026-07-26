@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from "react-dom";
 import { createSession, deleteMail, fetchMailPage, fetchMailState, fetchSafeSettings, fetchShareInfo, fetchShareMailPage, fetchShareSettings, hideSharedMail, patchMailState } from "./api";
 import { subscribeAuthenticationFailures } from "./authFailure";
-import { buildSessionCacheKey, clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession } from "./auth";
+import { buildSessionCacheKey, clearJwtFromUrl, clearStoredSession, hashToken, loadStoredSession, readJwtFromUrl, saveSession, touchStoredSession } from "./auth";
 import { clearMailboxCache, readMailboxCache, writeMailboxCache } from "./cache";
 import { copyText } from "./clipboard";
 import { buildMailFrameSrcDoc, getMailBodyText, mergeMails, parseMailBatch } from "./mailParser";
@@ -1062,6 +1062,9 @@ export default function App() {
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
+      // Returning to the mailbox is activity: slide the idle window so a
+      // session in daily use never ages out.
+      touchStoredSession();
       if (Date.now() - lastMailStateSyncAtRef.current < 15_000) return;
       setMailStateSyncTick((tick) => tick + 1);
     };

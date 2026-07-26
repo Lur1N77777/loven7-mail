@@ -308,6 +308,18 @@ test("webmail keeps read messages visibly interactive and removes the desktop re
   assert.match(workspace, /\.mail-detail-body\.mode-html \.mail-frame,[\s\S]*?\.mail-detail-body\.mode-html \.mail-html-view\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*height:\s*100%;/s);
 });
 
+test("a mailbox session outlives the tab that opened it", () => {
+  const auth = readWebmailSource("../src/auth.ts");
+  const app = readWebmailSource("../src/App.tsx");
+
+  assert.match(auth, /writeSessionRecord\(safeStorage\(\(\) => localStorage\), value\);/, "a session kept only in sessionStorage is discarded the moment the tab closes");
+  assert.match(auth, /readSessionRecord\(safeStorage\(\(\) => sessionStorage\)\) \?\? readSessionRecord\(safeStorage\(\(\) => localStorage\)\)/, "the tab's own session wins, with the durable record as the fallback");
+  assert.match(auth, /export function touchStoredSession/, "the idle window must slide or daily use still ages out");
+  assert.match(auth, /if \(parsed\.savedAt && Date\.now\(\) - parsed\.savedAt > SESSION_IDLE_TTL_MS\)/, "records written before the stamp existed must not be treated as expired on upgrade");
+  assert.match(auth, /export function clearStoredSession\(\)[\s\S]{0,300}localStorage/, "signing out has to clear the durable copy too");
+  assert.match(app, /touchStoredSession\(\);/, "returning to the mailbox counts as activity");
+});
+
 test("webmail re-merges remote read state when returning to the foreground", () => {
   const app = readWebmailSource("../src/App.tsx");
   assert.match(app, /document\.addEventListener\("visibilitychange", onVisibility\)/, "foreground return must trigger a read-state re-merge");

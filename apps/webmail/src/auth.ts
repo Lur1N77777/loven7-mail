@@ -58,7 +58,44 @@ type StoredSession = {
   address: string;
   settings?: SafeSettings;
   apiOrigin?: string;
+  savedAt?: number;
 };
+
+// A mailbox session outlives the tab that opened it. sessionStorage alone meant
+// closing the tab — or the OS reclaiming an installed PWA — silently discarded
+// the login, so it is now the per-tab view over a durable localStorage record.
+// Only an explicit sign-out or the idle window clears the durable copy.
+const SESSION_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function safeStorage(getStorage: () => Storage): Storage | null {
+  try {
+    return getStorage();
+  } catch {
+    // Hardened privacy modes can throw on the accessor itself.
+    return null;
+  }
+}
+
+function writeSessionRecord(storage: Storage | null, value: StoredSession) {
+  if (!storage) return;
+  try {
+    storage.setItem(SESSION_KEY, JSON.stringify(value));
+    storage.removeItem(LEGACY_SESSION_KEY);
+  } catch {
+    // Quota or privacy failures must never break signing in.
+  }
+}
+
+function readSessionRecord(storage: Storage | null): StoredSession | null {
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(SESSION_KEY) || storage.getItem(LEGACY_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as StoredSession;
+  } catch {
+    return null;
+  }
+}
 
 export function saveSession(session: WebmailSession) {
   const value: StoredSession = {
@@ -66,29 +103,48 @@ export function saveSession(session: WebmailSession) {
     address: session.address,
     settings: session.settings,
     apiOrigin: currentApiOrigin(),
+    savedAt: Date.now(),
   };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(value));
-  sessionStorage.removeItem(LEGACY_SESSION_KEY);
+  writeSessionRecord(safeStorage(() => sessionStorage), value);
+  writeSessionRecord(safeStorage(() => localStorage), value);
 }
 
 export async function loadStoredSession(): Promise<WebmailSession | null> {
-  const raw = sessionStorage.getItem(SESSION_KEY) || sessionStorage.getItem(LEGACY_SESSION_KEY);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as StoredSession;
-    if (!parsed.jwt || !parsed.address) return null;
-    const apiOrigin = currentApiOrigin();
-    if (parsed.apiOrigin && parsed.apiOrigin !== apiOrigin) return null;
-    return {
-      ...parsed,
-      cacheKey: await buildSessionCacheKey(apiOrigin, parsed.address, parsed.jwt),
-    };
-  } catch {
+  // The tab's own session wins so a deliberately different login in this tab is
+  // never overwritten by the durable one.
+  const parsed = readSessionRecord(safeStorage(() => sessionStorage)) ?? readSessionRecord(safeStorage(() => localStorage));
+  if (!parsed || !parsed.jwt || !parsed.address) return null;
+  const apiOrigin = currentApiOrigin();
+  if (parsed.apiOrigin && parsed.apiOrigin !== apiOrigin) return null;
+  // Records predating savedAt have no stamp; treat them as fresh rather than
+  // signing the user out on upgrade.
+  if (parsed.savedAt && Date.now() - parsed.savedAt > SESSION_IDLE_TTL_MS) {
+    clearStoredSession();
     return null;
   }
+  return {
+    ...parsed,
+    cacheKey: await buildSessionCacheKey(apiOrigin, parsed.address, parsed.jwt),
+  };
+}
+
+/** Slide the idle window; a session in daily use must never age out. */
+export function touchStoredSession() {
+  const parsed = readSessionRecord(safeStorage(() => sessionStorage)) ?? readSessionRecord(safeStorage(() => localStorage));
+  if (!parsed?.jwt) return;
+  const value: StoredSession = { ...parsed, savedAt: Date.now() };
+  writeSessionRecord(safeStorage(() => sessionStorage), value);
+  writeSessionRecord(safeStorage(() => localStorage), value);
 }
 
 export function clearStoredSession() {
-  sessionStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(LEGACY_SESSION_KEY);
+  [safeStorage(() => sessionStorage), safeStorage(() => localStorage)].forEach((storage) => {
+    if (!storage) return;
+    try {
+      storage.removeItem(SESSION_KEY);
+      storage.removeItem(LEGACY_SESSION_KEY);
+    } catch {
+      // ignore storage failures in privacy mode
+    }
+  });
 }

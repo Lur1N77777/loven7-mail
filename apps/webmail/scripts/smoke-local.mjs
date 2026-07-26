@@ -298,14 +298,17 @@ function mockFetchScript() {
   })()`;
 }
 
-async function openApp(pathname = '/', { width = 390, height = 844, locale = 'zh-CN', colorScheme = 'light' } = {}) {
+// Sessions are durable now, so a fresh tab inherits the signed-in mailbox by
+// design. Scenarios that assert on the login screen must therefore start from
+// an explicitly cleared session; `keepSession` opts into the real behavior.
+async function openApp(pathname = '/', { width = 390, height = 844, locale = 'zh-CN', colorScheme = 'light', keepSession = false } = {}) {
   const ws = await cdpNewPage('about:blank');
   await cdpSend(ws, 'Page.enable');
   await cdpSend(ws, 'Runtime.enable');
   await cdpSend(ws, 'Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 768 });
   await cdpSend(ws, 'Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: colorScheme }] });
   await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: mockFetchScript() });
-  await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('loven7.locale', ${JSON.stringify(locale)}); localStorage.setItem('loven7.uiTheme', ${JSON.stringify(colorScheme)}); sessionStorage.clear(); Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value) => { window.__webmailCopiedText = String(value); } } });` });
+  await cdpSend(ws, 'Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('loven7.locale', ${JSON.stringify(locale)}); localStorage.setItem('loven7.uiTheme', ${JSON.stringify(colorScheme)}); sessionStorage.clear(); ${keepSession ? '' : `localStorage.removeItem('loven7_mail_session_v1'); localStorage.removeItem('cloudmail_webmail_session_v1');`} Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value) => { window.__webmailCopiedText = String(value); } } });` });
   await cdpSend(ws, 'Page.navigate', { url: new URL(pathname, baseUrl).toString() });
   await cdpSend(ws, 'Page.loadEventFired').catch(() => undefined);
   await sleep(900);
@@ -560,6 +563,24 @@ async function run() {
   assert(desktopReaderMetrics.topbarPosition === 'absolute' && desktopReaderMetrics.headerGap <= 32, `桌面详情工具栏不应占据标题上方整行空白: ${JSON.stringify(desktopReaderMetrics)}`);
   assert(desktopReaderMetrics.framePosition === 'absolute' && desktopReaderMetrics.frameFillDelta <= 2, `HTML 邮件 iframe 必须铺满整个剩余阅读区: ${JSON.stringify(desktopReaderMetrics)}`);
   results.push({ name: 'webmail-login-inbox', loginMetrics, inboxMetrics, themeToggleMetrics, fallbackAvatarMetrics, codeButtonMetrics, mailInteractionMetrics, localeMenu, desktopReaderMetrics });
+
+  // The signed-in mailbox above must still be signed in from a brand new tab:
+  // that is the whole point of a durable session.
+  const reopened = await openApp('/', { keepSession: true });
+  await waitUntil(reopened, `document.querySelectorAll('.mail-row').length >= 2`);
+  const persistedSession = JSON.parse(await evaluate(reopened, `JSON.stringify((() => {
+    const stored = localStorage.getItem('loven7_mail_session_v1');
+    const parsed = stored ? JSON.parse(stored) : null;
+    return {
+      restoredWithoutLogin: !document.body.innerText.includes('请输入管理员提供的邮箱与密码'),
+      rows: document.querySelectorAll('.mail-row').length,
+      durable: !!parsed?.jwt,
+      stamped: typeof parsed?.savedAt === 'number' && parsed.savedAt > 0
+    };
+  })())`));
+  assert(persistedSession.restoredWithoutLogin && persistedSession.rows >= 2 && persistedSession.durable && persistedSession.stamped,
+    `新标签页必须直接恢复登录态而不是回到登录页: ${JSON.stringify(persistedSession)}`);
+  results.push({ name: 'webmail-session-survives-new-tab', persistedSession });
 
   const empty = await openApp('/');
   await setInput(empty, 'input[type="email"]', 'empty@example.test');

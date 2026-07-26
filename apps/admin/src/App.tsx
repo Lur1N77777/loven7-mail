@@ -4,7 +4,7 @@ import { subscribeAuthenticationFailures } from './lib/authFailure';
 import { API_BASE, STORAGE_KEYS, SWIPE } from './lib/constants';
 import { readJwtFromQuery } from './lib/clipboard';
 import { decodeJwtPayload, isLikelyJwt } from './lib/crypto';
-import { forgetAuthBrowserStorage, normalizeAuthApiBase, purgeExpiredAuthStorage, readAccountUserToken, readBoundAuth, readStorage, writeAccountUserToken, writeBoundAuth, writeLocalStorage, writeSessionStorage } from './lib/storage';
+import { forgetAuthBrowserStorage, normalizeAuthApiBase, purgeExpiredAuthStorage, readAccountUserToken, readBoundAuth, readStorage, touchAuthRememberedAt, writeAccountUserToken, writeBoundAuth, writeLocalStorage, writeSessionStorage } from './lib/storage';
 import { cls } from './lib/format';
 import { applyRuntimeLocale, getBackendLang, getRuntimeLocale, localeText, readInitialLocale, writeLocale, type AppLocale } from './lib/locale';
 import type { AddressUserFilter, ComposePayload, OpenSettings, Statistics } from './types/api';
@@ -693,6 +693,23 @@ export default function App() {
     if (credentialFingerprintRef.current !== null && credentialFingerprintRef.current !== fingerprint) clearApiCache();
     credentialFingerprintRef.current = fingerprint;
   }, [apiBase, effectiveAdminPassword, effectiveUserAccessToken]);
+  // Keep the 7-day window sliding. It is documented as an idle timeout, but the
+  // stamp was only written at sign-in, so it expired operators who never went
+  // idle at all. Touching it on load and on every return to the foreground
+  // means only genuine inactivity can run it out.
+  useEffect(() => {
+    if (!connected) return undefined;
+    touchAuthRememberedAt(apiBase);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') touchAuthRememberedAt(apiBase);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = window.setInterval(() => touchAuthRememberedAt(apiBase), 30 * 60 * 1000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(timer);
+    };
+  }, [apiBase, connected]);
   useEffect(() => { writeLocalStorage(STORAGE_KEYS.addressUserFilter, addressUserFilter ? JSON.stringify(addressUserFilter) : ''); }, [addressUserFilter]);
   useEffect(() => {
     setVisitedMenus((current) => {

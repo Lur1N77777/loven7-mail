@@ -135,8 +135,8 @@ test('sender display names drop MIME quoting artifacts', () => {
   assert.equal(bare.senderName, 'plain');
   const unbalanced = parseRawMailListItem({ id: 4, raw: 'From: "Unbalanced <a@b.test>\r\nSubject: Hi\r\n\r\nBody' } as never);
   assert.equal(unbalanced.senderName, 'Unbalanced');
-  const backslash = parseRawMailListItem({ id: 5, raw: 'From: C:\\path <c@x.test>\r\nSubject: Hi\r\n\r\nBody' } as never);
-  assert.equal(backslash.senderName, 'C:\\path');
+  const backslash = parseRawMailListItem({ id: 5, raw: 'From: Back\\slash <c@x.test>\r\nSubject: Hi\r\n\r\nBody' } as never);
+  assert.equal(backslash.senderName, 'Back\\slash');
 });
 
 test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
@@ -454,6 +454,18 @@ test('a live credential clears its strike so intermittent rejections never accum
     unsubscribe();
     noteAuthenticationSuccess();
   }
+});
+
+test('a signed-in session survives closing the browser and only genuine idling expires it', () => {
+  const storage = readFileSync(new URL('../src/lib/storage.ts', import.meta.url), 'utf8');
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(storage, /function clearPersistentAuthStorage/, 'wiping the durable copy on every write and every boot is what forced a fresh login after each restart');
+  assert.match(storage, /export function writeBoundAuth[\s\S]{0,400}getBrowserStorages\(\)/, 'credentials must reach durable storage, not only the tab that created them');
+  assert.match(storage, /export function readBoundAuth[\s\S]{0,400}if \(hasPrivateAuthValue\(fromSession\)\) return fromSession;\s*return readBoundAuthFromStorages\(getLocalStorages\(\)/s, 'a tab keeps its own identity, with the durable record as the fallback');
+  assert.match(storage, /function accountUserTokenKey\(apiBase: string\): string \{\s*return `\$\{STORAGE_KEYS\.accountUserToken\}\.\$\{authScopeId\(apiBase\)\}`;/s, 'the account token must be scoped per backend or a persisted one would follow an apiBase switch');
+  assert.match(storage, /export function touchAuthRememberedAt/, 'the 7-day window has to slide, or it is an absolute deadline for active operators');
+  assert.match(appSource, /touchAuthRememberedAt\(apiBase\);/, 'the sliding window must actually be refreshed by the app');
 });
 
 test('the admin proxy separates "not an admin" from "upstream could not answer"', () => {

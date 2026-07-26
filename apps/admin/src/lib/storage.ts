@@ -386,40 +386,72 @@ function clearPrivateCaches(storages: Storage[]): void {
   });
 }
 
-function clearPersistentAuthStorage(): void {
-  const localStorages = getLocalStorages();
-  removeLegacyAuthKeys(localStorages);
-  localStorages.forEach((storage) => {
-    collectAuthScopes([storage]).forEach((scope) => removeAuthScope([storage], scope));
+// The account token predates the scoped auth keys and used a single flat key.
+// Persisting a flat key would carry one backend's token over to the next after
+// an apiBase switch, so it gets the same per-backend scope as everything else.
+function accountUserTokenKey(apiBase: string): string {
+  return `${STORAGE_KEYS.accountUserToken}.${authScopeId(apiBase)}`;
+}
+
+function removeFlatAccountUserTokens(storages: Storage[]): void {
+  storages.forEach((storage) => {
+    removeStorageKey(storage, STORAGE_KEYS.accountUserToken);
+    removeStoragePrefixes(storage, [`${STORAGE_KEYS.accountUserToken}.`]);
   });
 }
 
 export function readBoundAuth(apiBase: string): BoundAuth {
   if (typeof window === 'undefined') return emptyBoundAuth();
-  return readBoundAuthFromStorages(getSessionStorages(), normalizeAuthApiBase(apiBase));
+  // Session first so a tab that deliberately signed in elsewhere keeps its own
+  // identity; localStorage is the durable fallback across restarts.
+  const normalizedBase = normalizeAuthApiBase(apiBase);
+  const fromSession = readBoundAuthFromStorages(getSessionStorages(), normalizedBase);
+  if (hasPrivateAuthValue(fromSession)) return fromSession;
+  return readBoundAuthFromStorages(getLocalStorages(), normalizedBase);
 }
 
 export function writeBoundAuth(apiBase: string, auth: Partial<BoundAuth>, rememberedAt = Date.now()): void {
   if (typeof window === 'undefined') return;
   const normalizedBase = normalizeAuthApiBase(apiBase);
-  const sessionStorages = getSessionStorages();
-  writeBoundAuthToStorages(sessionStorages, normalizedBase, auth, rememberedAt);
-  removeLegacyAuthKeys(sessionStorages);
-  clearPersistentAuthStorage();
+  const storages = getBrowserStorages();
+  writeBoundAuthToStorages(storages, normalizedBase, auth, rememberedAt);
+  removeLegacyAuthKeys(storages);
   if (auth.adminPassword || auth.sitePassword || auth.userAccessToken || auth.addressJwt) {
     writeAuthCookieMirror({ apiBase: normalizedBase, rememberedAt: auth.rememberedAt || rememberedAt });
   }
 }
 
-export function readAccountUserToken(): string {
+export function readAccountUserToken(apiBase = resolveStoredApiBase()): string {
   if (typeof window === 'undefined') return '';
-  return readFirstStorageItem(getSessionStorages(), STORAGE_KEYS.accountUserToken);
+  const key = accountUserTokenKey(apiBase);
+  return readFirstStorageItem(getSessionStorages(), key) || readFirstStorageItem(getLocalStorages(), key);
 }
 
-export function writeAccountUserToken(value: string): void {
+export function writeAccountUserToken(value: string, apiBase = resolveStoredApiBase()): void {
   if (typeof window === 'undefined') return;
-  getSessionStorages().forEach((storage) => writeStorageItem(storage, STORAGE_KEYS.accountUserToken, value.trim()));
-  getLocalStorages().forEach((storage) => removeStorageKey(storage, STORAGE_KEYS.accountUserToken));
+  const storages = getBrowserStorages();
+  const trimmed = value.trim();
+  // A token belongs to exactly one backend; drop every other scope's copy so a
+  // stale one can never be picked up after switching apiBase.
+  removeFlatAccountUserTokens(storages);
+  if (!trimmed) return;
+  storages.forEach((storage) => writeStorageItem(storage, accountUserTokenKey(apiBase), trimmed));
+}
+
+/**
+ * Refresh the sliding window. AUTH_IDLE_TIMEOUT_MS is documented as an idle
+ * timeout, but rememberedAt was only stamped at sign-in, which made it an
+ * absolute deadline that expired active operators mid-use.
+ */
+export function touchAuthRememberedAt(apiBase = resolveStoredApiBase(), now = Date.now()): void {
+  if (typeof window === 'undefined') return;
+  const normalizedBase = normalizeAuthApiBase(apiBase);
+  const current = readBoundAuth(normalizedBase);
+  if (!hasPrivateAuthValue(current)) return;
+  getBrowserStorages().forEach((storage) => {
+    writeStorageItem(storage, scopedAuthKey(normalizedBase, 'rememberedAt'), String(now));
+  });
+  writeAuthCookieMirror({ apiBase: normalizedBase, rememberedAt: now });
 }
 
 export function purgeExpiredAuthStorage(now = Date.now()): AuthExpiryCheck {
@@ -482,7 +514,6 @@ export function purgeExpiredAuthStorage(now = Date.now()): AuthExpiryCheck {
         expired = true;
       }
     });
-    clearPersistentAuthStorage();
     if (!hadPrivateAuth) return { ...fallback, rememberedAt };
     return { expired, migrated, rememberedAt, hadPrivateAuth };
   } catch {
