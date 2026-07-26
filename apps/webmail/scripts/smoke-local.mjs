@@ -461,24 +461,20 @@ async function run() {
     const button = document.querySelector('.mail-list-item .verification-code-button');
     const value = button?.querySelector('.verification-code-value');
     const detail = document.querySelector('.mail-detail-code-strip .verification-code-button');
-    if (!button || !value || !detail) return { exists: false };
+    if (!button || !value) return { exists: false };
     const buttonRect = button.getBoundingClientRect();
     const valueRect = value.getBoundingClientRect();
-    const detailRect = detail.getBoundingClientRect();
-    const detailValueRect = detail.querySelector('.verification-code-value').getBoundingClientRect();
-    const detailStyle = getComputedStyle(detail);
     return {
       exists: true,
       listCenterDelta: Math.abs((buttonRect.left + buttonRect.width / 2) - (valueRect.left + valueRect.width / 2)),
-      detailCenterDelta: detailRect.width ? Math.abs((detailRect.left + detailRect.width / 2) - (detailValueRect.left + detailValueRect.width / 2)) : 0,
       listHeight: buttonRect.height,
-      detailHeight: detailRect.height || Number.parseFloat(detailStyle.height),
+      hasDetailCode: !!detail,
       hasTrailingAction: !!button.querySelector('.verification-code-action, .mail-ui-icon')
     };
   })())`));
   assert(codeButtonMetrics.exists && !codeButtonMetrics.hasTrailingAction, `验证码快捷复制组件不应在右侧附加图标造成失重: ${JSON.stringify(codeButtonMetrics)}`);
-  assert(codeButtonMetrics.listCenterDelta <= 1 && codeButtonMetrics.detailCenterDelta <= 1, `验证码必须在按钮几何中心: ${JSON.stringify(codeButtonMetrics)}`);
-  assert(codeButtonMetrics.listHeight >= 27 && codeButtonMetrics.detailHeight >= 34, `验证码控件高度不符合紧凑布局: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.listCenterDelta <= 1, `验证码必须在按钮几何中心: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.listHeight >= 27 && !codeButtonMetrics.hasDetailCode, `验证码应只保留在列表快捷复制区: ${JSON.stringify(codeButtonMetrics)}`);
   await click(login, '.mail-list-item .verification-code-button');
   await waitUntil(login, `document.querySelector('.mail-list-item .verification-code-button')?.classList.contains('copied')`);
   assert(await evaluate(login, `window.__webmailCopiedText === document.querySelector('.mail-list-item .verification-code-value')?.textContent?.trim()`), '验证码快捷复制应只写入验证码文本');

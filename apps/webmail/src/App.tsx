@@ -62,6 +62,16 @@ function formatDate(value: string | undefined, locale: AppLocale) {
   }).format(date);
 }
 
+function formatListDate(value: string | undefined, locale: AppLocale) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const olderThanOneDay = Date.now() - date.getTime() >= 24 * 60 * 60 * 1000;
+  return new Intl.DateTimeFormat(locale, olderThanOneDay
+    ? { month: "2-digit", day: "2-digit" }
+    : { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
 function getSender(mail: ParsedMail, locale: AppLocale = "zh-CN") {
   return mail.from?.name || mail.from?.address || (locale === "en-US" ? "Unknown sender" : "未知发件人");
 }
@@ -532,9 +542,9 @@ const UI_COPY = {
     recipient: "收件人",
     attachments: "附件",
     mailFormat: "邮件显示格式",
-    htmlFormat: "HTML 格式",
-    textFormat: "显示文本格式",
-    sourceFormat: "显示源码格式",
+    htmlFormat: "HTML",
+    textFormat: "文本",
+    sourceFormat: "源码",
     noSource: "(无源码)",
     emptyTitle: "暂无邮件",
     emptyBody: "等待刷新新邮件",
@@ -706,7 +716,6 @@ const MailListRow = React.memo(function MailListRow({
   const sender = getSender(mail, locale);
   const senderName = mail.from?.name || sender;
   const senderAddress = mail.from?.address || sender;
-  const recipientAddress = mail.to?.map((item) => item.address || item.name).filter(Boolean).join(", ") || "";
   const attachmentCount = mail.attachments?.length || 0;
   const inert = deleting || exiting;
   const verificationCodes = getVerificationCodes(mail);
@@ -737,10 +746,9 @@ const MailListRow = React.memo(function MailListRow({
           <div className="mail-row-primary">
             <span className="mail-sender-line">
               <span className="mail-sender">{sender}</span>
-              {recipientAddress ? <span className="mail-list-recipient-inline" title={recipientAddress}>{recipientAddress}</span> : null}
             </span>
             <span className="mail-list-side">
-              <time className="mail-time">{formatDate(mail.date || mail.createdAt, locale)}</time>
+              <time className="mail-time">{formatListDate(mail.date || mail.createdAt, locale)}</time>
               {mail.isUnread ? <span className="mail-unread-dot" aria-hidden="true" /> : null}
             </span>
           </div>
@@ -1675,7 +1683,6 @@ export default function App() {
   }, [copy.codeCopied, copy.copyFailed, showToast]);
 
   const bodyText = useMemo(() => (selectedMail ? getMailBodyText(selectedMail) : ""), [selectedMail]);
-  const selectedVerificationCodes = useMemo(() => (selectedMail ? getVerificationCodes(selectedMail) : []), [selectedMail]);
   const unreadCount = useMemo(() => mails.filter((mail) => mail.isUnread).length, [mails]);
   const copyBodyText = useCallback(async () => {
     try {
@@ -1789,7 +1796,6 @@ export default function App() {
                 {copy.mailCount(mails.length)}{unreadCount ? ` · ${copy.unreadCount(unreadCount)}` : ""}
               </span>
             </div>
-            <p className="mail-auto-refresh-note">{autoRefreshEnabled ? copy.autoRefreshOnNote : copy.autoRefreshOffNote}</p>
           </div>
           <div className="sidebar-header-actions">
             <WebmailThemeToggle theme={theme} setTheme={setTheme} label={theme === "dark" ? copy.themeToggleLight : copy.themeToggleDark} />
@@ -1798,6 +1804,7 @@ export default function App() {
           </div>
         </div>
 
+        <div className="mail-list-control-row">
         <div className="account-card">
           <div
             className={`account-address-row ${(isShareSession(session) && (shareInfo?.addresses.length || 0) > 1) ? "has-mailbox-menu" : ""}`}
@@ -1893,6 +1900,7 @@ export default function App() {
           </button>
         </div>
         </div>
+        </div>
 
         <div className="mail-list mail-list-viewport" aria-label={copy.sidebarLabel}>
           {mails.map((mail) => (
@@ -1923,12 +1931,15 @@ export default function App() {
           <button type="button" className="load-more" disabled={loading === "sync"} onClick={loadMore}>
             {copy.loadMore}
           </button>
-        ) : mails.length ? (
-          <div className="end-note">{copy.allLoaded}</div>
         ) : null}
-        <a className="official-repository-link sidebar-repository-link" href={OFFICIAL_GITHUB_URL} target="_blank" rel="noreferrer" title={copy.officialRepositoryTitle}>
-          {copy.officialRepository}
-        </a>
+        <div className="mail-list-footer">
+          {mails.length && !hasMoreHistory ? <div className="end-note">{copy.allLoaded}</div> : <span />}
+          <a className="official-repository-link sidebar-repository-link" href={OFFICIAL_GITHUB_URL} target="_blank" rel="noreferrer" title={copy.officialRepositoryTitle} aria-label={copy.officialRepositoryTitle}>
+            <svg className="repository-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.52-1.34-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.28-5.27-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.71 5.39-5.28 5.68.42.36.78 1.06.78 2.14v3.26c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z" />
+            </svg>
+          </a>
+        </div>
       </aside>
 
       <main className="reader mail-detail-pane" aria-label={copy.readerLabel}>
@@ -1948,6 +1959,11 @@ export default function App() {
                 <MailUiIcon name="back" size={18} />
                 <span>{copy.backToList}</span>
               </button>
+              <div className="mail-view-tabs mail-detail-format-tabs" role="tablist" aria-label={copy.mailFormat}>
+                <button type="button" className={activeViewMode === "html" ? "active" : ""} disabled={!selectedMail.html} onClick={() => setMailViewMode("html")}>{copy.htmlFormat}</button>
+                <button type="button" className={activeViewMode === "text" ? "active" : ""} onClick={() => setMailViewMode("text")}>{copy.textFormat}</button>
+                <button type="button" className={activeViewMode === "source" ? "active" : ""} onClick={() => setMailViewMode("source")}>{copy.sourceFormat}</button>
+              </div>
               <div className="mail-detail-topbar-actions">
                 <button type="button" className="mail-detail-icon-action" onClick={() => void copyBodyText()} aria-label={copy.copyBody} title={copy.copyBody}>
                   <MailUiIcon name="copy" />
@@ -1995,46 +2011,6 @@ export default function App() {
             <div className="mail-detail-divider" />
 
             {error ? <div className="inline-error">{error}</div> : null}
-
-            {selectedVerificationCodes.length ? (
-              <div className="mail-detail-code-strip" aria-label={copy.verificationCode}>
-                <span>{copy.verificationCode}</span>
-                {selectedVerificationCodes.map((code) => (
-                  <span className="detail-code-copy" key={code}>
-                    <VerificationCodeButton
-                      code={code}
-                      copied={copiedCodeKey === verificationCopyKey(selectedMail.id, code)}
-                      copiedLabel={copy.copied}
-                      label={copy.copyCode}
-                      className="detail-code-button"
-                      onCopy={() => copyVerificationCode(selectedMail, code)}
-                    />
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="mail-view-tabs mail-detail-format-tabs" role="tablist" aria-label={copy.mailFormat}>
-              <button type="button"
-                className={activeViewMode === "html" ? "active" : ""}
-                disabled={!selectedMail.html}
-                onClick={() => setMailViewMode("html")}
-              >
-                {copy.htmlFormat}
-              </button>
-              <button type="button"
-                className={activeViewMode === "text" ? "active" : ""}
-                onClick={() => setMailViewMode("text")}
-              >
-                {copy.textFormat}
-              </button>
-              <button type="button"
-                className={activeViewMode === "source" ? "active" : ""}
-                onClick={() => setMailViewMode("source")}
-              >
-                {copy.sourceFormat}
-              </button>
-            </div>
 
             <div className={`mail-body-shell mail-detail-body mode-${activeViewMode}`}>
               {activeViewMode === "html" && selectedMail.html ? (

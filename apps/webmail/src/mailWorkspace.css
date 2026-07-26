@@ -11,7 +11,7 @@
 }
 
 .mail-workspace {
-  grid-template-columns: minmax(390px, 430px) minmax(0, 1fr);
+  grid-template-columns: minmax(310px, 330px) minmax(0, 1fr);
   background: var(--lm-bg);
   color: var(--lm-text);
 }
@@ -36,7 +36,7 @@
   position: relative;
   z-index: 60;
   flex: 0 0 auto;
-  padding: 18px 16px 12px;
+  padding: 16px 12px 9px;
   background: var(--lm-bg);
 }
 
@@ -45,8 +45,8 @@
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .sidebar-header-actions {
@@ -94,12 +94,23 @@
 
 .mail-list-header .account-card {
   z-index: 70;
-  margin: 0 0 10px;
-  padding: 4px 7px;
-  border: 1px solid var(--lm-divider);
-  border-radius: var(--lm-radius-control);
-  background: var(--lm-surface);
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
+}
+
+.mail-list-control-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--lm-divider);
 }
 
 .mail-list-header .account-address-row {
@@ -109,7 +120,7 @@
 
 .mail-list-header .address-copy-button {
   min-height: 32px;
-  padding: 3px 4px;
+  padding: 3px 5px;
   border-radius: var(--lm-radius-control-sm);
   color: var(--lm-text);
   font-size: 13px;
@@ -123,12 +134,7 @@
 }
 
 .mail-list-header .address-copy-affordance {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  color: var(--lm-muted);
-  background: transparent;
-  font-size: 10px;
-  font-weight: 500;
+  display: none;
 }
 
 .mail-list-summary {
@@ -163,20 +169,13 @@
   white-space: nowrap;
 }
 
-.mail-auto-refresh-note {
-  margin: 3px 0 0;
-  color: var(--lm-muted);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.35;
-}
-
 .mail-list-header .mail-toolbar {
   position: relative;
   z-index: 30;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 7px;
+  flex: 0 0 auto;
+  grid-template-columns: auto auto;
+  gap: 3px;
   margin: 0;
   overflow: visible;
   contain: none;
@@ -187,13 +186,13 @@
   grid-column: auto;
   width: auto;
   min-width: 0;
-  min-height: 36px;
+  min-height: 32px;
   border: 0;
   border-radius: var(--lm-radius-control);
-  padding-inline: 11px;
+  padding-inline: 8px;
   color: var(--lm-text-soft);
-  background: var(--lm-surface-soft);
-  font-size: 12px;
+  background: transparent;
+  font-size: 11.5px;
   font-weight: 550 !important;
   box-shadow: none;
 }
@@ -214,7 +213,7 @@
   z-index: 1;
   flex: 1 1 auto;
   gap: 8px;
-  padding: 4px 12px 12px;
+  padding: 4px 9px 9px;
   background: var(--lm-bg);
   scroll-padding-top: 6px;
 }
@@ -303,8 +302,8 @@
 
 .mail-sender {
   min-width: 0;
-  max-width: 54%;
-  flex: 0 1 auto;
+  max-width: 100%;
+  flex: 1 1 auto;
   overflow: hidden;
   color: var(--lm-text-soft);
   font-size: 13.5px;
@@ -312,24 +311,6 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.mail-list-recipient-inline {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  color: var(--lm-muted);
-  font-size: 11.5px;
-  font-weight: 400;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mail-list-recipient-inline::before {
-  content: "→";
-  margin-right: 5px;
-  color: var(--lm-muted-soft);
 }
 
 .mail-list-side {
@@ -475,7 +456,7 @@
   opacity: .55;
 }
 
-.mail-list-panel > :is(.load-more, .end-note) {
+.mail-list-panel > .load-more {
   flex: 0 0 auto;
   width: auto;
   margin: 0 12px 8px;
@@ -487,11 +468,43 @@
   background: var(--lm-surface-soft);
 }
 
-.mail-list-panel .sidebar-repository-link {
-  margin: 0 12px 10px;
-  padding: 2px 0;
+.mail-list-footer {
+  display: flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 10px 5px;
+  padding: 0 2px;
   color: var(--lm-muted);
-  font-size: 11px;
+  font-size: 10.5px;
+}
+
+.mail-list-footer .end-note {
+  margin: 0;
+  font-size: inherit;
+}
+
+.mail-list-panel .sidebar-repository-link {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  margin: 0;
+  border-radius: var(--lm-radius-control-sm);
+  padding: 0;
+  color: var(--lm-muted);
+  background: transparent;
+}
+
+.mail-list-panel .sidebar-repository-link:hover {
+  color: var(--lm-text);
+  background: var(--lm-surface-hover);
+}
+
+.repository-mark {
+  width: 16px;
+  height: 16px;
 }
 
 .mail-detail-pane.reader {
@@ -523,7 +536,8 @@
   display: flex;
   min-height: 36px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
+  gap: 6px;
   margin: 0;
 }
 
@@ -531,7 +545,7 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .mobile-back.mail-detail-icon-action {
@@ -593,7 +607,7 @@
 
 .mail-detail-subject-row {
   min-width: 0;
-  padding-right: 80px;
+  padding-right: 284px;
 }
 
 .mail-detail-subject,
@@ -709,39 +723,6 @@
   margin: 0 2px 9px;
 }
 
-.mail-detail-code-strip {
-  display: flex;
-  min-width: 0;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin: 0 2px 9px;
-}
-
-.mail-detail-code-strip > span:first-child {
-  margin-right: 1px;
-  color: var(--lm-muted);
-  font-size: 11.5px;
-  font-weight: 550;
-}
-
-.mail-detail-code-strip .detail-code-button {
-  min-width: 104px;
-  height: 34px;
-  padding-inline: 14px;
-  border-radius: 9px;
-  font-size: 14px;
-  letter-spacing: .055em;
-}
-
-.detail-code-copy {
-  display: inline-flex;
-  position: relative;
-  align-items: center;
-  gap: 4px;
-}
-
 .sr-only {
   position: absolute !important;
   width: 1px !important;
@@ -765,21 +746,21 @@
   width: fit-content;
   flex: 0 0 auto;
   gap: 2px;
-  margin: 0 2px 9px;
-  padding: 3px;
+  margin: 0;
+  padding: 2px;
   border: 0;
   border-radius: var(--lm-radius-control);
-  background: var(--lm-surface-soft);
+  background: color-mix(in srgb, var(--lm-surface-soft) 82%, transparent);
 }
 
 .mail-detail-format-tabs.mail-view-tabs button {
-  min-height: 29px;
+  min-height: 27px;
   border: 0;
   border-radius: var(--lm-radius-control-sm);
-  padding: 0 10px;
+  padding: 0 8px;
   color: var(--lm-muted);
   background: transparent;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500 !important;
 }
 
@@ -836,13 +817,13 @@
 
 @media (min-width: 1440px) {
   .mail-workspace {
-    grid-template-columns: minmax(430px, 470px) minmax(0, 1fr);
+    grid-template-columns: minmax(330px, 350px) minmax(0, 1fr);
   }
 }
 
 @media (max-width: 1040px) {
   .mail-workspace {
-    grid-template-columns: minmax(330px, 380px) minmax(0, 1fr);
+    grid-template-columns: minmax(300px, 320px) minmax(0, 1fr);
   }
 
   .mail-detail-pane.reader {
@@ -892,8 +873,8 @@
   }
 
   .mail-list-header .account-card {
-    margin-bottom: 9px;
-    padding: 4px 6px;
+    margin: 0;
+    padding: 0;
   }
 
   .mail-title-heading {
@@ -906,7 +887,7 @@
 
   .mail-list-header .mail-toolbar .refresh-button,
   .mail-list-header .mail-toolbar .auto-refresh-button {
-    min-height: 36px;
+    min-height: 32px;
   }
 
   .mail-list-viewport.mail-list {
@@ -952,6 +933,7 @@
     inset: auto;
     min-height: 40px;
     margin-bottom: 4px;
+    justify-content: flex-start;
   }
 
   .mobile-back.mail-detail-icon-action {
@@ -964,6 +946,11 @@
     background: transparent;
     font-size: 12px;
     font-weight: 500 !important;
+  }
+
+  .mail-detail-format-tabs.mail-view-tabs {
+    width: auto;
+    margin: 0 0 0 auto;
   }
 
   .mail-detail-icon-action {
@@ -1017,20 +1004,8 @@
     margin: 9px 0;
   }
 
-  .mail-detail-code-strip {
-    margin-inline: 0;
-    margin-bottom: 8px;
-  }
-
-  .mail-detail-format-tabs.mail-view-tabs {
-    width: 100%;
-    margin: 0 0 8px;
-  }
-
   .mail-detail-format-tabs.mail-view-tabs button {
-    min-width: 0;
-    flex: 1 1 0;
-    padding-inline: 6px;
+    padding-inline: 7px;
   }
 
   .mail-detail-body.mail-body-shell,
@@ -1044,16 +1019,9 @@
     font-size: 13.5px;
   }
 
-  .mail-list-panel .sidebar-repository-link {
-    display: none;
-  }
 }
 
 @media (max-width: 390px) {
-  .mail-list-recipient-inline {
-    display: none;
-  }
-
   .mail-sender {
     max-width: 100%;
   }

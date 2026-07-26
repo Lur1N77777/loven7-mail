@@ -168,12 +168,11 @@ test("webmail clipboard falls back to a temporary textarea and copies only trimm
   }
 });
 
-test("webmail exposes every high-confidence code as an individually copyable list and detail action", () => {
+test("webmail exposes every high-confidence code as an individually copyable list action", () => {
   const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const workspace = readWebmailSource("../src/mailWorkspace.css");
   assert.match(source, /verificationCodes\.map\(\(code\)\s*=>/);
-  assert.match(source, /selectedVerificationCodes\.map\(\(code\)\s*=>/);
-  assert.match(source, /copyVerificationCode\(selectedMail, code\)/);
+  assert.doesNotMatch(source, /mail-detail-code-strip|selectedVerificationCodes/);
   assert.match(source, /function VerificationCodeButton/);
   assert.match(source, /className="verification-code-value"/);
   assert.match(source, /className="mail-subject-line"[\s\S]*className="mail-subject"[\s\S]*className="code-row"[\s\S]*className="mail-row-footer"/);
@@ -273,11 +272,13 @@ test("webmail uses one bundled Maple Mono family for Chinese, Latin, and verific
 test("signed-in mail list uses calm hierarchy, visible row boundaries, and inline verification actions", () => {
   const workspace = readWebmailSource("../src/mailWorkspace.css");
 
-  assert.match(workspace, /\.mail-list-topbar\s*\{[^}]*justify-content:\s*space-between;[^}]*margin-bottom:\s*12px;/s);
+  assert.match(workspace, /\.mail-list-topbar\s*\{[^}]*justify-content:\s*space-between;[^}]*margin-bottom:\s*10px;/s);
   assert.match(workspace, /\.mail-list-item\.mail-row\s*\{[^}]*border:\s*1px solid var\(--lm-border\);[^}]*border-radius:\s*10px;[^}]*background:\s*var\(--lm-surface\);/s);
   assert.match(workspace, /\.mail-list-viewport\.mail-list\s*\{[^}]*gap:\s*8px;/s);
   assert.doesNotMatch(workspace, /\.mail-count-badge/);
   assert.doesNotMatch(workspace, /\.mail-list-header \.brand-logo-compact/);
+  assert.doesNotMatch(readWebmailSource("../src/App.tsx"), /mail-list-recipient-inline/);
+  assert.match(readWebmailSource("../src/App.tsx"), /formatListDate\(mail\.date \|\| mail\.createdAt, locale\)/);
 });
 
 test("webmail keeps read messages visibly interactive and removes the desktop reader spacer", () => {
