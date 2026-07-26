@@ -385,8 +385,9 @@ body .address-workspace .mobile-address-more.active {
   color: var(--workspace-ink) !important;
 }
 
+/* display stays untouched here: the JSX `md:hidden` gate must keep winning
+   on desktop, where the data table is the only list. */
 .address-mobile-list {
-  display: block;
   padding: 0 10px 5px;
 }
 

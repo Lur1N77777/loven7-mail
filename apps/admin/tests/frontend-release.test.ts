@@ -38,6 +38,8 @@ test('address management keeps floating controls visible and reports refresh pro
   assert.match(workspaceCss, /body \.address-view-shell\.address-workspace > \.product-page\s*\{[^}]*width:\s*100%;[^}]*padding:\s*16px 20px/s, 'mobile address content should use the normal page flow with restrained side padding');
   assert.match(workspaceCss, /body \.address-workspace \.address-page-actions > button\s*\{[^}]*flex:\s*1 1 0;[^}]*justify-content:\s*center;[^}]*text-align:\s*center;/s, 'mobile address actions should fill the row while centering their own labels');
   assert.match(workspaceCss, /body \.address-workspace \.mobile-address-card\s*\{[^}]*border-radius:\s*0\s*!important;[^}]*background:\s*transparent\s*!important;[^}]*box-shadow:\s*none\s*!important;/s, 'mobile address rows should remain flat instead of becoming tinted cards');
+  assert.match(source, /className="address-mobile-list md:hidden"/, 'the mobile card list must stay behind the responsive gate');
+  assert.doesNotMatch(workspaceCss, /\.address-mobile-list\s*\{[^}]*display:/s, 'an unscoped display on the mobile list outranks md:hidden by load order and duplicates the desktop table');
 });
 
 test('mobile navigation uses one immediate active surface and statistics keeps refresh compact', () => {
