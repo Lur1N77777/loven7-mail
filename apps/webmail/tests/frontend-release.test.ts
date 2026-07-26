@@ -176,9 +176,11 @@ test("webmail exposes every high-confidence code as an individually copyable lis
   assert.match(source, /copyVerificationCode\(selectedMail, code\)/);
   assert.match(source, /function VerificationCodeButton/);
   assert.match(source, /className="verification-code-value"/);
-  assert.match(source, /name=\{copied \? "check" : "copy"\}/);
+  assert.match(source, /className="mail-subject-line"[\s\S]*className="mail-subject"[\s\S]*className="code-row"[\s\S]*className="mail-row-footer"/);
+  assert.doesNotMatch(source, /className="verification-code-action"/);
   assert.match(workspace, /\.verification-code-button\s*\{[^}]*display:\s*inline-grid;[^}]*place-items:\s*center;[^}]*line-height:\s*1;/s);
-  assert.match(workspace, /\.verification-code-action\s*\{[^}]*position:\s*absolute;[^}]*right:\s*9px;[^}]*top:\s*50%;/s);
+  assert.match(workspace, /\.mail-subject-line\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
+  assert.match(workspace, /\.mail-list-item \.code-row\s*\{[^}]*flex:\s*0 0 auto;[^}]*margin:\s*0;/s);
   assert.match(workspace, /\.verification-code-button\.copied\s*\{[^}]*color:\s*var\(--lm-success\);/s);
 });
 
@@ -238,6 +240,7 @@ test("signed-in webmail uses Admin mail workspace semantics and exposes no passw
     "mail-detail-header",
     "mail-detail-sender-row",
     "mail-detail-body",
+    "mail-list-topbar",
   ]) {
     assert.match(app, new RegExp(`className=[^\\n]*${className}|className=\\{[^\\n]*${className}`), `missing Admin-aligned class ${className}`);
     assert.match(workspace, new RegExp(`\\.${className}\\b`), `missing workspace styling for ${className}`);
@@ -246,6 +249,10 @@ test("signed-in webmail uses Admin mail workspace semantics and exposes no passw
   assert.doesNotMatch(app, /changeAddressPassword|passwordDialogOpen|newMailboxPassword|passwordSaving|saveMailboxPassword|changePasswordTitle|修改密码|Change password/);
   assert.doesNotMatch(api, /address_change_password|changeAddressPassword/);
   assert.doesNotMatch(workspace, /webmail-modal/);
+  const signedHeaderStart = app.indexOf('<aside className="sidebar mail-list-panel"');
+  const signedAccountStart = app.indexOf('<div className="account-card">', signedHeaderStart);
+  assert.ok(signedHeaderStart > 0 && signedAccountStart > signedHeaderStart);
+  assert.doesNotMatch(app.slice(signedHeaderStart, signedAccountStart), /<BrandLogo/);
 });
 
 test("webmail mail typography follows Admin's locale-aware Apple-style font contract", () => {
@@ -256,9 +263,19 @@ test("webmail mail typography follows Admin's locale-aware Apple-style font cont
   assert.match(theme, /--apple-cn-font-display:[^;]*SF Pro Display[^;]*Noto Sans SC/s);
   assert.match(theme, /:root\[data-font-mode="en"\][\s\S]*--mail-ui-font:\s*var\(--font-ui\)/);
   assert.match(workspace, /\.mail-workspace,[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important/);
-  assert.match(workspace, /\.mail-list-header \.brand-logo-compact \.brand-wordmark,[\s\S]*font-family:\s*var\(--font-brand\)\s*!important/);
-  assert.match(workspace, /\.mail-subject\s*\{[\s\S]*font-weight:\s*520\s*!important/);
+  assert.match(workspace, /\.mail-title-heading\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*600\s*!important/);
+  assert.match(workspace, /\.mail-subject\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*600\s*!important/);
   assert.match(workspace, /\.mail-detail-subject,[\s\S]*font-weight:\s*550\s*!important/);
+});
+
+test("signed-in mail list uses calm hierarchy, visible row boundaries, and inline verification actions", () => {
+  const workspace = readWebmailSource("../src/mailWorkspace.css");
+
+  assert.match(workspace, /\.mail-list-topbar\s*\{[^}]*justify-content:\s*space-between;[^}]*margin-bottom:\s*12px;/s);
+  assert.match(workspace, /\.mail-list-item\.mail-row\s*\{[^}]*border:\s*1px solid var\(--lm-divider\);[^}]*border-radius:\s*10px;[^}]*background:\s*var\(--lm-surface\);/s);
+  assert.match(workspace, /\.mail-list-viewport\.mail-list\s*\{[^}]*gap:\s*8px;/s);
+  assert.doesNotMatch(workspace, /\.mail-count-badge/);
+  assert.doesNotMatch(workspace, /\.mail-list-header \.brand-logo-compact/);
 });
 
 test("webmail keeps read messages visibly interactive and removes the desktop reader spacer", () => {
@@ -266,7 +283,7 @@ test("webmail keeps read messages visibly interactive and removes the desktop re
 
   assert.doesNotMatch(workspace, /\.mail-list-item\.mail-row\.(?:read|unread)\s*\{/);
   assert.doesNotMatch(workspace, /\.mail-list-item\.read\s+:is\([^)]*\.mail-subject/);
-  assert.match(workspace, /\.mail-list-item\.mail-row-selected[\s\S]*background:\s*var\(--lm-surface\)/);
+  assert.match(workspace, /\.mail-list-item\.mail-row-selected[\s\S]*background:\s*var\(--lm-selected\)/);
   assert.match(workspace, /\.mail-detail-card\.mail-detail\s*\{[\s\S]*position:\s*relative/);
   assert.match(workspace, /\.mail-detail-topbar\s*\{[\s\S]*position:\s*absolute/);
   assert.match(workspace, /@media\s*\(max-width:\s*760px\)[\s\S]*\.mail-detail-topbar\s*\{[\s\S]*position:\s*static/);

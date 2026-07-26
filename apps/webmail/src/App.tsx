@@ -282,7 +282,7 @@ function MenuChevron() {
   );
 }
 
-type MailUiIconName = "back" | "check" | "copy" | "paperclip" | "trash";
+type MailUiIconName = "back" | "copy" | "paperclip" | "trash";
 
 function MailUiIcon({ name, size = 16 }: { name: MailUiIconName; size?: number }) {
   return (
@@ -296,7 +296,6 @@ function MailUiIcon({ name, size = 16 }: { name: MailUiIconName; size?: number }
       focusable="false"
     >
       {name === "back" ? <path d="m15 18-6-6 6-6M9 12h10" /> : null}
-      {name === "check" ? <path d="m5 12.5 4.2 4.2L19 7" /> : null}
       {name === "copy" ? <><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></> : null}
       {name === "paperclip" ? <path d="m20.5 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 1 1-2.8-2.8l8.3-8.3" /> : null}
       {name === "trash" ? <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /><path d="M10 11v5M14 11v5" /></> : null}
@@ -357,9 +356,6 @@ function VerificationCodeButton({ code, copied, disabled = false, label, copiedL
       title={`${label} ${code}`}
     >
       <span className="verification-code-value">{code}</span>
-      <span className="verification-code-action" aria-hidden="true">
-        <MailUiIcon name={copied ? "check" : "copy"} size={13} />
-      </span>
       <span className="sr-only" aria-live="polite">{copied ? copiedLabel : ""}</span>
     </button>
   );
@@ -751,31 +747,33 @@ const MailListRow = React.memo(function MailListRow({
           <div className="mail-subject-line">
             <strong className="mail-subject">{mail.subject}</strong>
             {attachmentCount ? <span className="mail-attachment-indicator" title={`${attachmentCount}`}><MailUiIcon name="paperclip" size={13} /></span> : null}
+            {verificationCodes.length ? (
+              <span className="code-row">
+                {verificationCodes.map((code) => {
+                  const copied = copiedCodeKey === verificationCopyKey(mail.id, code);
+                  return (
+                    <span className="code-copy-item" key={code}>
+                      <VerificationCodeButton
+                        code={code}
+                        copied={copied}
+                        copiedLabel={copiedLabel}
+                        disabled={inert}
+                        label={verificationCodeLabel}
+                        onCopy={(event) => {
+                          event.stopPropagation();
+                          if (inert) return;
+                          onCopyVerificationCode(mail, code);
+                        }}
+                      />
+                    </span>
+                  );
+                })}
+              </span>
+            ) : null}
           </div>
-          <span className="mail-row-preview mail-preview">{mail.preview || noContent}</span>
-          {verificationCodes.length ? (
-            <span className="code-row">
-              {verificationCodes.map((code) => {
-                const copied = copiedCodeKey === verificationCopyKey(mail.id, code);
-                return (
-                  <span className="code-copy-item" key={code}>
-                    <VerificationCodeButton
-                      code={code}
-                      copied={copied}
-                      copiedLabel={copiedLabel}
-                      disabled={inert}
-                      label={verificationCodeLabel}
-                      onCopy={(event) => {
-                        event.stopPropagation();
-                        if (inert) return;
-                        onCopyVerificationCode(mail, code);
-                      }}
-                    />
-                  </span>
-                );
-              })}
-            </span>
-          ) : null}
+          <div className="mail-row-footer">
+            <span className="mail-row-preview mail-preview">{mail.preview || noContent}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1783,8 +1781,16 @@ export default function App() {
       {toast ? <div className="toast">{toast}</div> : null}
       <aside className="sidebar mail-list-panel" aria-label={copy.sidebarLabel}>
         <div className="mail-list-header">
-        <div className="brand-row">
-          <BrandLogo variant="compact" />
+        <div className="mail-list-topbar">
+          <div className="mail-list-summary">
+            <div className="mail-title-line">
+              <h2 className="mail-title-heading">{copy.inboxTitle}</h2>
+              <span className="mail-count-summary">
+                {copy.mailCount(mails.length)}{unreadCount ? ` · ${copy.unreadCount(unreadCount)}` : ""}
+              </span>
+            </div>
+            <p className="mail-auto-refresh-note">{autoRefreshEnabled ? copy.autoRefreshOnNote : copy.autoRefreshOffNote}</p>
+          </div>
           <div className="sidebar-header-actions">
             <WebmailThemeToggle theme={theme} setTheme={setTheme} label={theme === "dark" ? copy.themeToggleLight : copy.themeToggleDark} />
             <WebmailLocaleMenu locale={locale} setLocale={setLocale} title={copy.localeTitle} label={copy.languageLabel} />
@@ -1793,7 +1799,6 @@ export default function App() {
         </div>
 
         <div className="account-card">
-          <span>{isShareSession(session) ? copy.sharedMailbox : copy.currentMailbox}</span>
           <div
             className={`account-address-row ${(isShareSession(session) && (shareInfo?.addresses.length || 0) > 1) ? "has-mailbox-menu" : ""}`}
             ref={mailboxMenuRef}
@@ -1848,15 +1853,6 @@ export default function App() {
               </div>
             ) : null}
           </div>
-        </div>
-
-        <div className="mail-list-summary">
-          <div className="mail-title-line">
-            <h2 className="mail-title-heading">{copy.inboxTitle}</h2>
-            <span className="mail-count-badge">{copy.mailCount(mails.length)}</span>
-            {unreadCount ? <span className="mail-count-badge unread">{copy.unreadCount(unreadCount)}</span> : null}
-          </div>
-          <p className="mail-auto-refresh-note">{autoRefreshEnabled ? copy.autoRefreshOnNote : copy.autoRefreshOffNote}</p>
         </div>
 
         <div className="toolbar mail-toolbar">

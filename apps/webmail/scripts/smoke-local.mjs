@@ -428,8 +428,7 @@ async function run() {
     htmlText: document.querySelector('.mail-html-view')?.srcdoc || '',
     hasRemoteImageButton: [...document.querySelectorAll('button')].some((button) => /显示远程图片|Show remote images/.test(button.textContent || '')),
     hasLoadingText: document.body.innerText.includes('正在优化') || document.body.innerText.includes('Loading images'),
-    brandFontFamily: getComputedStyle(document.querySelector('.brand-wordmark')).fontFamily,
-    brandFontReady: document.fonts.check('28px "Loven7 Brand Script"'),
+    signedInBrandLogo: !!document.querySelector('.mail-list-header .brand-logo'),
     emptyHuge: false
   })`));
   assert(!inboxMetrics.xOverflow, '用户站收件箱不应横向溢出');
@@ -439,7 +438,7 @@ async function run() {
   assert(inboxMetrics.htmlText.includes('/api/image?url='), `远程邮件图片应自动改写为同源代理地址: ${inboxMetrics.htmlText}`);
   assert(!inboxMetrics.hasRemoteImageButton, '远程邮件图片应自动通过代理加载，不应再要求手动允许');
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
-  assert(inboxMetrics.brandFontFamily.includes('Loven7 Brand Script') && inboxMetrics.brandFontReady, `顶部品牌字标应复用 Admin 手写字体: ${JSON.stringify(inboxMetrics)}`);
+  assert(!inboxMetrics.signedInBrandLogo, `登录后的邮箱左栏不应继续堆叠品牌 Logo: ${JSON.stringify(inboxMetrics)}`);
   const initialTheme = await evaluate(login, `document.documentElement.dataset.theme`);
   assert(initialTheme === 'light' || initialTheme === 'dark', `页面应在首屏应用明确主题: ${initialTheme}`);
   await click(login, '.sidebar-header-actions .webmail-theme-toggle');
@@ -471,12 +470,12 @@ async function run() {
       detailCenterDelta: detailRect.width ? Math.abs((detailRect.left + detailRect.width / 2) - (detailValueRect.left + detailValueRect.width / 2)) : 0,
       listHeight: buttonRect.height,
       detailHeight: detailRect.height || Number.parseFloat(detailStyle.height),
-      hasCopyIcon: !!button.querySelector('.verification-code-action .mail-ui-icon')
+      hasTrailingAction: !!button.querySelector('.verification-code-action, .mail-ui-icon')
     };
   })())`));
-  assert(codeButtonMetrics.exists && codeButtonMetrics.hasCopyIcon, `验证码快捷复制组件应完整呈现: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.exists && !codeButtonMetrics.hasTrailingAction, `验证码快捷复制组件不应在右侧附加图标造成失重: ${JSON.stringify(codeButtonMetrics)}`);
   assert(codeButtonMetrics.listCenterDelta <= 1 && codeButtonMetrics.detailCenterDelta <= 1, `验证码必须在按钮几何中心: ${JSON.stringify(codeButtonMetrics)}`);
-  assert(codeButtonMetrics.listHeight >= 30 && codeButtonMetrics.detailHeight >= 36, `验证码控件触控高度不足: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.listHeight >= 27 && codeButtonMetrics.detailHeight >= 34, `验证码控件高度不符合紧凑布局: ${JSON.stringify(codeButtonMetrics)}`);
   await click(login, '.mail-list-item .verification-code-button');
   await waitUntil(login, `document.querySelector('.mail-list-item .verification-code-button')?.classList.contains('copied')`);
   assert(await evaluate(login, `window.__webmailCopiedText === document.querySelector('.mail-list-item .verification-code-value')?.textContent?.trim()`), '验证码快捷复制应只写入验证码文本');
