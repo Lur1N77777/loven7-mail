@@ -91,6 +91,13 @@ test('mobile pages clear the floating dock and mail chrome renders calm details'
   assert.match(productCss, /\.frontend-base-controls > \.btn-primary\s*\{[^}]*align-self:\s*flex-end;/s, 'the settings save action should sit compact at the row end instead of stretching full width');
 });
 
+test('read state re-merges when a device resumes so cross-device marks arrive without a reload', () => {
+  const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.match(workspaceSource, /document\.addEventListener\('visibilitychange', onVisibility\)/, 'returning to the foreground must trigger a remote read-state re-merge');
+  assert.match(workspaceSource, /\[mailStateKeys, mode, request, stateSyncTick\]/, 'the remote merge effect must re-run on the resync tick, not only on mount');
+  assert.match(workspaceSource, /if \(Date\.now\(\) - lastStateSyncAtRef\.current < 15_000\) return;/, 'resync must be throttled so visibility flaps cannot spam the endpoint');
+});
+
 test('sender display names drop MIME quoting artifacts', () => {
   const plain = parseRawMailListItem({ id: 1, raw: 'From: "Nihon App" <no-reply@nihon.example>\r\nSubject: Code\r\n\r\nBody' } as never);
   assert.equal(plain.senderName, 'Nihon App');

@@ -547,7 +547,36 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
   useEffect(() => {
     setExpandedMailStacks(new Set());
   }, [activeTab, address, searchQuery, mode, page]);
+  // Devices learn about reads made elsewhere only through this remote merge, so
+  // re-run it when the app returns to the foreground, this view resumes, or the
+  // user refreshes — the merge is a pure union plus max watermark, so a stale
+  // remote snapshot can never flip a locally read mail back to unread, and the
+  // backfill PATCH inside it retries any marks a flaky network dropped earlier.
+  const [stateSyncTick, setStateSyncTick] = useState(0);
+  const lastStateSyncAtRef = useRef(0);
+  const requestStateResync = useCallback(() => {
+    if (Date.now() - lastStateSyncAtRef.current < 15_000) return;
+    setStateSyncTick((tick) => tick + 1);
+  }, []);
   useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') requestStateResync();
+    };
+    const onGlobalRefresh = () => requestStateResync();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener(GLOBAL_REFRESH_EVENT, onGlobalRefresh);
+    };
+  }, [requestStateResync]);
+  const wasActiveRef = useRef(active);
+  useEffect(() => {
+    if (active && !wasActiveRef.current) requestStateResync();
+    wasActiveRef.current = active;
+  }, [active, requestStateResync]);
+  useEffect(() => {
+    lastStateSyncAtRef.current = Date.now();
     const next = readMailState(mailStateKeys);
     setReadIds(next.readIds);
     setReadAllBefore(next.readAllBefore);
@@ -603,7 +632,7 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
     return () => {
       cancelled = true;
     };
-  }, [mailStateKeys, mode, request]);
+  }, [mailStateKeys, mode, request, stateSyncTick]);
 
   const persistReadIds = useCallback((next: Set<string>) => {
     setReadIds(new Set(next));

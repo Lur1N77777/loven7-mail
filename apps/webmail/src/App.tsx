@@ -1053,12 +1053,29 @@ export default function App() {
     return state;
   }, [setSessionMailReadState]);
 
+  // Cross-device reads arrive only via this remote merge; returning to the
+  // foreground re-runs it (throttled) so another device's marks show up without
+  // a reload. The union merge cannot regress local reads, and its backfill
+  // PATCH re-sends marks that a flaky mobile network dropped.
+  const [mailStateSyncTick, setMailStateSyncTick] = useState(0);
+  const lastMailStateSyncAtRef = useRef(0);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastMailStateSyncAtRef.current < 15_000) return;
+      setMailStateSyncTick((tick) => tick + 1);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
   useEffect(() => {
     if (!session || isShareSession(session)) {
       setSessionMailReadState(session, emptyMailReadState());
       return undefined;
     }
 
+    lastMailStateSyncAtRef.current = Date.now();
     let cancelled = false;
     const activeSession = session;
     const localState = loadLocalMailReadState(activeSession);
@@ -1083,7 +1100,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [loadLocalMailReadState, session, setSessionMailReadState]);
+  }, [loadLocalMailReadState, mailStateSyncTick, session, setSessionMailReadState]);
 
   useEffect(() => {
     writeLocale(locale);

@@ -308,6 +308,13 @@ test("webmail keeps read messages visibly interactive and removes the desktop re
   assert.match(workspace, /\.mail-detail-body\.mode-html \.mail-frame,[\s\S]*?\.mail-detail-body\.mode-html \.mail-html-view\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*height:\s*100%;/s);
 });
 
+test("webmail re-merges remote read state when returning to the foreground", () => {
+  const app = readWebmailSource("../src/App.tsx");
+  assert.match(app, /document\.addEventListener\("visibilitychange", onVisibility\)/, "foreground return must trigger a read-state re-merge");
+  assert.match(app, /\[loadLocalMailReadState, mailStateSyncTick, session, setSessionMailReadState\]/, "the remote merge effect must re-run on the resync tick");
+  assert.match(app, /if \(Date\.now\(\) - lastMailStateSyncAtRef\.current < 15_000\) return;/, "resync must be throttled against visibility flaps");
+});
+
 test("webmail renders blocked remote images as a calm placeholder", () => {
   const parser = readWebmailSource("../src/mailParser.ts");
   assert.match(parser, /img\[data-blocked-src\],img\[data-blocked-srcset\]:not\(\[src\]\)\{display:inline-block;/, "the mail frame must style blocked images (src or srcset-only) instead of showing a broken glyph");
