@@ -4,6 +4,7 @@
 
 ## 反思报告
 
+- [2026-07-27：修复 Admin PWA 新版本无法自动接管](2026-07/27_reflection_bugfix_admin-pwa-update-activation.md)
 - [2026-07-27：修复 Admin 实时语言切换并统一 Webmail 邮件行高](2026-07/27_reflection_bugfix_admin-locale-mail-row-height.md)
 - [2026-07-27：统一移动端控件并修复分享邮箱已读状态](2026-07/27_reflection_bugfix_ui-read-state-consistency.md)
 - [2026-07-26：结构级统一 Webmail 邮件列表与详情布局](2026-07/26_reflection_refactor_webmail-mail-layout.md)
@@ -15,7 +16,7 @@
 
 ## 统计
 
-- 报告总数：8
-- Bugfix：6
+- 报告总数：9
+- Bugfix：7
 - Refactor：1
 - Feature：1

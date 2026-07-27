@@ -37,6 +37,22 @@
     return true;
   };
 
+  const activateReadyUpdate = (current) => {
+    if (current?.waiting) return activateUpdateWorker(current);
+    if (typeof current?.addEventListener !== 'function') return false;
+    current.addEventListener('updatefound', () => {
+      const worker = current.installing;
+      if (!worker) return;
+      const activateWhenInstalled = () => {
+        if (worker.state !== 'installed' || !navigator.serviceWorker.controller) return;
+        activateUpdateWorker({ waiting: current.waiting || worker });
+      };
+      worker.addEventListener('statechange', activateWhenInstalled);
+      activateWhenInstalled();
+    });
+    return false;
+  };
+
   document.addEventListener('click', (event) => {
     if (!isUpdateRefreshClick(event)) return;
     try {
@@ -53,6 +69,7 @@
       .register('/sw-v2.js', { scope: '/' })
       .then((current) => {
         registration = current;
+        activateReadyUpdate(current);
         return current.update();
       })
       .catch((error) => console.warn('PWA update check failed', error));

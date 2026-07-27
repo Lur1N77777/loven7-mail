@@ -647,7 +647,7 @@ test('admin refresh leaves normal reload handling to the caller without a waitin
   assert.equal(activateWaitingServiceWorker(undefined, () => assert.fail('must not reload'), () => assert.fail('must not schedule')), false);
 });
 
-test('network-fresh registrar upgrades a stranded old update page after user confirmation', async () => {
+test('network-fresh registrar automatically activates a stranded waiting update', async () => {
   const registrarSource = readFileSync(new URL('../public/pwa-register-v2.js', import.meta.url), 'utf8');
   let loadListener: (() => void) | undefined;
   let clickListener: ((event: Record<string, unknown>) => void) | undefined;
@@ -712,6 +712,8 @@ test('network-fresh registrar upgrades a stranded old update page after user con
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(updates, 1);
+  assert.equal(messages.length, 1);
+  assert.equal((messages[0] as { type?: unknown }).type, 'SKIP_WAITING');
   const ordinaryButton = new MockElement();
   ordinaryButton.textContent = '刷新';
   ordinaryButton.closest = (selector: string) => selector === 'button' ? ordinaryButton : selector === '[role="alert"]' ? alert : null;
@@ -722,7 +724,7 @@ test('network-fresh registrar upgrades a stranded old update page after user con
     stopImmediatePropagation() { assert.fail('ordinary refresh must keep propagating'); },
   });
   assert.equal(ordinaryPrevented, false);
-  assert.equal(messages.length, 0);
+  assert.equal(messages.length, 1);
   let prevented = false;
   let stopped = false;
   clickListener({
@@ -742,7 +744,61 @@ test('network-fresh registrar upgrades a stranded old update page after user con
   assert.equal(reloads, 1);
 });
 
-test('admin PWA migrates through a network-fresh registrar without force-activating old clients', () => {
+test('network-fresh registrar activates an update that installs after the page loads', async () => {
+  const registrarSource = readFileSync(new URL('../public/pwa-register-v2.js', import.meta.url), 'utf8');
+  let loadListener: (() => void) | undefined;
+  let updateFound: (() => void) | undefined;
+  let workerStateChange: (() => void) | undefined;
+  let state = 'installing';
+  const messages: unknown[] = [];
+  class MockElement {}
+  const worker = {
+    get state() { return state; },
+    addEventListener(type: string, listener: () => void) {
+      assert.equal(type, 'statechange');
+      workerStateChange = listener;
+    },
+    postMessage(message: unknown) { messages.push(message); },
+  };
+  const registration = {
+    waiting: null,
+    installing: worker,
+    addEventListener(type: string, listener: () => void) {
+      assert.equal(type, 'updatefound');
+      updateFound = listener;
+    },
+    update() {},
+  };
+
+  runInNewContext(registrarSource, {
+    Element: MockElement,
+    console: { warn() {} },
+    document: { addEventListener() {} },
+    navigator: { serviceWorker: { controller: {}, register: async () => registration } },
+    window: {
+      addEventListener(type: string, listener: () => void) {
+        assert.equal(type, 'load');
+        loadListener = listener;
+      },
+      location: { reload() {} },
+      setTimeout() {},
+    },
+  });
+
+  loadListener?.();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.ok(updateFound);
+  updateFound();
+  assert.ok(workerStateChange);
+  assert.equal(messages.length, 0);
+  state = 'installed';
+  workerStateChange();
+  assert.equal(messages.length, 1);
+  assert.equal((messages[0] as { type?: unknown }).type, 'SKIP_WAITING');
+});
+
+test('admin PWA keeps generated workers prompt-safe while the network-fresh registrar coordinates activation', () => {
   const viteSource = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
   const htmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const registrarSource = readFileSync(new URL('../public/pwa-register-v2.js', import.meta.url), 'utf8');
