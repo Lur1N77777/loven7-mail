@@ -1,9 +1,10 @@
 # 开发工作流索引
 
-最后更新：2026-07-26
+最后更新：2026-07-27
 
 ## 反思报告
 
+- [2026-07-27：统一移动端控件并修复分享邮箱已读状态](2026-07/27_reflection_bugfix_ui-read-state-consistency.md)
 - [2026-07-26：结构级统一 Webmail 邮件列表与详情布局](2026-07/26_reflection_refactor_webmail-mail-layout.md)
 - [2026-07-26：统一 Webmail 与 Admin 的主题和组件风格](2026-07/26_reflection_feature_webmail-admin-theme.md)
 - [2026-07-26：修复 Dependabot 高危依赖告警](2026-07/26_reflection_bugfix_dependency-alerts.md)
@@ -13,7 +14,7 @@
 
 ## 统计
 
-- 报告总数：6
-- Bugfix：4
+- 报告总数：7
+- Bugfix：5
 - Refactor：1
 - Feature：1

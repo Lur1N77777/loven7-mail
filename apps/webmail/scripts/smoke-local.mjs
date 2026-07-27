@@ -600,6 +600,27 @@ async function run() {
 
   const share = await openApp('/s/share-token');
   await waitUntil(share, `document.querySelectorAll('.mail-row').length === 1`);
+  const sharedUnreadHeight = Number(await evaluate(share, `document.querySelector('.mail-row')?.getBoundingClientRect().height || 0`));
+  assert(await evaluate(share, `document.querySelector('.mail-unread-dot')?.dataset.visible === 'true'`), '共享邮件未读标记应显示在固定槽位中');
+  await click(share, '.mail-row');
+  await waitUntil(share, `document.querySelector('.mail-row')?.classList.contains('read')`);
+  const sharedReadHeight = Number(await evaluate(share, `(() => {
+    const shell = document.querySelector('.app-shell');
+    const row = document.querySelector('.mail-row');
+    if (!shell || !row) return 0;
+    shell.classList.remove('pane-reader');
+    shell.classList.add('pane-list');
+    const height = row.getBoundingClientRect().height;
+    shell.classList.remove('pane-list');
+    shell.classList.add('pane-reader');
+    return height;
+  })()`));
+  assert(Math.abs(sharedUnreadHeight - sharedReadHeight) <= 0.5, `共享邮件读前读后行高不应变化: ${sharedUnreadHeight} -> ${sharedReadHeight}`);
+  assert(await evaluate(share, `document.querySelector('.mail-unread-dot')?.dataset.visible === 'false' && getComputedStyle(document.querySelector('.mail-unread-dot')).visibility === 'hidden'`), '已读邮件应隐藏红点但保留布局槽位');
+  await cdpSend(share, 'Page.reload', { ignoreCache: true });
+  await sleep(900);
+  await waitUntil(share, `document.querySelectorAll('.mail-row').length === 1 && document.querySelector('.mail-row')?.classList.contains('read')`);
+  assert(await evaluate(share, `document.querySelector('.mail-unread-dot')?.dataset.visible === 'false'`), '重新进入分享邮箱后，本机已读状态应继续生效');
   await click(share, '.mail-row');
   await waitUntil(share, `document.querySelector('.mail-detail-icon-action.danger')?.getAttribute('aria-label')?.includes('删除')`);
   const shareBefore = await evaluate(share, `document.body.innerText`);
@@ -610,7 +631,7 @@ async function run() {
   await waitUntil(share, `document.body.innerText.includes('邮件已删除') || document.querySelectorAll('.mail-row').length === 0`);
   const shareAfter = await evaluate(share, `document.body.innerText`);
   assert(shareAfter.includes('暂无邮件'), '共享删除后当前链接应隐藏该邮件并显示空状态');
-  results.push({ name: 'webmail-share-delete-copy', ok: true });
+  results.push({ name: 'webmail-share-read-persistence-and-delete', rowHeight: sharedReadHeight, ok: true });
 
   const raceLogin = await openApp('/');
   await waitUntil(raceLogin, `!!window.__webmailSmokeRace && document.body.innerText.includes('请输入管理员提供的邮箱与密码')`);

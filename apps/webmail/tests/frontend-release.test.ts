@@ -327,6 +327,18 @@ test("webmail re-merges remote read state when returning to the foreground", () 
   assert.match(app, /if \(Date\.now\(\) - lastMailStateSyncAtRef\.current < 15_000\) return;/, "resync must be throttled against visibility flaps");
 });
 
+test("shared mail keeps read state locally without changing row height", () => {
+  const app = readWebmailSource("../src/App.tsx");
+  const workspace = readWebmailSource("../src/mailWorkspace.css");
+
+  assert.match(app, /const state = activeSession \? readLocalMailState\(activeSession\) : emptyMailReadState\(\);/, "shared sessions must restore their browser-local read state on entry");
+  assert.match(app, /if \(isShareSession\(session\)\) return undefined;/, "shared sessions should keep local state while skipping account-level remote sync");
+  assert.match(app, /<span className="mail-unread-dot" data-visible=\{mail\.isUnread \? "true" : "false"\} aria-hidden="true" \/>/, "the unread marker must keep one stable layout slot before and after selection");
+  assert.match(workspace, /\.mail-list-side\s*\{[^}]*flex-direction:\s*row;[^}]*align-items:\s*center;/s, "time and unread marker must share one line");
+  assert.match(workspace, /\.mail-unread-dot\s*\{[^}]*flex:\s*0 0 6px;[^}]*visibility:\s*hidden;/s, "the hidden marker must preserve its width without adding a line");
+  assert.match(workspace, /\.mail-unread-dot\[data-visible="true"\]\s*\{[^}]*visibility:\s*visible;/s, "only unread messages reveal the reserved marker");
+});
+
 test("webmail renders blocked remote images as a calm placeholder", () => {
   const parser = readWebmailSource("../src/mailParser.ts");
   assert.match(parser, /img\[data-blocked-src\],img\[data-blocked-srcset\]:not\(\[src\]\)\{display:inline-block;/, "the mail frame must style blocked images (src or srcset-only) instead of showing a broken glyph");

@@ -351,8 +351,12 @@ body .address-workspace .sender-access-toggle {
   transition: background-color 140ms ease;
 }
 
-body .address-workspace :is(.address-workspace-surface, .sender-access-shell) {
+body .address-workspace .sender-access-shell {
   border-radius: var(--workspace-radius) !important;
+}
+
+body .address-workspace .address-workspace-surface {
+  border-radius: var(--admin-radius-panel) !important;
 }
 
 body .address-workspace .sender-access-toggle:hover {
@@ -1027,8 +1031,8 @@ body .compose-workspace .compose-send-btn {
 
   body .address-workspace .address-toolbar :where(.toolbar-field, .user-filter-trigger, .toolbar-action),
   body .address-workspace .address-toolbar .address-sort-select .popover-select-trigger {
-    min-height: 36px !important;
-    height: 36px !important;
+    min-height: 38px !important;
+    height: 38px !important;
     border-radius: var(--workspace-radius) !important;
   }
 
@@ -1037,7 +1041,7 @@ body .compose-workspace .compose-send-btn {
   }
 
   body .address-workspace .address-workspace-surface {
-    border-radius: var(--workspace-radius) !important;
+    border-radius: var(--admin-radius-panel) !important;
   }
 
   body .address-workspace .address-toolbar .address-search-field {
@@ -1213,8 +1217,8 @@ body .address-workspace .user-filter-count {
 
 @media (max-width: 767px) {
   body .address-view-shell .address-toolbar .popover-select.address-sort-select .popover-select-trigger {
-    min-height: 36px !important;
-    height: 36px !important;
+    min-height: 38px !important;
+    height: 38px !important;
   }
 }
 

@@ -749,7 +749,7 @@ const MailListRow = React.memo(function MailListRow({
             </span>
             <span className="mail-list-side">
               <time className="mail-time">{formatListDate(mail.date || mail.createdAt, locale)}</time>
-              {mail.isUnread ? <span className="mail-unread-dot" aria-hidden="true" /> : null}
+              <span className="mail-unread-dot" data-visible={mail.isUnread ? "true" : "false"} aria-hidden="true" />
             </span>
           </div>
           <div className="mail-subject-line">
@@ -1048,7 +1048,7 @@ export default function App() {
   }, [rememberDeletedMail]);
 
   const loadLocalMailReadState = useCallback((activeSession: WebmailSession | null) => {
-    const state = activeSession && !isShareSession(activeSession) ? readLocalMailState(activeSession) : emptyMailReadState();
+    const state = activeSession ? readLocalMailState(activeSession) : emptyMailReadState();
     setSessionMailReadState(activeSession, state);
     return state;
   }, [setSessionMailReadState]);
@@ -1073,16 +1073,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session || isShareSession(session)) {
-      setSessionMailReadState(session, emptyMailReadState());
-      return undefined;
-    }
+    if (!session) return undefined;
 
     lastMailStateSyncAtRef.current = Date.now();
-    let cancelled = false;
     const activeSession = session;
     const localState = loadLocalMailReadState(activeSession);
     setMails((current) => applyMailReadState(current, localState));
+    if (isShareSession(session)) return undefined;
+
+    let cancelled = false;
 
     fetchMailState(activeSession.jwt)
       .then((remote) => {
