@@ -410,6 +410,7 @@
 
 .mail-subject-line {
   display: flex;
+  height: 24px;
   min-width: 0;
   align-items: center;
   gap: 7px;
@@ -469,21 +470,21 @@
 
 .verification-code-button {
   display: inline-grid;
-  min-width: 78px;
-  height: 27px;
+  min-width: 76px;
+  height: 24px;
   place-items: center;
   margin: 0;
   border: 1px solid color-mix(in srgb, var(--lm-accent) 28%, var(--lm-border));
-  border-radius: 8px;
-  padding: 0 10px;
+  border-radius: 7px;
+  padding: 0 8px;
   color: var(--lm-accent-strong);
   background: var(--lm-surface-soft);
   box-shadow: none;
   font-family: var(--font-code) !important;
-  font-size: 12px;
+  font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   font-weight: 600 !important;
-  letter-spacing: .035em;
+  letter-spacing: 0;
   line-height: 1;
   cursor: pointer;
   transition: color .16s ease, background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .12s ease;
@@ -991,9 +992,8 @@
   }
 
   .verification-code-button {
-    min-width: 74px;
-    padding-inline: 8px;
-    font-size: 11.5px;
+    min-width: 72px;
+    padding-inline: 7px;
   }
 
   .mail-detail-pane.reader {

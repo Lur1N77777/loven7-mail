@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import { PenLine, RefreshCw, Settings } from 'lucide-react';
 import { cls } from '../lib/format';
-import { getRuntimeLocale, localeText } from '../lib/locale';
+import { localeText, type AppLocale } from '../lib/locale';
 import type { OpenSettings, Statistics } from '../types/api';
 import type { MenuKey } from '../components/Shell';
 import {
@@ -133,8 +133,7 @@ function CapabilityCard({ items, title, enabledLabel, disabledLabel, metaText }:
   );
 }
 
-export function DashboardView({ stats, loading, openSettings, refresh, setActiveMenu }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void; setActiveMenu: (menu: MenuKey) => void }) {
-  const locale = getRuntimeLocale();
+export function DashboardView({ stats, loading, openSettings, refresh, setActiveMenu, locale }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void; setActiveMenu: (menu: MenuKey) => void; locale: AppLocale }) {
   const t = (zh: string, en: string) => localeText(zh, en, locale);
   const capabilities = capabilityLabels.map(([zh, en, key]) => ({ label: t(zh, en), key, enabled: Boolean(openSettings?.[key]) }));
   const enabledCount = capabilities.filter((item) => item.enabled).length;
@@ -232,8 +231,7 @@ export function DashboardView({ stats, loading, openSettings, refresh, setActive
   );
 }
 
-export function StatsView({ stats, loading, openSettings, refresh }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void }) {
-  const locale = getRuntimeLocale();
+export function StatsView({ stats, loading, openSettings, refresh, locale }: { stats: Statistics; loading: boolean; openSettings: OpenSettings | null; refresh: () => void; locale: AppLocale }) {
   const t = (zh: string, en: string) => localeText(zh, en, locale);
   const capabilities = capabilityLabels.map(([zh, en, key]) => ({ label: t(zh, en), key, enabled: Boolean(openSettings?.[key]) }));
   const enabledCount = capabilities.filter((item) => item.enabled).length;

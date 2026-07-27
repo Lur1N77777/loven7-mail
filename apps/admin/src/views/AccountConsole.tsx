@@ -1152,6 +1152,7 @@ export function AccountConsole({ apiBase, profile, locale, theme, setTheme, setL
                 ask={ask}
                 globalQuery=""
                 cacheScope={cacheScope}
+                locale={locale}
                 accountUserToken={profile.userToken}
                 accountUserEmail={profile.userEmail}
                 accountUserRoleLabel={profile.roleLabel || profile.roleKey || (profile.isAdmin ? 'Admin' : t('普通用户', 'Member'))}

@@ -356,7 +356,7 @@ body .address-workspace .sender-access-shell {
 }
 
 body .address-workspace .address-workspace-surface {
-  border-radius: var(--admin-radius-panel) !important;
+  border-radius: var(--workspace-radius) !important;
 }
 
 body .address-workspace .sender-access-toggle:hover {
@@ -1041,7 +1041,7 @@ body .compose-workspace .compose-send-btn {
   }
 
   body .address-workspace .address-workspace-surface {
-    border-radius: var(--admin-radius-panel) !important;
+    border-radius: var(--workspace-radius) !important;
   }
 
   body .address-workspace .address-toolbar .address-search-field {

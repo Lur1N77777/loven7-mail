@@ -34,7 +34,7 @@ test('address management keeps floating controls visible and reports refresh pro
   assert.match(source, /className="mobile-address-secondary"/, 'mobile address metadata and counts should share one compact secondary row');
   assert.match(workspaceCss, /\.mobile-address-action-menu\.mobile-address-action-menu-portal\s*\{[^}]*position:\s*fixed\s*!important;[^}]*max-height:/s, 'mobile actions must stay inside short viewports');
   assert.match(workspaceCss, /\.user-filter-trigger\.has-filter\s*\{[^}]*padding-right:\s*40px\s*!important;/s, 'selected user text must reserve space for its clear action');
-  assert.match(workspaceCss, /body \.address-workspace \.address-workspace-surface\s*\{[^}]*border-radius:\s*var\(--admin-radius-panel\)\s*!important;/s, 'the address data surface must use the same panel radius as user management');
+  assert.match(workspaceCss, /body \.address-workspace \.address-workspace-surface\s*\{[^}]*border-radius:\s*var\(--workspace-radius\)\s*!important;/s, 'the address data surface must use the same restrained workspace radius as user management');
   assert.match(workspaceCss, /@media \(max-width: 767px\)[\s\S]*body \.address-workspace \.address-toolbar :where\(\.toolbar-field, \.user-filter-trigger, \.toolbar-action\),[\s\S]*min-height:\s*38px\s*!important;[\s\S]*height:\s*38px\s*!important;[\s\S]*border-radius:\s*var\(--workspace-radius\)\s*!important;/s, 'mobile address fields and actions must share the user toolbar control geometry');
   assert.match(workspaceCss, /@media \(max-width: 767px\)\s*\{\s*body \.address-view-shell \.address-toolbar \.popover-select\.address-sort-select \.popover-select-trigger\s*\{[^}]*min-height:\s*38px\s*!important;[^}]*height:\s*38px\s*!important;/s, 'the final mobile sort override must not shrink below sibling inputs');
   assert.match(workspaceCss, /body \.address-view-shell\.address-workspace > \.product-page\s*\{[^}]*width:\s*100%;[^}]*padding:\s*16px 20px/s, 'mobile address content should use the normal page flow with restrained side padding');
@@ -60,6 +60,21 @@ test('mobile navigation uses one immediate active surface and statistics keeps r
   assert.doesNotMatch(appSource, /--mobile-(?:page-drag-x|nav-live-progress)/, 'page swipes must not invalidate global styles on every animation frame');
   assert.doesNotMatch(appSource, /pageAnimationSecondFrameRef/, 'page settling should not add a second animation-frame delay');
   assert.match(themeCss, /body \.mobile-mail-shell \.mail-list-item\s*\{[^}]*transform:\s*none\s*!important;[^}]*will-change:\s*auto\s*!important;/s, 'mail rows must not each reserve a compositor layer');
+});
+
+test('memoized admin views react to locale changes and theme labels keep their descenders', () => {
+  const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const dashboardSource = readFileSync(new URL('../src/views/DashboardView.tsx', import.meta.url), 'utf8');
+  const addressSource = readFileSync(new URL('../src/views/AddressView.tsx', import.meta.url), 'utf8');
+  const themeCss = readFileSync(new URL('../src/theme.css', import.meta.url), 'utf8');
+
+  assert.match(appSource, /<MemoDashboardView[^>]*locale=\{locale\}/, 'dashboard memo props must include the active locale');
+  assert.match(appSource, /<MemoStatsView[^>]*locale=\{locale\}/, 'statistics memo props must include the active locale');
+  assert.match(appSource, /<MemoAddressView[^>]*locale=\{locale\}/, 'address memo props must include the active locale');
+  assert.match(dashboardSource, /DashboardView\([^)]*locale[^)]*\)[\s\S]*localeText\(zh, en, locale\)/, 'dashboard copy must derive from its reactive locale prop');
+  assert.match(dashboardSource, /StatsView\([^)]*locale[^)]*\)[\s\S]*localeText\(zh, en, locale\)/, 'statistics copy must derive from its reactive locale prop');
+  assert.match(addressSource, /useLocaleCopy\(displayLocale\)/, 'address copy must derive from its reactive locale prop');
+  assert.match(themeCss, /body \.sidebar-reference-shell \.theme-segmented-option span\s*\{[^}]*padding-block:\s*1px;[^}]*line-height:\s*1\.25;/s, 'English theme labels need vertical room for descenders such as the g in Light');
 });
 
 test('mobile chrome drops per-frame backdrop blur and clips offscreen mail work', () => {

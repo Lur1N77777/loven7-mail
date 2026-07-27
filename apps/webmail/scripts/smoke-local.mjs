@@ -157,6 +157,14 @@ function mockFetchScript() {
     '',
     'Your verification code is 512399.',
   ].join('\r\n');
+  const regularMail = [
+    'From: PayPal <service@paypal.com>',
+    'To: qa@example.test',
+    'Subject: Your account update',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    'Your account preferences were updated successfully.',
+  ].join('\r\n');
   const oldStaleMail = [
     'From: Old Session <old@example.test>',
     'To: old@example.test',
@@ -199,7 +207,7 @@ function mockFetchScript() {
   ].join('\r\n');
   return `(() => {
     const mailPages = {
-      populated: [{ id: 101, raw: ${JSON.stringify(htmlMail)}, created_at: '2026-05-09T10:35:00.000Z' }, { id: 100, raw: ${JSON.stringify(textMail)}, created_at: '2026-05-09T10:30:00.000Z' }],
+      populated: [{ id: 101, raw: ${JSON.stringify(htmlMail)}, created_at: '2026-05-09T10:35:00.000Z' }, { id: 100, raw: ${JSON.stringify(textMail)}, created_at: '2026-05-09T10:30:00.000Z' }, { id: 99, raw: ${JSON.stringify(regularMail)}, created_at: '2026-05-09T10:25:00.000Z' }],
       empty: [],
       old: [{ id: 201, raw: ${JSON.stringify(oldStaleMail)}, created_at: '2026-05-09T10:25:00.000Z' }],
       newOnly: [{ id: 301, raw: ${JSON.stringify(newOnlyMail)}, created_at: '2026-05-09T10:40:00.000Z' }],
@@ -266,7 +274,7 @@ function mockFetchScript() {
               : mailPages.populated;
         return json({ results: list, count: list.length });
       }
-      if (path === '/api/mail/101' || path === '/api/mail/100') return json({ ok: true });
+      if (path === '/api/mail/101' || path === '/api/mail/100' || path === '/api/mail/99') return json({ ok: true });
       if (path === '/api/image') return new Response('not really an image', { status: 415, headers: { 'content-type': 'text/plain' } });
       if (path === '/api/share/no-config') return json({ error: { code: 'share_not_configured', message: 'SHARE_KV is not configured' } }, 500);
       if (path === '/api/share/no-config-kv') return json({ error: { code: 'share_kv_not_configured', message: 'SHARE_KV is not configured' } }, 500);
@@ -496,6 +504,8 @@ async function run() {
     const button = document.querySelector('.mail-list-item .verification-code-button');
     const value = button?.querySelector('.verification-code-value');
     const detail = document.querySelector('.mail-detail-code-strip .verification-code-button');
+    const codedRow = button?.closest('.mail-row');
+    const regularRow = [...document.querySelectorAll('.mail-row')].find((row) => !row.querySelector('.verification-code-button'));
     if (!button || !value) return { exists: false };
     const buttonRect = button.getBoundingClientRect();
     const valueRect = value.getBoundingClientRect();
@@ -503,13 +513,16 @@ async function run() {
       exists: true,
       listCenterDelta: Math.abs((buttonRect.left + buttonRect.width / 2) - (valueRect.left + valueRect.width / 2)),
       listHeight: buttonRect.height,
+      codedRowHeight: codedRow?.getBoundingClientRect().height || 0,
+      regularRowHeight: regularRow?.getBoundingClientRect().height || 0,
       hasDetailCode: !!detail,
       hasTrailingAction: !!button.querySelector('.verification-code-action, .mail-ui-icon')
     };
   })())`));
   assert(codeButtonMetrics.exists && !codeButtonMetrics.hasTrailingAction, `验证码快捷复制组件不应在右侧附加图标造成失重: ${JSON.stringify(codeButtonMetrics)}`);
   assert(codeButtonMetrics.listCenterDelta <= 1, `验证码必须在按钮几何中心: ${JSON.stringify(codeButtonMetrics)}`);
-  assert(codeButtonMetrics.listHeight >= 27 && !codeButtonMetrics.hasDetailCode, `验证码应只保留在列表快捷复制区: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.listHeight >= 23.5 && codeButtonMetrics.listHeight <= 24.5 && !codeButtonMetrics.hasDetailCode, `验证码应以紧凑尺寸保留在列表快捷复制区: ${JSON.stringify(codeButtonMetrics)}`);
+  assert(codeButtonMetrics.regularRowHeight > 0 && Math.abs(codeButtonMetrics.codedRowHeight - codeButtonMetrics.regularRowHeight) <= 0.5, `验证码邮件与普通邮件必须保持等高: ${JSON.stringify(codeButtonMetrics)}`);
   await click(login, '.mail-list-item .verification-code-button');
   await waitUntil(login, `document.querySelector('.mail-list-item .verification-code-button')?.classList.contains('copied')`);
   assert(await evaluate(login, `window.__webmailCopiedText === document.querySelector('.mail-list-item .verification-code-value')?.textContent?.trim()`), '验证码快捷复制应只写入验证码文本');

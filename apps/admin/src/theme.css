@@ -842,11 +842,14 @@ body .sidebar-reference-shell .theme-segmented-option {
   min-height: 30px !important;
   gap: 6px !important;
   font-size: 12px !important;
+  line-height: 1.25 !important;
 }
 
 body .sidebar-reference-shell .theme-segmented-option span {
   min-width: 0;
+  padding-block: 1px;
   overflow: hidden;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

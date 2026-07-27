@@ -381,6 +381,17 @@ async function waitForMailFrameText(ws, matcher, timeoutMs = 5000) {
   return last;
 }
 
+async function waitUntil(ws, expression, timeoutMs = 5000) {
+  const started = Date.now();
+  let last = false;
+  while (Date.now() - started < timeoutMs) {
+    last = await evaluate(ws, expression).catch(() => false);
+    if (last) return last;
+    await sleep(200);
+  }
+  throw new Error(`Timed out waiting for ${expression}; last=${JSON.stringify(last)}`);
+}
+
 async function openApp({ width, height, dark = false, mobile, seedAuth = true, legacyAuthCookie = '', authRememberedAt = Date.now(), extraStorageScript = '' }) {
   const ws = await cdpNewPage('about:blank');
   ws.send(JSON.stringify({ id: ++messageId, method: 'Page.enable', params: {} }));
@@ -1651,10 +1662,36 @@ async function main() {
   assert(dashboardSurface.overview?.backgroundColor === 'rgba(0, 0, 0, 0)', `dashboard overview should use the page canvas: ${JSON.stringify(dashboardSurface)}`);
   assert(dashboardSurface.commandIcon?.backgroundColor === 'rgba(0, 0, 0, 0)', `dashboard command icons should have transparent backgrounds: ${JSON.stringify(dashboardSurface)}`);
   assert(dashboardSurface.staleMetricCards === 0, `dashboard should not restore the old metric-card grid: ${JSON.stringify(dashboardSurface)}`);
+  await clickSelector(desktop, '.sidebar-locale-toggle');
+  await waitUntil(desktop, `document.querySelector('.admin-dashboard-view-shell .page-title')?.textContent?.includes('Operations overview')`);
+  const dashboardLocaleMetrics = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const button = [...document.querySelectorAll('.sidebar-theme-control .theme-segmented-option')].find((item) => item.textContent.includes('Light'));
+    const label = button?.querySelector('span');
+    const buttonRect = button?.getBoundingClientRect();
+    const labelRect = label?.getBoundingClientRect();
+    return {
+      title: document.querySelector('.admin-dashboard-view-shell .page-title')?.textContent || '',
+      themeLabel: label?.textContent || '',
+      labelInsideButton: Boolean(buttonRect && labelRect && labelRect.top >= buttonRect.top && labelRect.bottom <= buttonRect.bottom),
+      labelHeight: labelRect?.height || 0,
+    };
+  })())`));
+  extraResults.push({ name: 'desktop-dashboard-live-locale', ...dashboardLocaleMetrics });
+  assert(dashboardLocaleMetrics.title.includes('Operations overview'), `dashboard should switch language without a reload: ${JSON.stringify(dashboardLocaleMetrics)}`);
+  assert(dashboardLocaleMetrics.themeLabel === 'Light' && dashboardLocaleMetrics.labelInsideButton && dashboardLocaleMetrics.labelHeight >= 15, `Light label descender must fit inside the theme control: ${JSON.stringify(dashboardLocaleMetrics)}`);
+  await clickSelector(desktop, '.sidebar-locale-toggle');
+  await waitUntil(desktop, `document.querySelector('.admin-dashboard-view-shell .page-title')?.textContent?.includes('运营概览')`);
 
   await clickText(desktop, '地址管理');
   const desktopAddress = await collect(desktop, 'desktop-address');
   extraResults.push(desktopAddress);
+  await clickSelector(desktop, '.sidebar-locale-toggle');
+  await waitUntil(desktop, `document.querySelector('.address-view-shell .page-title')?.textContent?.includes('Address management')`);
+  const addressLocaleTitle = await evaluate(desktop, `document.querySelector('.address-view-shell .page-title')?.textContent || ''`);
+  extraResults.push({ name: 'desktop-address-live-locale', title: addressLocaleTitle });
+  assert(String(addressLocaleTitle).includes('Address management'), `address management should switch language without a reload: ${addressLocaleTitle}`);
+  await clickSelector(desktop, '.sidebar-locale-toggle');
+  await waitUntil(desktop, `document.querySelector('.address-view-shell .page-title')?.textContent?.includes('地址管理')`);
   const desktopAddressLayout = await inspectWorkspace(desktop, 'desktop-address-workspace-layout', {
     rootSelector: '.address-view-shell.address-workspace',
     structuralSelectors: [
@@ -1757,6 +1794,13 @@ async function main() {
   const desktopStats = await collect(desktop, 'desktop-stats');
   extraResults.push(desktopStats);
   assert(!desktopStats.xOverflow, 'desktop statistics has horizontal overflow');
+  await clickSelector(desktop, '.sidebar-locale-toggle');
+  await waitUntil(desktop, `document.querySelector('.admin-stats-view-shell .page-title')?.textContent?.includes('Statistics')`);
+  const statsLocaleTitle = await evaluate(desktop, `document.querySelector('.admin-stats-view-shell .page-title')?.textContent || ''`);
+  extraResults.push({ name: 'desktop-stats-live-locale', title: statsLocaleTitle });
+  assert(String(statsLocaleTitle).includes('Statistics'), `statistics should switch language without a reload: ${statsLocaleTitle}`);
+  await clickSelector(desktop, '.sidebar-locale-toggle');
+  await waitUntil(desktop, `document.querySelector('.admin-stats-view-shell .page-title')?.textContent?.includes('统计')`);
   const statsLayout = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
     const analysis = document.querySelector('.admin-stats-view-shell .stats-analysis-lead');
     const style = analysis ? getComputedStyle(analysis) : null;

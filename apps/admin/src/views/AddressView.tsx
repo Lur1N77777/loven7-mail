@@ -5,7 +5,7 @@ import { buildQuery, type Requester } from '../lib/api';
 import { CACHE_TTL, DEFAULT_PAGE_SIZE, FRONTEND_LOGIN_BASE, STORAGE_KEYS } from '../lib/constants';
 import { cls, formatDateTime, normalizeSearch } from '../lib/format';
 import { sha256Hex } from '../lib/crypto';
-import { getRuntimeLocale, localeText } from '../lib/locale';
+import { getRuntimeLocale, localeText, type AppLocale } from '../lib/locale';
 import { buildAddressLoginUrl, copyText } from '../lib/clipboard';
 import { isLocalAdminOrigin, normalizeFrontendBaseUrl } from '../lib/frontendBase';
 import { readJsonStorage, readStorage, writeJsonStorage, writeLocalStorage } from '../lib/storage';
@@ -87,6 +87,7 @@ type AddressViewProps = {
   accountDomains?: string[];
   adminAccessToken?: string;
   onAccountAddressRowsChange?: (rows: AddressRecord[]) => void;
+  locale: AppLocale;
 };
 
 const ADDRESS_SORT_OPTIONS = [
@@ -163,8 +164,7 @@ function normalizeShareApiError(error: unknown, base: string, fallback: string) 
   return error instanceof Error ? error : new Error(fallback);
 }
 
-function useLocaleCopy() {
-  const locale = getRuntimeLocale();
+function useLocaleCopy(locale: AppLocale = getRuntimeLocale()) {
   return {
     locale,
     t: (zh: string, en: string) => localeText(zh, en, locale),
@@ -527,8 +527,9 @@ export function AddressView({
   accountDomains = [],
   adminAccessToken = '',
   onAccountAddressRowsChange,
+  locale: displayLocale,
 }: AddressViewProps) {
-  const { locale, t } = useLocaleCopy();
+  const { locale, t } = useLocaleCopy(displayLocale);
   const isAccountScoped = Boolean(accountUserToken);
   const [data, setData] = useState<AddressRecord[]>([]);
   const [count, setCount] = useState(0);
@@ -2046,7 +2047,7 @@ export function AddressView({
           </span>
           <ChevronDown size={16} className={cls('shrink-0 text-slate-400 transition', senderPanelOpen && 'rotate-180')} />
         </button>
-        {senderPanelOpen && <SenderAccessPanel request={request} notify={notify} ask={ask} cacheScope={cacheScope} embedded />}
+        {senderPanelOpen && <SenderAccessPanel request={request} notify={notify} ask={ask} cacheScope={cacheScope} locale={locale} embedded />}
       </section>}
 
       {desktopActionMenu && typeof document !== 'undefined' && createPortal(
@@ -2339,8 +2340,8 @@ export function AddressView({
   );
 }
 
-function SenderAccessPanel({ request, notify, ask, cacheScope, embedded = false }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; cacheScope: string; embedded?: boolean }) {
-  const { locale, t } = useLocaleCopy();
+function SenderAccessPanel({ request, notify, ask, cacheScope, locale: displayLocale, embedded = false }: { request: Requester; notify: Notify; ask: ReturnType<typeof useConfirm>['ask']; cacheScope: string; locale: AppLocale; embedded?: boolean }) {
+  const { locale, t } = useLocaleCopy(displayLocale);
   const [data, setData] = useState<SenderAccessRecord[]>([]);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);

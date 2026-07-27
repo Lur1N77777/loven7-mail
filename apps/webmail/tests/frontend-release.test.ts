@@ -183,6 +183,14 @@ test("webmail exposes every high-confidence code as an individually copyable lis
   assert.match(workspace, /\.verification-code-button\.copied\s*\{[^}]*color:\s*var\(--lm-success\);/s);
 });
 
+test("verification actions keep coded and regular mail rows at one stable height", () => {
+  const workspace = readFileSync(new URL("../src/mailWorkspace.css", import.meta.url), "utf8");
+
+  assert.match(workspace, /\.mail-subject-line\s*\{[^}]*height:\s*24px;/s);
+  assert.match(workspace, /\.verification-code-button\s*\{[^}]*height:\s*24px;[^}]*padding:\s*0 8px;/s);
+  assert.doesNotMatch(workspace, /\.verification-code-button\s*\{[^}]*height:\s*27px;/s);
+});
+
 test("webmail uses white only for real brand icons and deterministic color for initials", () => {
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const theme = readFileSync(new URL("../src/theme.css", import.meta.url), "utf8");

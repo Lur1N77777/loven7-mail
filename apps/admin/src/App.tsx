@@ -893,9 +893,9 @@ export default function App() {
     navigateMenu('address');
   }, [navigateMenu]);
   const renderContent = (menu: MenuKey) => {
-    if (menu === 'dashboard') return <MemoDashboardView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} setActiveMenu={navigateMenu} />;
-    if (menu === 'stats') return <MemoStatsView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} />;
-    if (menu === 'address') return <MemoAddressView key={`address:${mailStateScope}`} request={request} notify={push} ask={ask} globalQuery={globalQuery} cacheScope={mailStateScope} openSettings={openSettings} userFilter={addressUserFilter} userTotal={stats.userCount} onClearUserFilter={clearAddressUserFilter} onOpenInbox={openAddressInbox} adminAccessToken={effectiveUserAccessToken} />;
+    if (menu === 'dashboard') return <MemoDashboardView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} setActiveMenu={navigateMenu} locale={locale} />;
+    if (menu === 'stats') return <MemoStatsView stats={stats} loading={statsLoading} openSettings={openSettings} refresh={refreshCurrent} locale={locale} />;
+    if (menu === 'address') return <MemoAddressView key={`address:${mailStateScope}`} request={request} notify={push} ask={ask} globalQuery={globalQuery} cacheScope={mailStateScope} openSettings={openSettings} userFilter={addressUserFilter} userTotal={stats.userCount} onClearUserFilter={clearAddressUserFilter} onOpenInbox={openAddressInbox} adminAccessToken={effectiveUserAccessToken} locale={locale} />;
     if (menu === 'users') return <UsersView key={`users:${mailStateScope}`} request={request} notify={push} ask={ask} globalQuery={globalQuery} cacheScope={mailStateScope} onFilterUserAddresses={filterUserAddresses} />;
     if (menu === 'inbox' || menu === 'sent' || menu === 'unknown') {
       const visualMenu = pageSwipeTargetMenu && Math.abs(pageDragX) > 2 ? pageSwipeTargetMenu : activeMenu;
