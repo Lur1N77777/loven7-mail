@@ -1,9 +1,10 @@
 # 开发工作流索引
 
-最后更新：2026-07-27
+最后更新：2026-07-28
 
 ## 反思报告
 
+- [2026-07-28：修复 HTML 邮件布局、居中与品牌图片](2026-07/28_reflection_bugfix_mail-html-layout-images.md)
 - [2026-07-27：修复 Admin PWA 新版本无法自动接管](2026-07/27_reflection_bugfix_admin-pwa-update-activation.md)
 - [2026-07-27：修复 Admin 实时语言切换并统一 Webmail 邮件行高](2026-07/27_reflection_bugfix_admin-locale-mail-row-height.md)
 - [2026-07-27：统一移动端控件并修复分享邮箱已读状态](2026-07/27_reflection_bugfix_ui-read-state-consistency.md)
@@ -16,7 +17,7 @@
 
 ## 统计
 
-- 报告总数：9
-- Bugfix：7
+- 报告总数：10
+- Bugfix：8
 - Refactor：1
 - Feature：1

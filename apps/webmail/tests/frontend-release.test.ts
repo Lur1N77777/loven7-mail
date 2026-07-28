@@ -352,6 +352,21 @@ test("webmail renders blocked remote images as a calm placeholder", () => {
   assert.match(parser, /img\[data-blocked-src\],img\[data-blocked-srcset\]:not\(\[src\]\)\{display:inline-block;/, "the mail frame must style blocked images (src or srcset-only) instead of showing a broken glyph");
 });
 
+test("webmail preserves fixed-width email tables and replaces blocked Claude logos locally", () => {
+  const parser = readWebmailSource("../src/mailParser.ts");
+  assert.doesNotMatch(parser, /\*\{box-sizing:border-box;\}/, "global border-box sizing changes fixed email cell geometry");
+  assert.doesNotMatch(parser, /table\[width\],td\[width\],th\[width\]\{max-width:100%!important;\}/, "mobile overrides must not collapse fixed email table cells independently");
+  assert.doesNotMatch(parser, /table\{display:block;overflow-x:auto;\}/, "turning every table into a block breaks nested email layouts");
+  assert.match(parser, /img:not\(\[height\]\)\{height:auto!important;\}/, "only images without an explicit sender-defined height should be auto-sized");
+  assert.match(parser, /#loven7-render-root>\*\{margin-left:auto!important;margin-right:auto!important;\}/, "each sender-defined top-level mail canvas should be centered without changing its internal alignment");
+  const blockedBrandAsset = ["https:/", "claude.ai/images/claude_logo_full.png"].join("/");
+  assert.equal(
+    proxyMailImageUrl(blockedBrandAsset, "https://mail.example.test"),
+    "https://mail.example.test/mail-assets/claude-logo-full.svg",
+    "known Claude assets that reject server fetches need a same-origin fallback",
+  );
+});
+
 test("webmail auto refresh keeps one stable interval through mail-list updates", () => {
   const appSource = readWebmailSource("../src/App.tsx");
 

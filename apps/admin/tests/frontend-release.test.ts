@@ -818,6 +818,21 @@ test('admin PWA keeps generated workers prompt-safe while the network-fresh regi
   assert.match(headersSource, /\/pwa-register-v2\.js[\s\S]*Cache-Control: no-cache, no-store, must-revalidate/);
 });
 
+test('admin preserves fixed-width email tables and replaces blocked Claude logos locally', () => {
+  const parser = readFileSync(new URL('../src/lib/mailParser.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(parser, /\*, \*::before, \*::after \{ box-sizing: border-box;/, "global border-box sizing changes fixed email cell geometry");
+  assert.doesNotMatch(parser, /\*, \*::before, \*::after \{[^}]*max-width: 100%/, "global max-width must not rewrite email table geometry");
+  assert.doesNotMatch(parser, /table \{ width: auto !important;/, "fixed-width email tables must not be expanded to the reader width");
+  assert.match(parser, /img:not\(\[height\]\) \{ height: auto !important; \}/, "only images without an explicit sender-defined height should be auto-sized");
+  assert.match(parser, /#loven7-mail-root > \* \{ margin-left: auto !important; margin-right: auto !important; \}/, "each sender-defined top-level mail canvas should be centered without changing its internal alignment");
+  const blockedBrandAsset = ['https:/', 'claude.ai/images/claude_logo_full.png'].join('/');
+  assert.equal(
+    proxyMailImageUrl(blockedBrandAsset, 'https://mail.example.test'),
+    'https://mail.example.test/mail-assets/claude-logo-full.svg',
+    'known Claude assets that reject server fetches need a same-origin fallback',
+  );
+});
+
 test('mail frame messages require the exact iframe window and bounded payloads', () => {
   const trustedWindow = {};
   assert.deepEqual(readTrustedMailFrameMessage({ source: trustedWindow, data: { type: 'loven7-mail-iframe-swipe', direction: 'left' } }, trustedWindow), { type: 'loven7-mail-iframe-swipe', direction: 'left' });

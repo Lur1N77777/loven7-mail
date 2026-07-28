@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="28" viewBox="0 0 128 28" role="img" aria-label="Claude">
+  <rect width="128" height="28" fill="white" fill-opacity="0"/>
+  <g fill="#d97757" transform="translate(1 2)">
+    <path d="M11.8 0h2.4l.8 8.3 7-4.5 1.2 2.1-7.5 3.8 7.5 3.8-1.2 2.1-7-4.5-.8 8.3h-2.4l-.8-8.3-7 4.5-1.2-2.1 7.5-3.8-7.5-3.8L4 3.8l7 4.5L11.8 0z"/>
+  </g>
+  <text x="31" y="21" fill="#181817" font-family="Georgia, 'Times New Roman', serif" font-size="22" font-weight="600">Claude</text>
+</svg>

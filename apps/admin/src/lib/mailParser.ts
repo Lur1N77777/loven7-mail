@@ -188,14 +188,14 @@ export function buildMailHtmlDocument(html: string, _theme: 'light' | 'dark' = '
     *::-webkit-scrollbar, *::-webkit-scrollbar-track, *::-webkit-scrollbar-thumb, *::-webkit-scrollbar-corner { width: 0 !important; height: 0 !important; display: none !important; background: transparent !important; }
     body { box-sizing: border-box; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable", "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif; background: var(--mail-frame-surface) !important; color: var(--mail-frame-text); font-size: 14px; line-height: 1.625; overflow-wrap: anywhere; word-break: break-word; font-weight: 400; letter-spacing: 0; -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
     #loven7-mail-root { display: flow-root; width: 100%; max-width: 100%; min-height: 0; background: transparent; color: inherit; }
-    *, *::before, *::after { box-sizing: border-box; max-width: 100%; }
-    img, video, canvas, svg { max-width: 100% !important; height: auto !important; }
+    #loven7-mail-root > * { margin-left: auto !important; margin-right: auto !important; }
+    img, video, canvas, svg { max-width: 100% !important; }
+    img:not([height]) { height: auto !important; }
     img[data-blocked-src], img[data-blocked-srcset]:not([src]) { display: inline-block; min-width: 130px; padding: 13px 15px; border: 1px dashed #d8d2c8; border-radius: 10px; background: #faf9f7; color: #8a857d; font-size: 12px; line-height: 1.5; }
-    table { width: auto !important; max-width: 100% !important; border-collapse: collapse; table-layout: auto; }
     pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
     a { color: var(--mail-frame-link); }
     blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--mail-frame-quote-border); color: var(--mail-frame-muted); }
-    @media (max-width: 640px) { body { padding: 8px 0 0; font-size: 14px; } table { display: block; overflow-x: auto; } }
+    @media (max-width: 640px) { body { padding: 8px 0 0; font-size: 14px; } }
   </style></head><body><div id="loven7-mail-root">${safe}</div>${swipeBridge}</body></html>`;
 }
 

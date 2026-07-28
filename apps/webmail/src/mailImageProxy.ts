@@ -1,4 +1,8 @@
 const SAFE_EMBEDDED_IMAGE = /^(?:data:image\/(?:png|jpe?g|gif|webp|bmp|svg\+xml|x-icon);|blob:|cid:)/i;
+const LOCAL_IMAGE_FALLBACKS = new Map([
+  ["/images/claude_logo_full.png", "/mail-assets/claude-logo-full.svg"],
+  ["/images/ant_logo_full_faded.png", "/mail-assets/anthropic-logo-faded.svg"],
+]);
 
 function normalizeOrigin(value: string) {
   try {
@@ -25,6 +29,10 @@ export function proxyMailImageUrl(value: string, explicitOrigin?: string) {
     if ((target.protocol !== "https:" && target.protocol !== "http:") || target.username || target.password) return "";
     target.hash = "";
     const origin = mailImageAssetOrigin(explicitOrigin);
+    if (target.hostname.toLowerCase() === "claude.ai") {
+      const fallbackPath = LOCAL_IMAGE_FALLBACKS.get(target.pathname.toLowerCase());
+      if (fallbackPath) return `${origin}${fallbackPath}`;
+    }
     if (target.origin === origin && target.pathname === "/api/image") return target.toString();
     return `${origin}/api/image?url=${encodeURIComponent(target.toString())}`;
   } catch {
