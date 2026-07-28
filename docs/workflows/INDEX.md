@@ -4,6 +4,7 @@
 
 ## 反思报告
 
+- [2026-07-28：修复沙箱邮件中的本地品牌图片](2026-07/28_reflection_bugfix_sandboxed-mail-assets.md)
 - [2026-07-28：修复 HTML 邮件布局、居中与品牌图片](2026-07/28_reflection_bugfix_mail-html-layout-images.md)
 - [2026-07-27：修复 Admin PWA 新版本无法自动接管](2026-07/27_reflection_bugfix_admin-pwa-update-activation.md)
 - [2026-07-27：修复 Admin 实时语言切换并统一 Webmail 邮件行高](2026-07/27_reflection_bugfix_admin-locale-mail-row-height.md)
@@ -17,7 +18,7 @@
 
 ## 统计
 
-- 报告总数：10
-- Bugfix：8
+- 报告总数：11
+- Bugfix：9
 - Refactor：1
 - Feature：1

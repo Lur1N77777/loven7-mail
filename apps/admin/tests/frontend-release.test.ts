@@ -820,6 +820,7 @@ test('admin PWA keeps generated workers prompt-safe while the network-fresh regi
 
 test('admin preserves fixed-width email tables and replaces blocked Claude logos locally', () => {
   const parser = readFileSync(new URL('../src/lib/mailParser.ts', import.meta.url), 'utf8');
+  const headersSource = readFileSync(new URL('../public/_headers', import.meta.url), 'utf8');
   assert.doesNotMatch(parser, /\*, \*::before, \*::after \{ box-sizing: border-box;/, "global border-box sizing changes fixed email cell geometry");
   assert.doesNotMatch(parser, /\*, \*::before, \*::after \{[^}]*max-width: 100%/, "global max-width must not rewrite email table geometry");
   assert.doesNotMatch(parser, /table \{ width: auto !important;/, "fixed-width email tables must not be expanded to the reader width");
@@ -830,6 +831,11 @@ test('admin preserves fixed-width email tables and replaces blocked Claude logos
     proxyMailImageUrl(blockedBrandAsset, 'https://mail.example.test'),
     'https://mail.example.test/mail-assets/claude-logo-full.svg',
     'known Claude assets that reject server fetches need a same-origin fallback',
+  );
+  assert.match(
+    headersSource,
+    /\/mail-assets\/\*[\s\S]*Cross-Origin-Resource-Policy:\s*cross-origin/,
+    'opaque sandboxed mail frames must be allowed to embed same-origin fallback assets',
   );
 });
 

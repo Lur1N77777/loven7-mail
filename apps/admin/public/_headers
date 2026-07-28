@@ -32,6 +32,12 @@
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 
+/mail-assets/*
+  ! Cross-Origin-Resource-Policy
+  Cross-Origin-Resource-Policy: cross-origin
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=86400
+
 /loven7-mail-email-logo.png
   ! Cross-Origin-Resource-Policy
   Cross-Origin-Resource-Policy: cross-origin
