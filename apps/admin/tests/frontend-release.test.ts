@@ -110,6 +110,20 @@ test('mobile pages clear the floating dock and mail chrome renders calm details'
   assert.match(productCss, /\.frontend-base-controls > \.btn-primary\s*\{[^}]*align-self:\s*flex-end;/s, 'the settings save action should sit compact at the row end instead of stretching full width');
 });
 
+test('desktop mail reader expands through one balanced inset and nested radius scale', () => {
+  const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const finalReaderPass = indexCss.slice(indexCss.indexOf('FINAL V78 desktop mail reader expansion'));
+
+  assert.match(finalReaderPass, /--mail-reader-gutter:\s*clamp\(26px, 2\.2vw, 30px\);/, 'the reader should keep one restrained responsive gutter instead of unrelated edge values');
+  assert.match(finalReaderPass, /--mail-detail-card-inline:\s*42px;/, 'the header should retain its calm alignment while the message canvas expands independently');
+  assert.match(finalReaderPass, /--mail-reader-outer-radius:\s*16px;/, 'the desktop detail surface should keep its established card radius');
+  assert.match(finalReaderPass, /--mail-reader-radius:\s*12px;/, 'the inner reader radius should visibly step down from the outer card radius');
+  assert.match(finalReaderPass, /\.mail-detail-card\s*\{[^}]*padding:\s*20px var\(--mail-detail-card-inline\) var\(--mail-reader-gutter\)\s*!important;[^}]*border-radius:\s*var\(--mail-reader-outer-radius\)\s*!important;/s, 'the outer card should reserve the same bottom clearance used by the reader canvas');
+  assert.match(finalReaderPass, /\.mail-detail-code-strip\s*\{[^}]*margin-bottom:\s*0\s*!important;/s, 'verification actions must not add a second gap above the reader');
+  assert.match(finalReaderPass, /body \.mail-workspace \.mail-detail-body\s*\{[^}]*margin-top:\s*var\(--mail-reader-gutter\)\s*!important;[^}]*margin-inline:\s*calc\(var\(--mail-reader-gutter\) - var\(--mail-detail-card-inline\)\)\s*!important;[^}]*border-radius:\s*var\(--mail-reader-radius\)\s*!important;[^}]*overflow:\s*hidden\s*!important;/s, 'the reader top, left, right and bottom clearances must resolve to one shared gutter');
+  assert.match(finalReaderPass, /body \.mail-workspace \.mail-frame,\s*body \.mail-workspace \.mail-text\s*\{[^}]*border-radius:\s*var\(--mail-reader-radius\)\s*!important;/s, 'HTML and plain-text mail should use identical reader corners');
+});
+
 test('the user filter trigger reads as one row inside its fixed-height control', () => {
   const themeCss = readFileSync(new URL('../src/theme.css', import.meta.url), 'utf8');
   const source = readFileSync(new URL('../src/views/AddressView.tsx', import.meta.url), 'utf8');

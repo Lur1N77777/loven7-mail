@@ -19580,3 +19580,63 @@ html.theme-dark body .mobile-mail-detail .brand-avatar-fallback {
   border-color: color-mix(in srgb, var(--brand-avatar-fallback-bg) 72%, #fff) !important;
   box-shadow: none !important;
 }
+
+/* FINAL V78 desktop mail reader expansion:
+   Enlarge the message canvas without pulling the subject and sender toward the card edge.
+   One responsive gutter controls the canvas top, sides and bottom; the inner radius steps
+   down from the outer card radius so both surfaces read as one nested component. */
+@media (min-width: 1024px) {
+  .mail-workspace {
+    --mail-detail-card-inline: 42px;
+    --mail-reader-gutter: clamp(26px, 2.2vw, 30px);
+    --mail-reader-outer-radius: 16px;
+    --mail-reader-radius: 12px;
+  }
+
+  .mail-detail-card {
+    padding: 20px var(--mail-detail-card-inline) var(--mail-reader-gutter) !important;
+    border-radius: var(--mail-reader-outer-radius) !important;
+  }
+
+  .mail-detail-topbar {
+    margin-bottom: 28px !important;
+  }
+
+  .mail-detail-sender-row {
+    margin-top: 28px !important;
+  }
+
+  .mail-detail-code-strip {
+    margin-bottom: 0 !important;
+  }
+
+  body .mail-workspace .mail-detail-body {
+    margin-top: var(--mail-reader-gutter) !important;
+    margin-inline: calc(var(--mail-reader-gutter) - var(--mail-detail-card-inline)) !important;
+    border-radius: var(--mail-reader-radius) !important;
+    overflow: hidden !important;
+  }
+
+  body .mail-workspace .mail-frame,
+  body .mail-workspace .mail-text {
+    border-radius: var(--mail-reader-radius) !important;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 720px) {
+  .mail-workspace {
+    --mail-reader-gutter: 22px;
+  }
+
+  .mail-detail-card {
+    padding-top: 16px !important;
+  }
+
+  .mail-detail-topbar {
+    margin-bottom: 20px !important;
+  }
+
+  .mail-detail-sender-row {
+    margin-top: 22px !important;
+  }
+}

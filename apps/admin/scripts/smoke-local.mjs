@@ -1755,6 +1755,65 @@ async function main() {
   extraResults.push({ name: 'desktop-inbox-global-refresh-settled', ...globalRefreshSettled });
   assert(globalRefreshSettled.busy === 'false' && !globalRefreshSettled.disabled && !globalRefreshSettled.spinning, `global inbox refresh should stop spinning after mail reload completes: ${JSON.stringify(globalRefreshSettled)}`);
 
+  const desktopInboxReader = await collect(desktop, 'desktop-inbox-reader');
+  extraResults.push(desktopInboxReader);
+  const desktopInboxReaderGeometry = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const card = document.querySelector('.mail-detail-card');
+    const header = document.querySelector('.mail-detail-header');
+    const body = document.querySelector('.mail-detail-body');
+    const frame = document.querySelector('.mail-frame, .mail-text');
+    const rect = (element) => {
+      const box = element?.getBoundingClientRect();
+      return box ? { top: box.top, right: box.right, bottom: box.bottom, left: box.left, width: box.width, height: box.height } : null;
+    };
+    const cardRect = rect(card);
+    const headerRect = rect(header);
+    const bodyRect = rect(body);
+    const bodySiblings = body ? [...body.parentElement.children] : [];
+    const bodyIndex = body ? bodySiblings.indexOf(body) : -1;
+    const previousVisible = bodyIndex > 0
+      ? bodySiblings.slice(0, bodyIndex).reverse().find((element) => {
+          const box = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return style.display !== 'none' && style.visibility !== 'hidden' && box.height > 0;
+        })
+      : null;
+    const previousVisibleRect = rect(previousVisible || header);
+    const bodyStyle = body ? getComputedStyle(body) : null;
+    const cardStyle = card ? getComputedStyle(card) : null;
+    const frameStyle = frame ? getComputedStyle(frame) : null;
+    return {
+      card: cardRect,
+      header: headerRect,
+      body: bodyRect,
+      precedingSurface: previousVisibleRect,
+      gaps: cardRect && previousVisibleRect && bodyRect ? {
+        top: bodyRect.top - previousVisibleRect.bottom,
+        right: cardRect.right - bodyRect.right,
+        bottom: cardRect.bottom - bodyRect.bottom,
+        left: bodyRect.left - cardRect.left,
+      } : null,
+      outerRadius: cardStyle?.borderRadius || null,
+      bodyRadius: bodyStyle?.borderRadius || null,
+      frameRadius: frameStyle?.borderRadius || null,
+      xOverflow: document.documentElement.scrollWidth > innerWidth + 1 || document.body.scrollWidth > innerWidth + 1,
+    };
+  })())`));
+  extraResults.push({ name: 'desktop-inbox-reader-geometry', ...desktopInboxReaderGeometry });
+  assert(!desktopInboxReaderGeometry.xOverflow, 'expanded desktop mail reader must not create horizontal overflow');
+  assert(desktopInboxReaderGeometry.gaps, `desktop mail reader geometry should be measurable: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  const readerGaps = Object.values(desktopInboxReaderGeometry.gaps);
+  assert(Math.max(...readerGaps) - Math.min(...readerGaps) <= 1.5, `desktop mail reader must keep equal top/right/bottom/left clearance: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  assert(desktopInboxReaderGeometry.outerRadius === '16px' && desktopInboxReaderGeometry.bodyRadius === '12px' && desktopInboxReaderGeometry.frameRadius === '12px', `nested mail reader radii should step from 16px to 12px: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+
+  await clickSelector(desktop, '.sidebar-theme-control button[aria-label="深色模式"]');
+  await waitUntil(desktop, `document.documentElement.classList.contains('theme-dark')`);
+  const desktopInboxReaderDark = await collect(desktop, 'desktop-inbox-reader-dark');
+  extraResults.push(desktopInboxReaderDark);
+  assert(!desktopInboxReaderDark.xOverflow, 'expanded desktop dark mail reader must not create horizontal overflow');
+  await clickSelector(desktop, '.sidebar-theme-control button[aria-label="浅色模式"]');
+  await waitUntil(desktop, `!document.documentElement.classList.contains('theme-dark')`);
+
   await clickText(desktop, '用户管理');
   const desktopUsers = await collect(desktop, 'desktop-users');
   extraResults.push(desktopUsers);
