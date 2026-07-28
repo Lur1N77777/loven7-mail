@@ -19581,7 +19581,7 @@ html.theme-dark body .mobile-mail-detail .brand-avatar-fallback {
   box-shadow: none !important;
 }
 
-/* FINAL V78 desktop mail reader expansion:
+/* FINAL V79 desktop mail reader expansion:
    Enlarge the message canvas without pulling the subject and sender toward the card edge.
    One responsive gutter controls the canvas top, sides and bottom; the inner radius steps
    down from the outer card radius so both surfaces read as one nested component. */
@@ -19599,11 +19599,11 @@ html.theme-dark body .mobile-mail-detail .brand-avatar-fallback {
   }
 
   .mail-detail-topbar {
-    margin-bottom: 28px !important;
+    margin-bottom: 24px !important;
   }
 
   .mail-detail-sender-row {
-    margin-top: 28px !important;
+    margin-top: 24px !important;
   }
 
   .mail-detail-code-strip {
