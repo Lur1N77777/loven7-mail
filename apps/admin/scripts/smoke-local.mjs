@@ -1758,53 +1758,42 @@ async function main() {
   const desktopInboxReader = await collect(desktop, 'desktop-inbox-reader');
   extraResults.push(desktopInboxReader);
   const desktopInboxReaderGeometry = JSON.parse(await evaluate(desktop, `JSON.stringify((() => {
+    const workspace = document.querySelector('.mail-workspace');
+    const list = document.querySelector('.mail-list-panel');
     const card = document.querySelector('.mail-detail-card');
-    const header = document.querySelector('.mail-detail-header');
-    const body = document.querySelector('.mail-detail-body');
-    const frame = document.querySelector('.mail-frame, .mail-text');
     const rect = (element) => {
       const box = element?.getBoundingClientRect();
       return box ? { top: box.top, right: box.right, bottom: box.bottom, left: box.left, width: box.width, height: box.height } : null;
     };
+    const workspaceRect = rect(workspace);
+    const listRect = rect(list);
     const cardRect = rect(card);
-    const headerRect = rect(header);
-    const bodyRect = rect(body);
-    const bodySiblings = body ? [...body.parentElement.children] : [];
-    const bodyIndex = body ? bodySiblings.indexOf(body) : -1;
-    const previousVisible = bodyIndex > 0
-      ? bodySiblings.slice(0, bodyIndex).reverse().find((element) => {
-          const box = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          return style.display !== 'none' && style.visibility !== 'hidden' && box.height > 0;
-        })
-      : null;
-    const previousVisibleRect = rect(previousVisible || header);
-    const bodyStyle = body ? getComputedStyle(body) : null;
     const cardStyle = card ? getComputedStyle(card) : null;
-    const frameStyle = frame ? getComputedStyle(frame) : null;
     return {
+      workspace: workspaceRect,
+      list: listRect,
       card: cardRect,
-      header: headerRect,
-      body: bodyRect,
-      precedingSurface: previousVisibleRect,
-      gaps: cardRect && previousVisibleRect && bodyRect ? {
-        top: bodyRect.top - previousVisibleRect.bottom,
-        right: cardRect.right - bodyRect.right,
-        bottom: cardRect.bottom - bodyRect.bottom,
-        left: bodyRect.left - cardRect.left,
+      gaps: workspaceRect && listRect && cardRect ? {
+        top: cardRect.top - workspaceRect.top,
+        right: workspaceRect.right - cardRect.right,
+        bottom: workspaceRect.bottom - cardRect.bottom,
+        left: cardRect.left - listRect.right,
       } : null,
       outerRadius: cardStyle?.borderRadius || null,
-      bodyRadius: bodyStyle?.borderRadius || null,
-      frameRadius: frameStyle?.borderRadius || null,
+      workspaceAreaShare: workspaceRect && cardRect ? (cardRect.width * cardRect.height) / (workspaceRect.width * workspaceRect.height) : 0,
+      viewportAreaShare: cardRect ? (cardRect.width * cardRect.height) / (innerWidth * innerHeight) : 0,
       xOverflow: document.documentElement.scrollWidth > innerWidth + 1 || document.body.scrollWidth > innerWidth + 1,
     };
   })())`));
   extraResults.push({ name: 'desktop-inbox-reader-geometry', ...desktopInboxReaderGeometry });
-  assert(!desktopInboxReaderGeometry.xOverflow, 'expanded desktop mail reader must not create horizontal overflow');
-  assert(desktopInboxReaderGeometry.gaps, `desktop mail reader geometry should be measurable: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  assert(!desktopInboxReaderGeometry.xOverflow, 'expanded desktop mail detail surface must not create horizontal overflow');
+  assert(desktopInboxReaderGeometry.gaps, `desktop mail detail surface geometry should be measurable: ${JSON.stringify(desktopInboxReaderGeometry)}`);
   const readerGaps = Object.values(desktopInboxReaderGeometry.gaps);
-  assert(Math.max(...readerGaps) - Math.min(...readerGaps) <= 1.5, `desktop mail reader must keep equal top/right/bottom/left clearance: ${JSON.stringify(desktopInboxReaderGeometry)}`);
-  assert(desktopInboxReaderGeometry.outerRadius === '16px' && desktopInboxReaderGeometry.bodyRadius === '12px' && desktopInboxReaderGeometry.frameRadius === '12px', `nested mail reader radii should step from 16px to 12px: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  assert(Math.max(...readerGaps) - Math.min(...readerGaps) <= 1.5, `desktop mail detail surface must keep equal top/right/bottom/left clearance: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  assert(readerGaps.every((gap) => Math.abs(gap - 8) <= 1), `desktop mail detail surface should keep an 8px outer inset: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  assert(desktopInboxReaderGeometry.list.width <= 350.5, `desktop mail list should yield more width to the detail surface: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  assert(desktopInboxReaderGeometry.workspaceAreaShare >= 0.64 && desktopInboxReaderGeometry.viewportAreaShare >= 0.51, `the outer detail card should occupy a visibly larger share of the page: ${JSON.stringify(desktopInboxReaderGeometry)}`);
+  assert(desktopInboxReaderGeometry.outerRadius === '14px', `the expanded outer detail card should keep its established radius: ${JSON.stringify(desktopInboxReaderGeometry)}`);
 
   await clickSelector(desktop, '.sidebar-theme-control button[aria-label="深色模式"]');
   await waitUntil(desktop, `document.documentElement.classList.contains('theme-dark')`);

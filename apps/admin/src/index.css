@@ -19581,62 +19581,24 @@ html.theme-dark body .mobile-mail-detail .brand-avatar-fallback {
   box-shadow: none !important;
 }
 
-/* FINAL V79 desktop mail reader expansion:
-   Enlarge the message canvas without pulling the subject and sender toward the card edge.
-   One responsive gutter controls the canvas top, sides and bottom; the inner radius steps
-   down from the outer card radius so both surfaces read as one nested component. */
+/* FINAL V80 desktop mail detail surface expansion:
+   Increase the whole detail card's share of the mail workspace. The surrounding inset and
+   list-to-detail gap use one value, while the message canvas keeps its established internals. */
 @media (min-width: 1024px) {
   .mail-workspace {
-    --mail-detail-card-inline: 42px;
-    --mail-reader-gutter: clamp(26px, 2.2vw, 30px);
-    --mail-reader-outer-radius: 16px;
-    --mail-reader-radius: 12px;
+    --mail-detail-outer-inset: 8px;
+    --mail-list-outer-width: clamp(336px, 26vw, 350px);
+    gap: var(--mail-detail-outer-inset) !important;
+    padding: var(--mail-detail-outer-inset) !important;
   }
 
-  .mail-detail-card {
-    padding: 20px var(--mail-detail-card-inline) var(--mail-reader-gutter) !important;
-    border-radius: var(--mail-reader-outer-radius) !important;
+  .mail-list-panel {
+    width: var(--mail-list-outer-width) !important;
+    max-width: var(--mail-list-outer-width) !important;
+    flex-basis: var(--mail-list-outer-width) !important;
   }
 
-  .mail-detail-topbar {
-    margin-bottom: 24px !important;
-  }
-
-  .mail-detail-sender-row {
-    margin-top: 24px !important;
-  }
-
-  .mail-detail-code-strip {
-    margin-bottom: 0 !important;
-  }
-
-  body .mail-workspace .mail-detail-body {
-    margin-top: var(--mail-reader-gutter) !important;
-    margin-inline: calc(var(--mail-reader-gutter) - var(--mail-detail-card-inline)) !important;
-    border-radius: var(--mail-reader-radius) !important;
-    overflow: hidden !important;
-  }
-
-  body .mail-workspace .mail-frame,
-  body .mail-workspace .mail-text {
-    border-radius: var(--mail-reader-radius) !important;
-  }
-}
-
-@media (min-width: 1024px) and (max-height: 720px) {
-  .mail-workspace {
-    --mail-reader-gutter: 22px;
-  }
-
-  .mail-detail-card {
-    padding-top: 16px !important;
-  }
-
-  .mail-detail-topbar {
-    margin-bottom: 20px !important;
-  }
-
-  .mail-detail-sender-row {
-    margin-top: 22px !important;
+  .mail-detail-scroll {
+    padding: 0 !important;
   }
 }
