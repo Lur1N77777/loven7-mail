@@ -2,6 +2,13 @@
 
 本项目的显著变更记录在此。版本号遵循 [Semantic Versioning](https://semver.org/)；日期使用 `YYYY-MM-DD`。
 
+## [Unreleased]
+
+### Changed
+
+- README 首屏改为“下载启动器 → Cloudflare 授权 → Email Routing → 真实收件验收”的新手路径，并补充部署前准备、能力边界和收件配置速查。
+- Release workflow 现在会为创建或更新的 Release 同步中文正文，明确下载入口、版本变更和安装后的 Email Routing 必做项。
+
 ## [0.4.0] - 2026-08-13
 
 ### Added

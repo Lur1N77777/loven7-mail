@@ -29,4 +29,7 @@ test('release workflow publishes the launcher, bootstrap and checksums', () => {
   assert.match(workflow, /loven7-mail-bootstrap\.ps1/);
   assert.match(workflow, /Install-Loven7-Mail\.cmd/);
   assert.match(workflow, /SHA256SUMS\.txt/);
+  assert.match(workflow, /gh release edit/);
+  assert.match(workflow, /--notes-file release-assets\/RELEASE_NOTES\.md/);
+  assert.match(workflow, /部署完成后还要做什么/);
 });

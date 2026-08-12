@@ -67,8 +67,33 @@ jobs:
             found { print }
           ' CHANGELOG.md > release-assets/RELEASE_NOTES.md
           if [ ! -s release-assets/RELEASE_NOTES.md ]; then
-            printf 'Source release for %s. See CHANGELOG.md for details.\n' "$tag" > release-assets/RELEASE_NOTES.md
+            printf '本版本的源码和安装器资产已发布。\n' > release-assets/RELEASE_NOTES.md
           fi
+
+          # Keep the public Release page useful to beginners even when a tag is
+          # re-published: the page itself is the first place most people look.
+          sed -i \
+            -e 's/^### Added$/### 新增/' \
+            -e 's/^### Changed$/### 变更/' \
+            -e 's/^### Fixed$/### 修复/' \
+            -e 's/^### Security$/### 安全/' \
+            -e 's/^### Compatibility$/### 兼容性/' \
+            release-assets/RELEASE_NOTES.md
+          notes="release-assets/RELEASE_NOTES.md"
+          {
+            printf '# Loven7 Mail Cloudflare Suite %s\n\n' "$tag"
+            printf '> 中文发布说明：本页包含本版本变更、Windows 一键安装器和部署完成后的必要操作。\n\n'
+            printf '## 下载与安装\n\n'
+            printf -- '- **Windows 新手**：下载并双击 [Install-Loven7-Mail.cmd](./Install-Loven7-Mail.cmd)，无需克隆仓库。\n'
+            printf -- '- **源码部署**：下载 [源码包](./%s) 后运行 `npm run setup`。\n'
+            printf -- '- **完整校验**：下载 [SHA256SUMS.txt](./SHA256SUMS.txt) 校验安装器和源码包。\n\n' "$(basename "$asset")"
+            printf '## 更新内容\n\n'
+            cat "$notes"
+            printf '\n## 部署完成后还要做什么\n\n'
+            printf '安装器完成的是 Cloudflare Worker、D1、Pages 和 KV 基础设施。要真正收到公网邮件，请在每个域名的 **Email → Email Routing → Catch-all** 中选择 **Send to a Worker**，然后发送一封真实测试邮件。详细步骤见 [Email Routing 收件配置](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/blob/main/docs/EMAIL_ROUTING.md)。\n\n'
+            printf '> 发件能力需要另外配置 Resend、SMTP 或 Cloudflare Send Email；本版本不会自动创建第三方发件账号。\n'
+          } > release-assets/RELEASE_NOTES.final.md
+          mv release-assets/RELEASE_NOTES.final.md release-assets/RELEASE_NOTES.md
 
       - name: Create or update GitHub Release
         shell: bash
@@ -80,9 +105,10 @@ jobs:
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" release-assets/SHA256SUMS.txt release-assets/loven7-mail-bootstrap.ps1 release-assets/Install-Loven7-Mail.cmd --clobber
+            gh release edit "$tag" --title "Loven7 Mail Cloudflare Suite ${tag#v}" --notes-file release-assets/RELEASE_NOTES.md
           else
             gh release create "$tag" "$asset" release-assets/SHA256SUMS.txt release-assets/loven7-mail-bootstrap.ps1 release-assets/Install-Loven7-Mail.cmd \
               --verify-tag \
-              --title "$tag" \
+              --title "Loven7 Mail Cloudflare Suite ${tag#v}" \
               --notes-file release-assets/RELEASE_NOTES.md
           fi

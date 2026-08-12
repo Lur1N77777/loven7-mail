@@ -14,20 +14,51 @@
   <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml/badge.svg" /></a>
 </p>
 
-[界面预览](#界面预览) · [一条命令部署](#一条命令部署) · [功能](#功能) · [手动部署](#手动部署已有-worker) · [配置边界](#公开版与自用配置边界) · [文档](#文档)
+[快速开始](#快速开始) · [界面预览](#界面预览) · [功能](#功能) · [收件配置](#收件配置) · [文档](#文档)
 
 </div>
 
 > 这是可复用的公开版前端仓库，不包含任何部署者的 Worker 地址、Cloudflare 资源 ID、域名、账号、密码、Token、密钥或生产运维记录。所有私有值都在部署平台或浏览器中注入。
 
-## v0.3.0 · 大前端更新
+## 快速开始
 
-管理后台完成一次完整的视觉与工作区重构，采用 **Paper, Ink & Sealing Wax** 设计语言：暖灰纸面、墨黑主操作与陶土红强调色贯穿仪表盘、统计、地址、用户、收发件、系统设置和维护页面。
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <strong>1. 下载启动器</strong><br />
+      Windows 用户下载并双击 <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd"><code>Install-Loven7-Mail.cmd</code></a>。
+    </td>
+    <td width="33%" valign="top">
+      <strong>2. 授权 Cloudflare</strong><br />
+      在浏览器完成 Wrangler OAuth，选择 Cloudflare 账号并按提示输入域名和管理员信息。
+    </td>
+    <td width="33%" valign="top">
+      <strong>3. 接通真实收件</strong><br />
+      为每个域名开启 Email Routing，将 Catch-all 指向安装器创建的 Worker。
+    </td>
+  </tr>
+</table>
 
-- 桌面端重新组织信息层级、指标卡片、管理表格和工具面板。
-- 平板与移动端补齐专用布局、底部导航、快捷操作菜单和无横向溢出体验。
-- 深色模式、表单控件、分页、弹层和代码面板使用统一的圆角与表面规范。
-- 保持现有 Worker API、Pages 运行时变量和 KV 数据结构不变，可从旧版本平滑升级。
+> **最短路径：** 只想部署并使用项目时，直接下载 [Windows 单文件安装器](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)。不需要 Git，不需要克隆仓库，也不需要先安装 Node.js。
+
+### 部署前准备
+
+| 需要准备 | 说明 |
+| --- | --- |
+| Cloudflare 账号 | 需要能管理目标域名，并允许 Wrangler OAuth 创建资源 |
+| 已托管域名 | 域名状态为 Active，并使用 Cloudflare 权威 DNS；可一次填写多个域名 |
+| 管理员信息 | 安装时输入首个管理员邮箱和密码，密码不会显示或写入仓库 |
+
+> **重要边界：** 安装器可以部署 Worker、D1、Pages 和 KV，但不会替你修改 DNS、MX 或 Catch-all。完成部署后，必须按 [Email Routing 收件配置](docs/EMAIL_ROUTING.md) 完成最后一步，并发送真实测试邮件。
+
+## v0.4.0 · 一键部署与多域名支持
+
+这一版把“从源码到可用邮箱”的路径收拢到一个安装器中，同时保留已有 Worker 接入能力。管理后台继续采用 **Paper, Ink & Sealing Wax** 设计语言：暖灰纸面、墨黑主操作与陶土红强调色贯穿仪表盘、统计、地址、用户、收发件、系统设置和维护页面。
+
+- Windows 用户可以下载一个 `.cmd` 文件完成安装器引导，失败后再次打开会从断点继续。
+- 新 Worker 模式支持一次配置多个邮箱域名，第一个域名作为默认域名。
+- 安装器会校验远端资源、保护 Secret、复用健康后端，并对 Admin、Webmail 和 `/api/runtime` 做有限重试验收。
+- 默认能力覆盖收件、Admin、Webmail、分享和已读/星标同步；发件仍需要额外配置 Resend、SMTP 或 Cloudflare Send Email。
 
 ## 界面预览
 
@@ -94,7 +125,7 @@
 
 ### Windows：下载一个文件启动
 
-不想安装 Git、克隆仓库或打开终端时，直接在 GitHub Release 下载并双击 [`Install-Loven7-Mail.cmd`](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)。它会自动下载经过 SHA-256 校验的正式安装包，准备 Node.js 22，打开 Wrangler 的 Cloudflare 官方 OAuth 授权，并启动同一套新手安装器。安装文件会保存在当前 Windows 用户的 `%LOCALAPPDATA%\Loven7Mail\installer`，失败后再次双击会从断点继续。
+直接在 [GitHub Releases](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest) 下载并双击 [`Install-Loven7-Mail.cmd`](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)。启动器会自动下载经过 SHA-256 校验的正式安装包，准备 Node.js 22，打开 Wrangler 的 Cloudflare 官方 OAuth 授权，并启动同一套新手安装器。安装文件会保存在当前 Windows 用户的 `%LOCALAPPDATA%\Loven7Mail\installer`，失败后再次双击会从断点继续。
 
 首次从零部署官方 Worker 时，启动器会在缺少 Git 时自动下载官方 MinGit 便携版到用户目录；已有兼容 Worker 的接入不需要 Git。Git 只用于临时下载锁定的上游 Worker，安装结束后上游临时目录会自动删除。
 
@@ -104,7 +135,7 @@
 npm run setup
 ```
 
-安装器会先询问是否已有兼容 Worker。选择“是”时，它会先只读验证 Worker、站点密码和管理员口令，再接入现有 Worker；选择“否”时，可以输入一个或多个邮箱域名（逗号分隔），安装器会锁定并克隆官方 `v1.10.0`、创建 D1、初始化 schema、写入 Worker Secret，再自动创建或复用两个 Pages 项目、分享 KV 和邮件状态 KV，完成线上 Worker 域名配置、Admin 代理和 `/api/runtime` 验收。
+安装器会先询问是否已有兼容 Worker。选择“是”时，它会只读验证 Worker、站点密码和管理员口令，再接入现有 Worker；选择“否”时，可以输入一个或多个邮箱域名（逗号分隔），安装器会锁定并克隆官方 `v1.10.0`、创建 D1、初始化 schema、写入 Worker Secret，再自动创建或复用两个 Pages 项目、分享 KV 和邮件状态 KV，完成 Admin 代理和 `/api/runtime` 验收。
 
 密码不会显示，也不会保存到仓库或安装状态文件。失败后再次运行相同命令会复用已创建资源，并保留已有分享密钥。
 
@@ -117,6 +148,19 @@ npm run setup:plan
 上述命令只显示安装计划，不连接 Cloudflare。完整说明见 [新手安装器](docs/INSTALLER.md)；安装后必须按 [Email Routing 收件配置](docs/EMAIL_ROUTING.md) 为每个域名接通真实邮件。
 
 首次完整部署优先使用本地交互式终端运行 `npm run setup`，因为密码需要在不回显的 TTY 中安全输入。无法使用交互式终端时，[AI Agent Pages-only 部署指令](docs/AGENT_DEPLOY_PROMPT.md) 和下面的人工步骤只适用于已有兼容 Worker 的前端接入，不会替你创建 Worker、D1 或 Email Routing。
+
+## 收件配置
+
+基础设施部署完成后，对每个邮箱域名执行一次：
+
+1. 打开 Cloudflare **Email → Email Routing**，确认建议的 MX/TXT 记录已添加。
+2. 进入 **Routing rules → Catch-all**，选择 **Send to a Worker**。
+3. 选择安装器输出的 Worker，例如 `<项目名前缀>-worker`，保存规则。
+4. 在 Admin 创建一个该域名的邮箱，用 Gmail、Outlook 或 QQ 邮箱发送真实测试邮件。
+
+> 页面能打开或 `/api/runtime` 返回 `ok: true`，只代表应用基础设施正常；收到真实外部邮件，才代表收件链路完整。
+
+详见 [Email Routing 收件配置](docs/EMAIL_ROUTING.md)。
 
 ## 手动部署（已有 Worker）
 
