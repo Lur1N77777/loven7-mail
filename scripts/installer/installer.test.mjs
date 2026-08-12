@@ -105,6 +105,12 @@ test.afterEach(() => {
 
 function successfulFetch(url) {
   const value = String(url);
+  if (value.endsWith('/admin/worker/configs')) {
+    return Promise.resolve(new Response(JSON.stringify({
+      DOMAINS: ['mail.example.net'],
+      DEFAULT_DOMAINS: ['mail.example.net'],
+    }), { status: 200 }));
+  }
   if (value.endsWith('/admin/users')) {
     return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }));
   }
@@ -356,6 +362,63 @@ test('runs a new-worker install with locked upstream and cleans scratch files', 
   }
 });
 
+test('deploys every configured mail domain and persists the ordered list', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  globalThis.fetch = (url) => String(url).endsWith('/admin/worker/configs')
+    ? Promise.resolve(new Response(JSON.stringify({
+      DOMAINS: ['primary.example.net', 'second.example.net'],
+      DEFAULT_DOMAINS: ['primary.example.net', 'second.example.net'],
+    }), { status: 200 }))
+    : successfulFetch(url);
+  try {
+    const result = await new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+      prefix: 'test-mail',
+      domains: ['primary.example.net', 'second.example.net'],
+      adminPassword: 'admin-private',
+      adminEmail: 'owner@example.net',
+      adminUserPassword: 'owner-private',
+      sitePassword: '',
+    });
+    assert.equal(result.state.domain, 'primary.example.net');
+    assert.deepEqual(result.state.domains, ['primary.example.net', 'second.example.net']);
+    assert.match(cloudflare.upstreamConfig, /DOMAINS = \["primary\.example\.net", "second\.example\.net"\]/);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('stops before frontend deployment when the live Worker domain config differs from the plan', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  globalThis.fetch = (url) => String(url).endsWith('/admin/worker/configs')
+    ? Promise.resolve(new Response(JSON.stringify({
+      DOMAINS: ['wrong.example.net'],
+      DEFAULT_DOMAINS: ['wrong.example.net'],
+    }), { status: 200 }))
+    : successfulFetch(url);
+  try {
+    await assert.rejects(
+      () => new Installer({
+        rootDir,
+        cloudflare,
+        ui: new FakeUi(),
+        probeOptions: { attempts: 2, delayMs: 0, timeoutMs: 500 },
+      }).runNewWorker({
+        prefix: 'test-mail',
+        domains: ['mail.example.net'],
+        adminPassword: 'admin-private',
+        adminEmail: 'owner@example.net',
+        adminUserPassword: 'owner-private',
+      }),
+      /Worker 线上域名与安装计划不一致/,
+    );
+    assert.equal(cloudflare.deploys.length, 0);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('retries the Worker health check after secrets are published', async () => {
   const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
   const cloudflare = new FakeCloudflare();
@@ -505,6 +568,42 @@ test('requires confirmation before changing the domain of a resumable Worker ins
   }
 });
 
+test('requires confirmation before adding, removing or reordering resumable Worker domains', async () => {
+  for (const domains of [
+    ['mail.example.net', 'second.example.net', 'third.example.net'],
+    ['mail.example.net'],
+    ['second.example.net', 'mail.example.net'],
+  ]) {
+    const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+    const cloudflare = new FakeCloudflare();
+    writeState(rootDir, {
+      accountId: 'account-test',
+      prefix: 'test-mail',
+      domain: 'mail.example.net',
+      domains: ['mail.example.net', 'second.example.net'],
+      workerProject: 'test-mail-worker',
+      workerDeploymentConfirmed: true,
+      upstreamCommit: '116ddc732431afd6f4154a74669804473b373baa',
+      phase: 'complete',
+    });
+    try {
+      await assert.rejects(
+        () => new Installer({ rootDir, cloudflare, ui: new FakeUi({ confirm: false }) }).runNewWorker({
+          prefix: 'test-mail',
+          domains,
+          adminPassword: 'admin-private',
+          adminEmail: 'owner@example.net',
+          adminUserPassword: 'owner-private',
+        }),
+        /未确认修改现有 Worker 的邮箱域名列表/,
+      );
+      assert.equal(cloudflare.upstreamDeploys, 0);
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  }
+});
+
 test('reuses a verified Worker after a frontend interruption without overwriting optional bindings', async () => {
   const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
   const cloudflare = new FakeCloudflare();
@@ -540,6 +639,42 @@ test('reuses a verified Worker after a frontend interruption without overwriting
     assert.equal(cloudflare.upstreamDeploys, 0);
     assert.equal(cloudflare.schemaExecutions.length, 0);
     assert.equal(cloudflare.deploys.length, 2);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('migrates an old single-domain checkpoint and reuses its verified Worker', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  cloudflare.hasExistingWorker = true;
+  cloudflare.databases.push({ name: 'test-mail-db', uuid: 'test-mail-db-id' });
+  cloudflare.existingWorkerSecrets.add('JWT_SECRET');
+  cloudflare.existingWorkerSecrets.add('ADMIN_PASSWORDS');
+  globalThis.fetch = successfulFetch;
+  writeState(rootDir, {
+    accountId: 'account-test',
+    prefix: 'test-mail',
+    domain: 'mail.example.net',
+    workerProject: 'test-mail-worker',
+    workerDeploymentConfirmed: true,
+    databaseName: 'test-mail-db',
+    databaseId: 'test-mail-db-id',
+    upstreamCommit: '116ddc732431afd6f4154a74669804473b373baa',
+    managedWorkerOrigin: 'https://mail-worker.example.workers.dev',
+    phase: 'worker-ready',
+  });
+  try {
+    const result = await new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+      prefix: 'test-mail',
+      domains: ['mail.example.net'],
+      adminPassword: 'admin-private',
+      adminEmail: 'owner@example.net',
+      adminUserPassword: 'owner-private',
+      sitePassword: '',
+    });
+    assert.deepEqual(result.state.domains, ['mail.example.net']);
+    assert.equal(cloudflare.upstreamDeploys, 0);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

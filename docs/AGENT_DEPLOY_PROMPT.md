@@ -1,6 +1,8 @@
-# AI Agent 安全部署指令
+# AI Agent Pages-only 安全部署指令
 
-本页是一份可直接复制给 Codex、Claude Code、OpenCode 或其他编程 Agent 的部署规约。它刻意把目标、禁止项、执行顺序、停止条件和验收结果写死，让能力较弱的 Agent 也不容易误改后端、泄露 Secret 或把两个 Pages 项目配反。
+本页仅适用于已经有兼容 Worker、D1 和可用 Email Routing，只部署 Admin 与 Webmail 两个 Pages 前端的场景。全新 Cloudflare 账号或没有 Worker 时，请在交互式终端运行 `npm run setup`，再完成 [Email Routing 收件配置](EMAIL_ROUTING.md)；本提示词明确禁止创建或修改 Worker，因此不是首次完整部署的替代入口。
+
+下面的部署规约可直接复制给 Codex、Claude Code、OpenCode 或其他编程 Agent。它刻意把目标、禁止项、执行顺序、停止条件和验收结果写死，避免 Agent 误改后端、泄露 Secret 或把两个 Pages 项目配反。
 
 ## 使用方法
 

@@ -59,6 +59,21 @@ export function validateMailDomain(value) {
   return domain;
 }
 
+export function validateMailDomains(value) {
+  const items = (Array.isArray(value) ? value : [value])
+    .flatMap((item) => String(item ?? '').split(/[,，\r\n]+/))
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!items.length) throw new Error('至少需要填写一个已经托管到 Cloudflare 的邮箱域名。');
+
+  const seen = new Set();
+  return items.map(validateMailDomain).filter((domain) => {
+    if (seen.has(domain)) return false;
+    seen.add(domain);
+    return true;
+  });
+}
+
 export function validateAdminEmail(value) {
   const email = String(value || '').trim().toLowerCase();
   const separator = email.lastIndexOf('@');
@@ -120,13 +135,15 @@ export function createInstallPlan({ prefix = 'loven7-mail', workerUrl = 'https:/
   };
 }
 
-export function createUpstreamInstallPlan({ prefix = 'loven7-mail', domain = 'example.com' } = {}) {
+export function createUpstreamInstallPlan({ prefix = 'loven7-mail', domain = 'example.com', domains } = {}) {
   const names = createResourceNames(prefix);
   const workerName = `${names.prefix}-worker`;
   const databaseName = `${names.prefix}-db`;
+  const mailDomains = validateMailDomains(domains ?? domain);
   return {
     mode: 'new-worker',
-    domain: validateMailDomain(domain),
+    domain: mailDomains[0],
+    domains: mailDomains,
     resources: { ...names, workerName, databaseName },
     upstream: {
       repository: UPSTREAM_LOCK.repositoryUrl,
@@ -144,7 +161,9 @@ export function createUpstreamInstallPlan({ prefix = 'loven7-mail', domain = 'ex
       '检查三个运行单元并等待 Email Routing 确认',
     ],
     manual: [
-      `在 Cloudflare Email Routing 中为 ${domain} 配置 DNS 记录和 Catch-all Worker 路由`,
+      '确认每个邮箱域名都在即将登录的 Cloudflare 账号中为 Active，并允许配置邮件 MX 和 Catch-all',
+      '已有企业邮箱或其他收件服务的域名必须先规划迁移，避免直接替换 MX 导致原邮箱中断',
+      `在 Cloudflare Email Routing 中为每个邮箱域名配置 DNS 记录，并将 Catch-all 指向 ${workerName}`,
       '使用安装时创建的首个管理员账号登录 Admin',
       '从外部邮箱发送测试邮件并创建分享链接',
       '如需发件，另行配置 Resend、SMTP 或 Cloudflare Send Email',
@@ -152,7 +171,9 @@ export function createUpstreamInstallPlan({ prefix = 'loven7-mail', domain = 'ex
   };
 }
 
-export function renderUpstreamWorkerConfig({ workerName, domain, databaseName, databaseId }) {
+export function renderUpstreamWorkerConfig({ workerName, domain, domains, databaseName, databaseId }) {
+  const mailDomains = validateMailDomains(domains ?? domain);
+  const domainList = mailDomains.map((item) => JSON.stringify(item)).join(', ');
   return [
     `name = ${JSON.stringify(workerName)}`,
     'main = "src/worker.ts"',
@@ -163,12 +184,12 @@ export function renderUpstreamWorkerConfig({ workerName, domain, databaseName, d
     '',
     '[vars]',
     'PREFIX = "tmp"',
-    `DEFAULT_DOMAINS = [${JSON.stringify(domain)}]`,
-    `DOMAINS = [${JSON.stringify(domain)}]`,
+    `DEFAULT_DOMAINS = [${domainList}]`,
+    `DOMAINS = [${domainList}]`,
     'ADMIN_USER_ROLE = "admin"',
     'ENABLE_USER_CREATE_EMAIL = true',
     'ENABLE_USER_DELETE_EMAIL = true',
-    'USER_ROLES = [{ domains = [' + JSON.stringify(domain) + '], role = "admin", prefix = "" }]',
+    `USER_ROLES = [{ domains = [${domainList}], role = "admin", prefix = "" }]`,
     '',
     '[[d1_databases]]',
     'binding = "DB"',
@@ -194,7 +215,7 @@ export function renderPagesConfig({ name, app, adminOrigin, shareKvId, mailState
 
 export function redactInstallState(state) {
   const allowed = [
-    'version', 'accountId', 'prefix', 'installMode', 'domain', 'adminProject', 'webmailProject',
+    'version', 'accountId', 'prefix', 'installMode', 'domain', 'domains', 'adminProject', 'webmailProject',
     'workerProject', 'workerDeploymentConfirmed', 'databaseName', 'databaseId', 'upstreamCommit',
     'shareKvId', 'mailStateKvId', 'adminOrigin', 'webmailOrigin', 'phase', 'updatedAt',
   ];

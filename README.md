@@ -80,7 +80,7 @@
 | Admin | `apps/admin` | 地址、用户、收发件、分享、系统设置与维护工具 |
 | Webmail | `apps/webmail` | 用户登录、邮箱阅读、单/多邮箱分享与 Pages Functions |
 
-本仓库提供前端和 Pages Functions，并通过安装器支持接入兼容的 Cloudflare Temp Mail / `cloudflare_temp_email` Worker，或从锁定的官方 `v1.10.0` 开始创建 Worker、D1 与首个管理员账号。邮箱 DNS 和 Email Routing 仍由部署者最终确认。
+本仓库提供前端和 Pages Functions，并通过安装器支持接入兼容的 Cloudflare Temp Mail / `cloudflare_temp_email` Worker，或从锁定的官方 `v1.10.0` 开始创建 Worker、D1 与首个管理员账号。新 Worker 模式支持一次配置多个邮箱域名，第一个为默认域名；每个域名的 DNS 和 Email Routing 仍由部署者最终确认。
 
 ## 功能
 
@@ -92,13 +92,19 @@
 
 ## 一条命令部署
 
+### Windows：下载一个文件启动
+
+不想安装 Git、克隆仓库或打开终端时，直接在 GitHub Release 下载并双击 [`Install-Loven7-Mail.cmd`](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)。它会自动下载经过 SHA-256 校验的正式安装包，准备 Node.js 22，打开 Wrangler 的 Cloudflare 官方 OAuth 授权，并启动同一套新手安装器。安装文件会保存在当前 Windows 用户的 `%LOCALAPPDATA%\Loven7Mail\installer`，失败后再次双击会从断点继续。
+
+首次从零部署官方 Worker 时，启动器会在缺少 Git 时自动下载官方 MinGit 便携版到用户目录；已有兼容 Worker 的接入不需要 Git。Git 只用于临时下载锁定的上游 Worker，安装结束后上游临时目录会自动删除。
+
 克隆或 Fork 本仓库后运行：
 
 ```bash
 npm run setup
 ```
 
-安装器会先询问是否已有兼容 Worker。选择“是”时，它会先只读验证 Worker、站点密码和管理员口令，再接入现有 Worker；选择“否”时，它锁定并克隆官方 `v1.10.0`、创建 D1、初始化 schema、写入 Worker Secret，再自动创建或复用两个 Pages 项目、分享 KV 和邮件状态 KV，完成双应用构建、Admin 代理和 `/api/runtime` 验收。
+安装器会先询问是否已有兼容 Worker。选择“是”时，它会先只读验证 Worker、站点密码和管理员口令，再接入现有 Worker；选择“否”时，可以输入一个或多个邮箱域名（逗号分隔），安装器会锁定并克隆官方 `v1.10.0`、创建 D1、初始化 schema、写入 Worker Secret，再自动创建或复用两个 Pages 项目、分享 KV 和邮件状态 KV，完成线上 Worker 域名配置、Admin 代理和 `/api/runtime` 验收。
 
 密码不会显示，也不会保存到仓库或安装状态文件。失败后再次运行相同命令会复用已创建资源，并保留已有分享密钥。
 
@@ -108,9 +114,9 @@ npm run setup
 npm run setup:plan
 ```
 
-上述命令只显示安装计划，不连接 Cloudflare。完整说明、两种模式和 Email Routing 人工边界见 [新手安装器](docs/INSTALLER.md)。
+上述命令只显示安装计划，不连接 Cloudflare。完整说明见 [新手安装器](docs/INSTALLER.md)；安装后必须按 [Email Routing 收件配置](docs/EMAIL_ROUTING.md) 为每个域名接通真实邮件。
 
-无法使用本地交互式终端时，可以使用 [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md) 或下面的人工步骤。
+首次完整部署优先使用本地交互式终端运行 `npm run setup`，因为密码需要在不回显的 TTY 中安全输入。无法使用交互式终端时，[AI Agent Pages-only 部署指令](docs/AGENT_DEPLOY_PROMPT.md) 和下面的人工步骤只适用于已有兼容 Worker 的前端接入，不会替你创建 Worker、D1 或 Email Routing。
 
 ## 手动部署（已有 Worker）
 
@@ -236,7 +242,8 @@ WEBMAIL_RUNTIME_URL=https://webmail.example.com npm run check:cloudflare:runtime
 | --- | --- |
 | [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 最短的人工部署清单 |
 | [新手安装器](docs/INSTALLER.md) | 一条命令部署、重试与安全边界 |
-| [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md) | 强约束、分阶段、可验收的完整提示词 |
+| [Email Routing](docs/EMAIL_ROUTING.md) | 逐域名配置 Catch-all 和真实收件验收 |
+| [AI Agent Pages-only 部署指令](docs/AGENT_DEPLOY_PROMPT.md) | 已有 Worker 时部署两个前端的安全提示词 |
 | [Cloudflare Pages](docs/CLOUDFLARE_PAGES.md) | 变量、KV、Preview、探针与排错 |
 | [GitHub Actions](docs/GITHUB_ACTIONS.md) | CI 与可选自动部署 |
 | [配置边界](docs/CONFIGURATION_BOUNDARY.md) | 公开源码和自用配置如何长期分离 |

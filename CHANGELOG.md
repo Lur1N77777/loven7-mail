@@ -2,18 +2,25 @@
 
 本项目的显著变更记录在此。版本号遵循 [Semantic Versioning](https://semver.org/)；日期使用 `YYYY-MM-DD`。
 
-## [Unreleased]
+## [0.4.0] - 2026-08-13
 
 ### Added
 
 - 新增 `npm run setup` 新手安装器，可接入已有 Worker，或从锁定的官方 `cloudflare_temp_email` `v1.10.0` 创建 Worker、D1、首个管理员、双 Pages 与所需 KV。
 - 新增可脱敏续装状态、同名资源归属确认、Worker/Pages 在线探针和安装器命令级回归测试。
+- 新增多个邮箱域名的一次配置能力，第一个域名作为默认域名，并把完整列表写入 Worker 的 `DEFAULT_DOMAINS`、`DOMAINS` 与管理员角色配置。
+- 新增逐域名 Cloudflare Email Routing、Catch-all 和真实外部收件验收教程。
+- 新增 Windows 单文件启动器：双击 `Install-Loven7-Mail.cmd` 即可下载校验过的 Release、准备 Node.js 22 和便携 Git，并进入 Cloudflare OAuth 安装流程，无需先克隆仓库。
 
 ### Changed
 
 - 安装器通过标准输入写入 Cloudflare Secret，不在仓库或断点文件中保存密码、Worker 私有地址和分享密钥。
 - Worker、Admin 与 Webmail 发布验收增加有限重试；D1 与 KV 断点 ID 每次续装都会重新向 Cloudflare 核验。
 - 新 Worker 模式只进行一次 Cloudflare 账号选择；同一前缀的域名或锁定上游版本变化时先要求确认。
+- 新 Worker 部署与续装会在线核对 `DOMAINS` 和 `DEFAULT_DOMAINS`；线上配置损坏时重新部署修复，域名列表增删或顺序变化时要求确认。
+- 安装器完成提示区分“应用基础设施部署完成”和“邮箱收件尚待配置”，并逐域名显示 Email Routing 的 Worker 目标。
+- 主 CI 现在执行安装器回归测试；AI Agent 指令明确限定为已有 Worker 的 Pages-only 流程。
+- Release workflow 现在同时发布 Windows 启动器、PowerShell 引导脚本和 SHA-256 校验文件。
 - 修复安装检测到已有 Worker 的 `PASSWORDS` Secret 时要求重新输入当前站点密码，避免续装健康检查只返回不明确的 401。
 - 已有 Worker 模式在创建前端资源前只读验证健康状态、站点密码和管理员口令；部署后继续验证 Admin Pages 代理链路。
 - Pages 已保存 `SITE_PASSWORD` 时，空密码续装会停止并要求输入当前值或明确删除旧 Secret，避免前端继续携带过期站点凭据。
@@ -74,7 +81,8 @@
 - Loven7 Mail Admin 与 Webmail 双应用结构。
 - Cloudflare Pages Functions、分享 KV、PWA 和基础 CI/发布脚本。
 
-[Unreleased]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/tag/v0.1.0

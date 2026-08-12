@@ -11,6 +11,7 @@ import {
   validateManagedWorkerOrigin,
   validateWorkerUrl,
   validateMailDomain,
+  validateMailDomains,
   validateAdminEmail,
   renderUpstreamWorkerConfig,
 } from './domain.mjs';
@@ -79,6 +80,16 @@ test('validates real mail domains for a new upstream install', () => {
   assert.throws(() => validateMailDomain('example.com'), /示例域名/);
 });
 
+test('parses, normalizes and de-duplicates an ordered mail domain list', () => {
+  assert.deepEqual(
+    validateMailDomains('Mail.Example.net, second.example.net，mail.example.net\nthird.example.net.'),
+    ['mail.example.net', 'second.example.net', 'third.example.net'],
+  );
+  assert.deepEqual(validateMailDomains(['mail.example.net', 'second.example.net']), ['mail.example.net', 'second.example.net']);
+  assert.throws(() => validateMailDomains(''), /至少需要填写一个/);
+  assert.throws(() => validateMailDomains('mail.example.net,localhost'), /格式无效/);
+});
+
 test('validates the bootstrap administrator email', () => {
   assert.equal(validateAdminEmail(' Owner@Example.net '), 'owner@example.net');
   assert.throws(() => validateAdminEmail('owner'), /邮箱格式无效/);
@@ -100,10 +111,24 @@ test('creates a locked upstream plan and worker config', () => {
   assert.doesNotMatch(config, /JWT_SECRET|ADMIN_PASSWORDS|PASSWORDS/);
 });
 
+test('keeps the first mail domain as default and renders every domain into the Worker config', () => {
+  const plan = createUpstreamInstallPlan({
+    prefix: 'mail',
+    domains: 'primary.example.net, backup.example.net, PRIMARY.example.net',
+  });
+  assert.equal(plan.domain, 'primary.example.net');
+  assert.deepEqual(plan.domains, ['primary.example.net', 'backup.example.net']);
+  const config = renderUpstreamWorkerConfig({ ...plan.resources, domains: plan.domains, databaseId: 'db-id' });
+  assert.match(config, /DEFAULT_DOMAINS = \["primary\.example\.net", "backup\.example\.net"\]/);
+  assert.match(config, /DOMAINS = \["primary\.example\.net", "backup\.example\.net"\]/);
+  assert.match(config, /USER_ROLES = \[\{ domains = \["primary\.example\.net", "backup\.example\.net"\]/);
+});
+
 test('keeps a validated managed Worker origin but redacts private Worker URLs and secrets', () => {
   const state = redactInstallState({
     prefix: 'mail',
     domain: 'mail.example.net',
+    domains: ['mail.example.net', 'second.example.net'],
     workerProject: 'mail-worker',
     workerDeploymentConfirmed: true,
     databaseName: 'mail-db',
@@ -116,6 +141,7 @@ test('keeps a validated managed Worker origin but redacts private Worker URLs an
   assert.deepEqual(state, {
     prefix: 'mail',
     domain: 'mail.example.net',
+    domains: ['mail.example.net', 'second.example.net'],
     workerProject: 'mail-worker',
     workerDeploymentConfirmed: true,
     databaseName: 'mail-db',

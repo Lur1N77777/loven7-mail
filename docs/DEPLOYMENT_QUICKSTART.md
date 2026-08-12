@@ -2,22 +2,24 @@
 
 ## 新手首选：一条命令
 
+Windows 用户可以直接下载并双击 [Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)，不需要先克隆 GitHub 仓库。启动器会自动获取校验过的正式版本、准备 Node.js 22，并在从零部署时按需下载官方 MinGit 便携版，然后进入 Cloudflare OAuth 登录。已有 Worker 接入不要求 Git。
+
 准备 Node.js 22+，克隆或 Fork 仓库后运行：
 
 ```bash
 npm run setup
 ```
 
-选择已有 Worker 时，安装器会接入它；选择没有 Worker 时，安装器会从锁定的官方 `v1.10.0` 创建 Worker、D1、首个管理员、两个 Pages 项目和两个 KV。密码不落盘，失败后可运行同一命令安全续装。
+选择已有 Worker 时，安装器会接入它；选择没有 Worker 时，可以输入一个或多个邮箱域名（逗号分隔，第一个为默认域名），安装器会从锁定的官方 `v1.10.0` 创建 Worker、D1、首个管理员、两个 Pages 项目和两个 KV。密码不落盘，失败后可运行同一命令安全续装。
 
 只预览资源和步骤：
 
 ```bash
 npm run setup:plan
-node scripts/installer/cli.mjs --plan --new-worker --domain mail.example.net
+node scripts/installer/cli.mjs --plan --new-worker --domains mail.example.net,second.example.net
 ```
 
-完整说明见 [新手安装器](INSTALLER.md)。新 Worker 部署完成后仍需在 Cloudflare 启用 Email Routing、确认邮件 DNS，并将 Catch-all 指向新 Worker。
+完整说明见 [新手安装器](INSTALLER.md)。安装器显示“应用基础设施部署完成”后，仍需对每个域名按 [Email Routing 收件配置](EMAIL_ROUTING.md) 启用 Email Routing、确认邮件 DNS，并将 Catch-all 指向安装器 Worker。真实外部邮件投递成功后才算完整可用。
 
 安装器默认覆盖收件、Admin、Webmail、分享和已读/星标同步。发件需要额外配置 Resend、SMTP 或 Cloudflare Send Email，不会因一条命令安装自动启用。
 
@@ -108,4 +110,4 @@ $env:WEBMAIL_RUNTIME_URL = "https://webmail.example.com"
 npm run check:cloudflare:runtime
 ```
 
-需要 Agent 自动完成时，完整复制 [AI Agent 部署指令](AGENT_DEPLOY_PROMPT.md)。该指令要求 Agent 把两个站点作为一个连续任务执行，只在登录、平台 Secret 输入和真实账号验收时暂停。详细排错见 [Cloudflare Pages 部署说明](CLOUDFLARE_PAGES.md)。
+已有兼容 Worker、只需要部署两个前端时，可以复制 [AI Agent Pages-only 部署指令](AGENT_DEPLOY_PROMPT.md)。首次完整 Worker/D1 部署仍应运行 `npm run setup`。详细排错见 [Cloudflare Pages 部署说明](CLOUDFLARE_PAGES.md)。

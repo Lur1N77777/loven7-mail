@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInstallPlan, projectOrigin, renderPagesConfig } from './domain.mjs';
-import { createUpstreamInstallPlan, renderUpstreamWorkerConfig, validateAdminEmail, validateManagedWorkerOrigin } from './domain.mjs';
+import { createUpstreamInstallPlan, renderUpstreamWorkerConfig, validateAdminEmail, validateMailDomains, validateManagedWorkerOrigin } from './domain.mjs';
 import { readState, writeState } from './state.mjs';
 
 const DEFAULT_PROBE_ATTEMPTS = 8;
@@ -19,6 +19,18 @@ function findNamespace(namespaces, title) {
 
 function wait(milliseconds) {
   return milliseconds > 0 ? new Promise((resolve) => setTimeout(resolve, milliseconds)) : Promise.resolve();
+}
+
+function stateDomains(state) {
+  try {
+    return validateMailDomains(state?.domains ?? state?.domain);
+  } catch {
+    return [];
+  }
+}
+
+function sameDomains(left, right) {
+  return left.length === right.length && left.every((domain, index) => domain === right[index]);
 }
 
 function probeFailure(error, label) {
@@ -130,6 +142,28 @@ export class Installer {
     }
   }
 
+  async verifyManagedWorkerDomains({ workerUrl, adminPassword, sitePassword, domains }) {
+    const siteHeaders = sitePassword ? { 'x-custom-auth': sitePassword } : {};
+    await this.probe(`${workerUrl}/admin/worker/configs`, (body) => {
+      let data;
+      try { data = JSON.parse(body); } catch { return { ok: false, message: 'Worker 域名配置没有返回 JSON。' }; }
+      let actualDomains;
+      let actualDefaults;
+      try {
+        actualDomains = validateMailDomains(data?.DOMAINS);
+        actualDefaults = validateMailDomains(data?.DEFAULT_DOMAINS);
+      } catch (error) {
+        return { ok: false, message: `Worker 域名配置验收失败：${error instanceof Error ? error.message : error}` };
+      }
+      return sameDomains(actualDomains, domains) && sameDomains(actualDefaults, domains)
+        ? { ok: true, value: data }
+        : {
+            ok: false,
+            message: `Worker 线上域名与安装计划不一致：计划 ${domains.join('、')}；DOMAINS ${actualDomains.join('、')}；DEFAULT_DOMAINS ${actualDefaults.join('、')}。`,
+          };
+    }, 'Worker 域名配置', { headers: { ...siteHeaders, 'x-admin-auth': adminPassword } });
+  }
+
   async ensureAuthentication() {
     let identity;
     try {
@@ -193,7 +227,7 @@ export class Installer {
     if (
       previous?.workerDeploymentConfirmed !== true
       || previous?.workerProject !== plan.resources.workerName
-      || previous?.domain !== plan.domain
+      || !sameDomains(stateDomains(previous), plan.domains)
       || previous?.upstreamCommit !== plan.upstream.commit
       || !previous?.databaseId
       || !previous?.managedWorkerOrigin
@@ -243,6 +277,17 @@ export class Installer {
       adminPassword: input.adminPassword,
       sitePassword: input.sitePassword,
     });
+    try {
+      await this.verifyManagedWorkerDomains({
+        workerUrl,
+        adminPassword: input.adminPassword,
+        sitePassword: input.sitePassword,
+        domains: plan.domains,
+      });
+    } catch (error) {
+      this.ui.info(`已保存的 Worker 域名配置未通过验收，将重新部署修复：${error instanceof Error ? error.message : error}`);
+      return null;
+    }
     await this.bootstrapAdminUser({
       workerUrl,
       adminPassword: input.adminPassword,
@@ -273,6 +318,7 @@ export class Installer {
       installMode,
       ...(installMode === 'existing-worker' ? {
         domain: undefined,
+        domains: undefined,
         workerProject: undefined,
         workerDeploymentConfirmed: undefined,
         databaseName: undefined,
@@ -387,12 +433,13 @@ export class Installer {
     const saved = readState(this.rootDir);
     const account = await this.ensureAuthentication();
     const previous = saved?.accountId === account.id && saved?.prefix === plan.resources.prefix ? saved : null;
-    if (previous?.domain && previous.domain !== plan.domain) {
+    const previousDomains = stateDomains(previous);
+    if (previousDomains.length && !sameDomains(previousDomains, plan.domains)) {
       const confirmed = await this.ui.confirm(
-        `此前前缀 ${plan.resources.prefix} 使用域名 ${previous.domain}，本次输入为 ${plan.domain}。继续会更新现有 Worker 的邮箱域名，是否继续？`,
+        `此前前缀 ${plan.resources.prefix} 使用域名 ${previousDomains.join('、')}，本次输入为 ${plan.domains.join('、')}。继续会替换现有 Worker 的完整邮箱域名列表；第一个域名是默认域名。是否继续？`,
         false,
       );
-      if (!confirmed) throw new Error('未确认修改现有 Worker 的邮箱域名。请使用原域名或换一个项目名称前缀后重试。');
+      if (!confirmed) throw new Error('未确认修改现有 Worker 的邮箱域名列表。请使用原域名列表或换一个项目名称前缀后重试。');
     }
     if (previous?.upstreamCommit && previous.upstreamCommit !== plan.upstream.commit) {
       const confirmed = await this.ui.confirm(
@@ -407,6 +454,7 @@ export class Installer {
       prefix: plan.resources.prefix,
       installMode: 'new-worker',
       domain: plan.domain,
+      domains: plan.domains,
       phase: 'authenticated',
     });
 
@@ -421,6 +469,7 @@ export class Installer {
         state: writeState(this.rootDir, {
           ...frontendResult.state,
           domain: plan.domain,
+          domains: plan.domains,
           workerProject: plan.resources.workerName,
           workerDeploymentConfirmed: true,
           databaseName: reusableWorker.database.name,
@@ -456,7 +505,7 @@ export class Installer {
       this.ui.step('配置并部署官方 Worker');
       this.cloudflare.writeUpstreamConfig(upstreamDir, renderUpstreamWorkerConfig({
         workerName: plan.resources.workerName,
-        domain: plan.domain,
+        domains: plan.domains,
         databaseName: database.name,
         databaseId: database.id,
       }));
@@ -495,6 +544,12 @@ export class Installer {
         adminPassword: input.adminPassword,
         sitePassword: input.sitePassword,
       });
+      await this.verifyManagedWorkerDomains({
+        workerUrl,
+        adminPassword: input.adminPassword,
+        sitePassword: input.sitePassword,
+        domains: plan.domains,
+      });
       await this.bootstrapAdminUser({
         workerUrl,
         adminPassword: input.adminPassword,
@@ -515,6 +570,7 @@ export class Installer {
         state: writeState(this.rootDir, {
           ...frontendResult.state,
           domain: plan.domain,
+          domains: plan.domains,
           managedWorkerOrigin,
           databaseName: database.name,
           databaseId: database.id,

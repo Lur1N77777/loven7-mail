@@ -47,6 +47,9 @@ jobs:
       - name: Check Cloudflare Pages preflight
         run: npm run check:cloudflare
 
+      - name: Run installer regression tests
+        run: npm run test:installer
+
       - name: Build admin
         working-directory: apps/admin
         env:

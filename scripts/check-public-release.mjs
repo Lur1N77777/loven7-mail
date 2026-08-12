@@ -64,6 +64,7 @@ const textExtensions = new Set([
 
 const allowedExternalHosts = new Set([
   "github.com",
+  "api.github.com",
   "cli.github.com",
   "img.shields.io",
   "linux.do",

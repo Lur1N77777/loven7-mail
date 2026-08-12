@@ -6,11 +6,11 @@
 | --- | --- |
 | `.github/workflows/ci.yml` | PR、`main` push 与手动触发时运行脱敏、类型、测试、构建和 smoke 检查 |
 | `.github/workflows/deploy-cloudflare-pages.yml` | CI 成功后或手动触发时，可选部署两个 Pages 项目 |
-| `.github/workflows/release-assets.yml` | `v*` tag 或手动触发时生成 Release 源码包 |
+| `.github/workflows/release-assets.yml` | `v*` tag 或手动触发时生成源码包、Windows 一键启动器和校验文件 |
 
 Fork 后不配置 Cloudflare Secrets/Variables，CI 仍会运行，部署步骤会安全跳过。手动触发部署但配置不完整时，workflow 会失败并列出缺失的变量名，不输出 Secret。
 
-这条部署 workflow 只更新已经创建、已经配置运行时 Secret/KV 的 Pages 项目，不负责首次创建项目或写入 Cloudflare 运行时配置。首次部署先使用 [AI Agent 部署指令](AGENT_DEPLOY_PROMPT.md) 或 [部署速查](DEPLOYMENT_QUICKSTART.md) 完成两个项目的初始化与验收。
+这条部署 workflow 只更新已经创建、已经配置运行时 Secret/KV 的 Pages 项目，不负责首次创建 Worker、D1、Pages、KV 或写入 Cloudflare 运行时配置。全新部署先运行 `npm run setup`；只有已经有兼容 Worker、只初始化前端时，才使用 [AI Agent Pages-only 部署指令](AGENT_DEPLOY_PROMPT.md) 或 [部署速查](DEPLOYMENT_QUICKSTART.md)。
 
 ## CI 门禁
 
@@ -21,6 +21,7 @@ npm --prefix apps/admin ci
 npm --prefix apps/webmail ci
 npm run check:public
 npm run check:cloudflare
+npm run test:installer
 npm run test:frontend
 npm run check:webmail
 npm run build
@@ -69,7 +70,7 @@ Token 创建后直接写入 GitHub Secret；不要把它放进命令参数、截
 5. 查看两个部署步骤与 Webmail runtime probe。
 6. 只有 workflow 与 `/api/runtime` 都通过后，才把自动部署视为可用。
 
-需要 Agent 执行时，请直接使用 [AI Agent 部署指令](AGENT_DEPLOY_PROMPT.md)，不要另写包含 Token 或密码的 Prompt。
+已有 Worker 且需要 Agent 执行 Pages-only 部署时，请直接使用 [AI Agent Pages-only 部署指令](AGENT_DEPLOY_PROMPT.md)，不要另写包含 Token 或密码的 Prompt。
 
 ## 工作流行为
 

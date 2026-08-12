@@ -17,7 +17,10 @@ function argValue(name) {
 function printPlan(plan) {
   console.log('\nLoven7 Mail 安装计划');
   console.log(`模式：${plan.mode === 'new-worker' ? '从零部署官方 Worker' : '已有兼容 Worker'}`);
-  if (plan.domain) console.log(`邮箱域名：${plan.domain}`);
+  if (plan.domains) {
+    console.log(`邮箱域名：${plan.domains.join('、')}`);
+    console.log(`默认域名：${plan.domain}`);
+  } else if (plan.domain) console.log(`邮箱域名：${plan.domain}`);
   if (plan.workerUrl) console.log(`Worker：${plan.workerUrl}`);
   console.log(`项目：${plan.resources.adminProject} / ${plan.resources.webmailProject}`);
   console.log(`KV：${plan.resources.shareKv} / ${plan.resources.mailStateKv}`);
@@ -38,8 +41,9 @@ const planOnly = args.includes('--plan');
 if (planOnly) {
   try {
     const prefix = argValue('--prefix') || 'loven7-mail';
+    const domains = argValue('--domains') || argValue('--domain');
     const plan = args.includes('--new-worker')
-      ? createUpstreamInstallPlan({ prefix, domain: argValue('--domain') })
+      ? createUpstreamInstallPlan({ prefix, domains })
       : createInstallPlan({ prefix, workerUrl: argValue('--worker-url') || 'https://worker.example.com' });
     printPlan(plan);
   } catch (error) {
@@ -55,7 +59,9 @@ if (planOnly) {
     const mode = args.includes('--new-worker') ? 'new-worker' : args.includes('--existing-worker') ? 'existing-worker' : await ui.mode();
     const prefix = await ui.text('项目名称前缀', argValue('--prefix') || 'loven7-mail');
     const workerUrl = mode === 'existing-worker' ? await ui.text('已有邮件 Worker 根地址', argValue('--worker-url')) : '';
-    const domain = mode === 'new-worker' ? await ui.text('邮箱域名（必须已托管到 Cloudflare）', argValue('--domain')) : '';
+    const domains = mode === 'new-worker'
+      ? await ui.text('邮箱域名（多个用逗号分隔，第一个为默认域名；必须已托管到当前 Cloudflare 账号）', argValue('--domains') || argValue('--domain'))
+      : '';
     const adminPassword = await ui.secret('Worker 管理员口令');
     if (!adminPassword) throw new Error('Worker 管理员口令不能为空。');
     const adminEmail = mode === 'new-worker' ? validateAdminEmail(await ui.text('首个管理员登录邮箱')) : '';
@@ -63,22 +69,33 @@ if (planOnly) {
     if (mode === 'new-worker' && (!adminEmail || !adminUserPassword)) throw new Error('首个管理员账号和登录密码不能为空。');
     const sitePassword = await ui.secret('Worker 站点密码', { optional: true });
     const plan = mode === 'new-worker'
-      ? (await import('./domain.mjs')).createUpstreamInstallPlan({ prefix, domain })
+      ? createUpstreamInstallPlan({ prefix, domains })
       : createInstallPlan({ prefix, workerUrl });
     printPlan(plan);
-    if (!await ui.confirm('按此计划开始部署？', true)) throw new Error('安装已取消。');
+    const confirmation = mode === 'new-worker'
+      ? '确认上述域名都在即将登录的 Cloudflare 账号中为 Active，并理解安装器不会自动修改 MX/Email Routing；按此计划开始部署？'
+      : '按此计划开始部署？';
+    if (!await ui.confirm(confirmation, true)) throw new Error('安装已取消。');
 
     const runner = new CommandRunner({ cwd: rootDir });
     const cloudflare = new CloudflareAdapter({ rootDir, runner });
     const installer = new Installer({ rootDir, cloudflare, ui });
     const result = mode === 'new-worker'
-      ? await installer.runNewWorker({ prefix, domain, adminPassword, adminEmail, adminUserPassword, sitePassword })
+      ? await installer.runNewWorker({ prefix, domains, adminPassword, adminEmail, adminUserPassword, sitePassword })
       : await installer.run({ prefix, workerUrl, adminPassword, sitePassword });
 
-    console.log('\n部署完成');
+    console.log('\n应用基础设施部署完成');
     console.log(`Admin：${result.state.adminOrigin}`);
     console.log(`Webmail：${result.state.webmailOrigin}`);
     console.log('运行时：Webmail /api/runtime 已通过');
+    if (mode === 'new-worker') {
+      console.log(`Worker 域名：已在线核对 ${result.plan.domains.join('、')}`);
+      console.log('\n邮箱收件尚未完成。请为下面每个域名配置 Cloudflare Email Routing：');
+      result.plan.domains.forEach((mailDomain) => {
+        console.log(`  - ${mailDomain}：启用 Email Routing，确认 Cloudflare 建议的 MX/TXT，再把 Catch-all 设置为 Send to a Worker → ${result.plan.resources.workerName}`);
+      });
+      console.log('详细步骤：docs/EMAIL_ROUTING.md');
+    }
     console.log('\n最后请完成真实验收：');
     console.log(mode === 'new-worker'
       ? '  1. 使用刚创建的首个管理员账号登录 Admin。'

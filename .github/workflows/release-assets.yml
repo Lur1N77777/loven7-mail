@@ -56,7 +56,9 @@ jobs:
           mkdir -p release-assets
           asset="release-assets/loven7-mail-cloudflare-suite-${tag}-source.zip"
           git archive --format=zip --prefix="loven7-mail-cloudflare-suite-${tag}/" -o "$asset" "$tag"
-          (cd release-assets && sha256sum "$(basename "$asset")" > SHA256SUMS.txt)
+          cp scripts/installer/bootstrap.ps1 release-assets/loven7-mail-bootstrap.ps1
+          cp scripts/installer/Install-Loven7-Mail.cmd release-assets/Install-Loven7-Mail.cmd
+          (cd release-assets && sha256sum "$(basename "$asset")" loven7-mail-bootstrap.ps1 Install-Loven7-Mail.cmd > SHA256SUMS.txt)
 
           version="${tag#v}"
           awk -v heading="## [${version}]" '
@@ -77,9 +79,9 @@ jobs:
           asset="release-assets/loven7-mail-cloudflare-suite-${tag}-source.zip"
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$asset" release-assets/SHA256SUMS.txt --clobber
+            gh release upload "$tag" "$asset" release-assets/SHA256SUMS.txt release-assets/loven7-mail-bootstrap.ps1 release-assets/Install-Loven7-Mail.cmd --clobber
           else
-            gh release create "$tag" "$asset" release-assets/SHA256SUMS.txt \
+            gh release create "$tag" "$asset" release-assets/SHA256SUMS.txt release-assets/loven7-mail-bootstrap.ps1 release-assets/Install-Loven7-Mail.cmd \
               --verify-tag \
               --title "$tag" \
               --notes-file release-assets/RELEASE_NOTES.md
