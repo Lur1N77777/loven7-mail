@@ -8,6 +8,8 @@ wrangler.local.toml
 .omx/
 .playwright-mcp/
 .codex-dev-logs/
+.loven7-installer/
+.loven7-installer-*/
 qa-shots/
 tmp/
 apps/admin/*.png

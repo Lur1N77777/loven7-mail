@@ -4,6 +4,28 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `npm run setup` 新手安装器，可接入已有 Worker，或从锁定的官方 `cloudflare_temp_email` `v1.10.0` 创建 Worker、D1、首个管理员、双 Pages 与所需 KV。
+- 新增可脱敏续装状态、同名资源归属确认、Worker/Pages 在线探针和安装器命令级回归测试。
+
+### Changed
+
+- 安装器通过标准输入写入 Cloudflare Secret，不在仓库或断点文件中保存密码、Worker 私有地址和分享密钥。
+- Worker、Admin 与 Webmail 发布验收增加有限重试；D1 与 KV 断点 ID 每次续装都会重新向 Cloudflare 核验。
+- 新 Worker 模式只进行一次 Cloudflare 账号选择；同一前缀的域名或锁定上游版本变化时先要求确认。
+- 修复安装检测到已有 Worker 的 `PASSWORDS` Secret 时要求重新输入当前站点密码，避免续装健康检查只返回不明确的 401。
+- 已有 Worker 模式在创建前端资源前只读验证健康状态、站点密码和管理员口令；部署后继续验证 Admin Pages 代理链路。
+- Pages 已保存 `SITE_PASSWORD` 时，空密码续装会停止并要求输入当前值或明确删除旧 Secret，避免前端继续携带过期站点凭据。
+- 文档和完成提示明确区分默认可用的收件/前端/分享/状态同步，与需要额外凭据或 binding 的可选发件能力。
+- 已完成 Worker 与管理员验收的同配置续装会复用已保存的安全 `*.workers.dev` 地址，只验证后端并修复前端，避免覆盖用户后来手工增加的 Resend、SMTP、Send Email 或其他 binding。
+- README、部署速查与上游边界文档改为优先引导一条命令部署，并明确 Email Routing 仍需部署者最终确认。
+- 新 Worker 安装通过 npx 调用锁定版 pnpm，不再要求新手额外启用 Corepack 或全局安装 pnpm。
+
+### Fixed
+
+- 修复 Windows 下 Node 子进程无法直接启动 `npm.cmd`、`npx.cmd`、`corepack.cmd`，以及误将 Git 当作 `git.cmd` 的安装器兼容问题。
+
 ## [0.3.0] - 2026-07-25
 
 ### Added

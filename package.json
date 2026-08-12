@@ -5,9 +5,12 @@
   "version": "0.3.0",
   "description": "Enhanced admin and webmail frontends for Cloudflare Temp Mail / cloudflare_temp_email.",
   "scripts": {
+    "setup": "node scripts/installer/cli.mjs",
+    "setup:plan": "node scripts/installer/cli.mjs --plan",
     "build:admin": "npm --prefix apps/admin run build",
     "build:webmail": "npm --prefix apps/webmail run build",
     "lint:admin": "npm --prefix apps/admin run lint",
+    "test:installer": "node --test scripts/installer/*.test.mjs",
     "test:frontend": "npm --prefix apps/admin test && npm --prefix apps/webmail test",
     "check:webmail": "npm --prefix apps/webmail run check:functions:headers && npm --prefix apps/webmail run check:functions:cors && npm --prefix apps/webmail run check:functions:image && npm --prefix apps/webmail run check:functions:brand && npm --prefix apps/webmail run check:functions:share-delete && npm --prefix apps/webmail run check:functions:regressions",
     "check:public": "node scripts/check-public-release.mjs",
@@ -17,7 +20,7 @@
     "smoke:webmail": "npm --prefix apps/webmail run smoke:local",
     "smoke": "npm run smoke:admin && npm run smoke:webmail",
     "docs:screenshots": "node scripts/capture-readme-screenshots.mjs",
-    "check:release": "npm run check:public && npm run check:cloudflare && npm run lint:admin && npm run test:frontend && npm run check:webmail && npm run build && npm run smoke",
+    "check:release": "npm run check:public && npm run check:cloudflare && npm run lint:admin && npm run test:installer && npm run test:frontend && npm run check:webmail && npm run build && npm run smoke",
     "build": "npm run build:admin && npm run build:webmail"
   }
 }

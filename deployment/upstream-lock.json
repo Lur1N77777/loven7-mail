@@ -1,0 +1,10 @@
+{
+  "repository": "dreamhunter2333/cloudflare_temp_email",
+  "release": "v1.10.0",
+  "commit": "116ddc732431afd6f4154a74669804473b373baa",
+  "documentation": "https://temp-mail-docs.awsl.uk/zh/guide/actions/github-action.html",
+  "installerSupport": "existing-worker-and-new-worker",
+  "workerPnpm": "10.10.0",
+  "workerWrangler": "4.116.0",
+  "emailRouting": "manual-final-step"
+}

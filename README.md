@@ -14,7 +14,7 @@
   <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml/badge.svg" /></a>
 </p>
 
-[界面预览](#界面预览) · [5 分钟部署](#5-分钟部署) · [功能](#功能) · [手动部署](#手动部署) · [配置边界](#公开版与自用配置边界) · [文档](#文档)
+[界面预览](#界面预览) · [一条命令部署](#一条命令部署) · [功能](#功能) · [手动部署](#手动部署已有-worker) · [配置边界](#公开版与自用配置边界) · [文档](#文档)
 
 </div>
 
@@ -80,7 +80,7 @@
 | Admin | `apps/admin` | 地址、用户、收发件、分享、系统设置与维护工具 |
 | Webmail | `apps/webmail` | 用户登录、邮箱阅读、单/多邮箱分享与 Pages Functions |
 
-本仓库只提供前端和 Pages Functions。你需要先部署兼容的 Cloudflare Temp Mail / `cloudflare_temp_email` Worker；数据库、邮件路由和 Worker 迁移均由后端项目负责。
+本仓库提供前端和 Pages Functions，并通过安装器支持接入兼容的 Cloudflare Temp Mail / `cloudflare_temp_email` Worker，或从锁定的官方 `v1.10.0` 开始创建 Worker、D1 与首个管理员账号。邮箱 DNS 和 Email Routing 仍由部署者最终确认。
 
 ## 功能
 
@@ -90,23 +90,37 @@
 - 邮件安全：HTML 沙箱、远程图片保护、附件处理、品牌头像代理与请求预算。
 - 工程能力：TypeScript、PWA、双 Pages 构建、运行时诊断、CI、脱敏门禁和发布检查。
 
-## 5 分钟部署
+## 一条命令部署
 
-最省心的方式是把下面整段一次性交给能操作 GitHub 和 Cloudflare 的 AI Agent。开始前先在浏览器登录 GitHub 与 Cloudflare，并准备好现有 Worker 的运行时配置；不要把任何密码或 Token 发进聊天。
+克隆或 Fork 本仓库后运行：
 
-```text
-请严格按照仓库 docs/AGENT_DEPLOY_PROMPT.md，把当前仓库从只读预检到两个 Production 站点验收作为一个连续任务一次完成；不要在计划、预检、创建第一个站点或单次部署后结束。不得修改或重新部署上游邮件 Worker，不得要求我在聊天中发送任何密码、Token、Worker 私有地址或加密密钥，不得输出密钥原文。除 GitHub/Cloudflare 登录、由我在平台页面一次性填写全部 Secret，以及真实账号最终验收外，不要逐阶段停下征求确认；需要我操作时一次列出全部事项，我回复“已配置”后从断点继续。先部署 Admin 并取得最终 origin，再用该 origin 配置 Webmail 的 SHARE_ADMIN_CORS_ORIGINS、SHARE_KV 和分享密钥，然后部署 Webmail。完成构建、两个 Pages 部署、/api/runtime 探针和回滚点记录后，再统一报告两个站点 URL、证据、未完成项和回滚方法。
+```bash
+npm run setup
 ```
 
-完整、可直接复制的强约束提示词见 [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md)。如果你更喜欢自己操作，继续阅读下一节。
+安装器会先询问是否已有兼容 Worker。选择“是”时，它会先只读验证 Worker、站点密码和管理员口令，再接入现有 Worker；选择“否”时，它锁定并克隆官方 `v1.10.0`、创建 D1、初始化 schema、写入 Worker Secret，再自动创建或复用两个 Pages 项目、分享 KV 和邮件状态 KV，完成双应用构建、Admin 代理和 `/api/runtime` 验收。
 
-## 手动部署
+密码不会显示，也不会保存到仓库或安装状态文件。失败后再次运行相同命令会复用已创建资源，并保留已有分享密钥。
+
+一条命令默认覆盖收件、Admin、Webmail、分享和已读/星标同步。发件需要部署者另行选择并配置 Resend、SMTP 或 Cloudflare Send Email；安装器不会自动创建外部发件账号或写入发件凭据。
+
+```bash
+npm run setup:plan
+```
+
+上述命令只显示安装计划，不连接 Cloudflare。完整说明、两种模式和 Email Routing 人工边界见 [新手安装器](docs/INSTALLER.md)。
+
+无法使用本地交互式终端时，可以使用 [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md) 或下面的人工步骤。
+
+## 手动部署（已有 Worker）
 
 ### 1. 准备
 
 - 一个可用的 Cloudflare 账号。
 - 一个已部署且 API 兼容的邮件 Worker。
 - 将本仓库 Fork 到你自己的 GitHub 账号。
+
+这一节只讲“已有 Worker”的人工接入。没有 Worker 的新手请优先运行 `npm run setup`；安装器会从锁定的官方版本创建 Worker 和 D1，人工流程仍需你自行部署上游后端。
 
 ### 2. 创建 Admin Pages
 
@@ -221,6 +235,7 @@ WEBMAIL_RUNTIME_URL=https://webmail.example.com npm run check:cloudflare:runtime
 | 文档 | 用途 |
 | --- | --- |
 | [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 最短的人工部署清单 |
+| [新手安装器](docs/INSTALLER.md) | 一条命令部署、重试与安全边界 |
 | [AI Agent 部署指令](docs/AGENT_DEPLOY_PROMPT.md) | 强约束、分阶段、可验收的完整提示词 |
 | [Cloudflare Pages](docs/CLOUDFLARE_PAGES.md) | 变量、KV、Preview、探针与排错 |
 | [GitHub Actions](docs/GITHUB_ACTIONS.md) | CI 与可选自动部署 |

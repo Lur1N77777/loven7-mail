@@ -11,7 +11,9 @@ const requiredPublicFiles = [
   "README.md",
   "CHANGELOG.md",
   "SECURITY.md",
+  "deployment/upstream-lock.json",
   "docs/AGENT_DEPLOY_PROMPT.md",
+  "docs/INSTALLER.md",
   "docs/CONFIGURATION_BOUNDARY.md",
   "docs/DEPLOYMENT_QUICKSTART.md",
   "docs/VERSIONING.md",
@@ -33,6 +35,7 @@ const publicSurfaceRoots = [
   "SECURITY.md",
   ".env.example",
   ".github",
+  "deployment",
   "docs",
   "scripts",
   "apps",
@@ -72,6 +75,7 @@ const allowedExternalHosts = new Set([
   "challenges.cloudflare.com",
   "nodejs.org",
   "www.npmjs.com",
+  "temp-mail-docs.awsl.uk",
   "semver.org",
   "www.w3.org",
 ]);
@@ -238,8 +242,8 @@ if (existsSync(readmePath)) {
   const readme = readFileSync(readmePath, "utf8");
   for (const heading of [
     "## 界面预览",
-    "## 5 分钟部署",
-    "## 手动部署",
+    "## 一条命令部署",
+    "## 手动部署（已有 Worker）",
     "## 公开版与自用配置边界",
     "## 版本与升级",
   ]) {

@@ -1,6 +1,29 @@
 # 部署速查
 
-这是一页式清单。前提是你已经有一个兼容 Cloudflare Temp Mail / `cloudflare_temp_email` API 的 Worker。
+## 新手首选：一条命令
+
+准备 Node.js 22+，克隆或 Fork 仓库后运行：
+
+```bash
+npm run setup
+```
+
+选择已有 Worker 时，安装器会接入它；选择没有 Worker 时，安装器会从锁定的官方 `v1.10.0` 创建 Worker、D1、首个管理员、两个 Pages 项目和两个 KV。密码不落盘，失败后可运行同一命令安全续装。
+
+只预览资源和步骤：
+
+```bash
+npm run setup:plan
+node scripts/installer/cli.mjs --plan --new-worker --domain mail.example.net
+```
+
+完整说明见 [新手安装器](INSTALLER.md)。新 Worker 部署完成后仍需在 Cloudflare 启用 Email Routing、确认邮件 DNS，并将 Catch-all 指向新 Worker。
+
+安装器默认覆盖收件、Admin、Webmail、分享和已读/星标同步。发件需要额外配置 Resend、SMTP 或 Cloudflare Send Email，不会因一条命令安装自动启用。
+
+## 人工部署（已有 Worker）
+
+下面是一页式人工清单，前提是你已经有一个兼容 Cloudflare Temp Mail / `cloudflare_temp_email` API 的 Worker。
 
 ## 两个 Pages 项目
 
