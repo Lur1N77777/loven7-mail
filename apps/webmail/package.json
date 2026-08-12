@@ -23,7 +23,7 @@
     "typescript": "~5.9.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "postal-mime": "^2.7.4"
+    "postal-mime": "^2.7.6"
   },
   "devDependencies": {
     "@types/react": "19.1.17",
