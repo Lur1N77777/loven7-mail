@@ -1,6 +1,7 @@
 {
   "name": "loven7-mail-cloudflare-suite",
   "private": true,
+  "type": "module",
   "version": "0.3.0",
   "description": "Enhanced admin and webmail frontends for Cloudflare Temp Mail / cloudflare_temp_email.",
   "scripts": {

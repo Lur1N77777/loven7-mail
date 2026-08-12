@@ -151,7 +151,7 @@ test('the share manager modal styles its own portaled scope', () => {
 test('read state re-merges when a device resumes so cross-device marks arrive without a reload', () => {
   const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
   assert.match(workspaceSource, /document\.addEventListener\('visibilitychange', onVisibility\)/, 'returning to the foreground must trigger a remote read-state re-merge');
-  assert.match(workspaceSource, /\[mailStateKeys, mode, request, stateSyncTick\]/, 'the remote merge effect must re-run on the resync tick, not only on mount');
+  assert.match(workspaceSource, /\[mailStateGateway, mailStateKeys, mode, stateSyncTick\]/, 'the remote merge effect must re-run on the resync tick, not only on mount');
   assert.match(workspaceSource, /if \(Date\.now\(\) - lastStateSyncAtRef\.current < 15_000\) return;/, 'resync must be throttled so visibility flaps cannot spam the endpoint');
 });
 
@@ -595,13 +595,38 @@ test('optional mail-state sync stays on the Admin origin and cannot invalidate t
 });
 
 test('every Admin mail-state request uses the same-origin non-authoritative channel', () => {
-  const source = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
-  assert.equal([...source.matchAll(/adminMailStateEndpoint\(/g)].length, 3);
-  assert.equal([...source.matchAll(/reportAuthFailure:\s*false/g)].length, 3);
+  const gatewaySource = readFileSync(new URL('../src/features/mail/infrastructure/mailStateGateway.ts', import.meta.url), 'utf8');
+  const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.equal([...gatewaySource.matchAll(/adminMailStateEndpoint\(/g)].length, 2);
+  assert.equal([...gatewaySource.matchAll(/reportAuthFailure:\s*false/g)].length, 2);
+  assert.doesNotMatch(workspaceSource, /adminMailStateEndpoint\(/);
+});
+
+test('Admin mail list transport stays inside the mailbox gateway', () => {
+  const gatewaySource = readFileSync(new URL('../src/features/mail/infrastructure/mailListGateway.ts', import.meta.url), 'utf8');
+  const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.match(gatewaySource, /\/admin\/sendbox/);
+  assert.match(gatewaySource, /\/admin\/mails_unknow/);
+  assert.match(gatewaySource, /parseRawMailListItem/);
+  assert.match(gatewaySource, /parseSendbox/);
+  assert.doesNotMatch(workspaceSource, /const endpoint = mode === 'unknown'/);
+  assert.doesNotMatch(workspaceSource, /request<ListResponse</);
+});
+
+test('Admin mail deletion transport stays inside the mutation gateway', () => {
+  const gatewaySource = readFileSync(new URL('../src/features/mail/infrastructure/mailMutationGateway.ts', import.meta.url), 'utf8');
+  const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.match(gatewaySource, /method:\s*'DELETE'/);
+  assert.match(gatewaySource, /invalidates:\s*MAIL_MUTATION_INVALIDATIONS/);
+  assert.match(gatewaySource, /mode === 'sent' \? '\/admin\/sendbox' : '\/admin\/mails'/);
+  assert.match(workspaceSource, /mailMutationGateway\.delete\(mode, mail\.id\)/);
+  assert.doesNotMatch(workspaceSource, /method:\s*'DELETE'/);
+  assert.doesNotMatch(workspaceSource, /invalidates:\s*\['\/admin\/mails'/);
 });
 
 test('admin parsed session-detail cache follows the mail parser cache version', () => {
-  const source = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/features/mail/infrastructure/mailCache.ts', import.meta.url), 'utf8');
+  assert.match(source, /export const MAIL_LIST_CACHE_VERSION = \d+;/);
   assert.match(source, /mailDetailSessionPrefix,\s*`v\$\{MAIL_LIST_CACHE_VERSION\}`/);
 });
 

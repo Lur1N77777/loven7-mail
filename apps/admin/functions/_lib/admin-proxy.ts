@@ -59,7 +59,7 @@ function jsonError(status: number, message: string, code = "admin_proxy_error") 
   });
 }
 
-function sameOriginCorsHeaders(request: Request) {
+function sameOriginCorsHeaders(request: Request): Record<string, string> | null {
   const origin = request.headers.get("origin") || "";
   if (!origin) return {};
   try {

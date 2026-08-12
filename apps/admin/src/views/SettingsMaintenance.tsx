@@ -825,7 +825,7 @@ function RoleAddressConfigPanel({ request, notify }: { request: Requester; notif
     try {
       const [roleRes, configRes] = await Promise.all([
         request<RoleRecord[]>('/admin/user_roles'),
-        request<RoleAddressConfigResponse>('/admin/role_address_config').catch(() => ({ configs: {} })),
+        request<RoleAddressConfigResponse>('/admin/role_address_config').catch((): RoleAddressConfigResponse => ({ configs: {} })),
       ]);
       const list = Array.isArray(roleRes) ? roleRes : [];
       setRoles(list);

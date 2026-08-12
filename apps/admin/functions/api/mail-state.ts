@@ -81,7 +81,7 @@ function jsonError(status: number, message: string, code = "mail_state_error") {
   return json({ error: { code, message } }, { status });
 }
 
-function sameOriginCorsHeaders(request: Request) {
+function sameOriginCorsHeaders(request: Request): Record<string, string> | null {
   const origin = request.headers.get("origin") || "";
   if (!origin) return {};
   try {
