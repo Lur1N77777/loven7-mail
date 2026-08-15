@@ -32,4 +32,6 @@ test('release workflow publishes the launcher, bootstrap and checksums', () => {
   assert.match(workflow, /gh release edit/);
   assert.match(workflow, /--notes-file release-assets\/RELEASE_NOTES\.md/);
   assert.match(workflow, /部署完成后还要做什么/);
+  assert.match(workflow, /Compute → Email Service → Email Routing/);
+  assert.match(workflow, /--title "Loven7 Mail \$\{tag#v\}"/);
 });

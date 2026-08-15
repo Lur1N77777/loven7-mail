@@ -16,7 +16,7 @@ function argValue(name) {
 
 function printPlan(plan) {
   console.log('\nLoven7 Mail 安装计划');
-  console.log(`模式：${plan.mode === 'new-worker' ? '从零部署官方 Worker' : '已有兼容 Worker'}`);
+  console.log(`模式：${plan.mode === 'new-worker' ? '从零部署兼容 Worker' : '已有兼容 Worker'}`);
   if (plan.domains) {
     console.log(`邮箱域名：${plan.domains.join('、')}`);
     console.log(`默认域名：${plan.domain}`);
@@ -24,7 +24,7 @@ function printPlan(plan) {
   if (plan.workerUrl) console.log(`Worker：${plan.workerUrl}`);
   console.log(`项目：${plan.resources.adminProject} / ${plan.resources.webmailProject}`);
   console.log(`KV：${plan.resources.shareKv} / ${plan.resources.mailStateKv}`);
-  if (plan.resources.workerName) console.log(`上游 Worker：${plan.resources.workerName}`);
+  if (plan.resources.workerName) console.log(`邮件 Worker：${plan.resources.workerName}`);
   if (plan.resources.databaseName) console.log(`D1：${plan.resources.databaseName}`);
   console.log('\n自动执行：');
   plan.steps.forEach((step, index) => console.log(`  ${index + 1}. ${step}`));
@@ -54,7 +54,7 @@ if (planOnly) {
   const ui = new ConsoleUi();
   try {
     console.log('\nLoven7 Mail 新手安装器');
-    console.log('安装器支持已有 Worker 接入，也支持从锁定的官方 v1.10.0 Worker 开始部署。');
+    console.log('安装器支持已有 Worker 接入，也支持从锁定的兼容 Worker v1.10.0 开始部署。');
     console.log('输入的密码不会显示，也不会保存到仓库或安装状态文件。\n');
     const mode = args.includes('--new-worker') ? 'new-worker' : args.includes('--existing-worker') ? 'existing-worker' : await ui.mode();
     const prefix = await ui.text('项目名称前缀', argValue('--prefix') || 'loven7-mail');
@@ -92,7 +92,7 @@ if (planOnly) {
       console.log(`Worker 域名：已在线核对 ${result.plan.domains.join('、')}`);
       console.log('\n邮箱收件尚未完成。请为下面每个域名配置 Cloudflare Email Routing：');
       result.plan.domains.forEach((mailDomain) => {
-        console.log(`  - ${mailDomain}：启用 Email Routing，确认 Cloudflare 建议的 MX/TXT，再把 Catch-all 设置为 Send to a Worker → ${result.plan.resources.workerName}`);
+        console.log(`  - ${mailDomain}：进入 Compute → Email Service → Email Routing，接入域名并确认 MX/SPF/DKIM，再把 Catch-all 设置为 Send to a Worker → ${result.plan.resources.workerName}`);
       });
       console.log('详细步骤：docs/EMAIL_ROUTING.md');
     }
@@ -102,7 +102,7 @@ if (planOnly) {
       : '  1. 使用已有的管理员角色账号登录 Admin。');
     console.log('  2. 从外部邮箱发送测试邮件，确认 Email Routing Catch-all 正常。');
     console.log('  3. 创建分享并在无痕窗口打开。');
-    console.log('  4. 如需发件，再按上游文档配置 Resend、SMTP 或 Cloudflare Send Email；安装器未自动开启发件服务。');
+    console.log('  4. 如需发件，再按兼容后端文档配置 Resend、SMTP 或 Cloudflare Send Email；安装器未自动开启发件服务。');
   } catch (error) {
     console.error(`\n安装未完成：${error instanceof Error ? error.message : error}`);
     console.error('修复问题后重新运行 npm run setup；已创建资源会被安全复用。');

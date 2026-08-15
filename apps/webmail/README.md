@@ -1,6 +1,6 @@
 # 用户站 / 分享站（apps/webmail）
 
-这是 Loven7 Mail Cloudflare Suite 的用户侧前端和分享链接服务，部署为 Cloudflare Pages + Pages Functions。
+这是 Loven7 Mail 的用户侧前端和分享链接服务，部署为 Cloudflare Pages + Pages Functions。
 
 ## 功能
 

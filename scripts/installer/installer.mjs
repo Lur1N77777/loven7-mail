@@ -443,7 +443,7 @@ export class Installer {
     }
     if (previous?.upstreamCommit && previous.upstreamCommit !== plan.upstream.commit) {
       const confirmed = await this.ui.confirm(
-        `锁定的官方 Worker 已从 ${previous.upstreamCommit.slice(0, 12)} 更新为 ${plan.upstream.commit.slice(0, 12)}，是否升级现有 Worker？`,
+        `锁定的兼容 Worker 已从 ${previous.upstreamCommit.slice(0, 12)} 更新为 ${plan.upstream.commit.slice(0, 12)}，是否升级现有 Worker？`,
         false,
       );
       if (!confirmed) throw new Error('未确认升级现有 Worker。请保留原锁定版本或换一个项目名称前缀后重试。');
@@ -484,13 +484,13 @@ export class Installer {
     const scratch = mkdtempSync(join(this.rootDir, '.loven7-installer-'));
     const upstreamDir = join(scratch, 'upstream');
     try {
-      this.ui.step('下载并准备锁定版本的官方 Worker');
+      this.ui.step('下载并准备锁定版本的兼容 Worker');
       const commit = this.cloudflare.cloneUpstream({
         repository: plan.upstream.repository,
         release: plan.upstream.release,
         destination: upstreamDir,
       });
-      if (commit !== plan.upstream.commit) throw new Error(`官方 Worker 版本校验失败：期望 ${plan.upstream.commit}，实际 ${commit}。`);
+      if (commit !== plan.upstream.commit) throw new Error(`兼容 Worker 版本校验失败：期望 ${plan.upstream.commit}，实际 ${commit}。`);
       this.cloudflare.installUpstreamDependencies(upstreamDir);
       state = writeState(this.rootDir, { ...state, upstreamCommit: commit, phase: 'upstream-ready' });
 
@@ -502,7 +502,7 @@ export class Installer {
       this.cloudflare.executeD1Schema(database.name, join(upstreamDir, 'db', 'schema.sql'), upstreamDir);
       state = writeState(this.rootDir, { ...state, databaseName: database.name, databaseId: database.id, phase: 'database-ready' });
 
-      this.ui.step('配置并部署官方 Worker');
+      this.ui.step('配置并部署兼容 Worker');
       this.cloudflare.writeUpstreamConfig(upstreamDir, renderUpstreamWorkerConfig({
         workerName: plan.resources.workerName,
         domains: plan.domains,
@@ -560,7 +560,7 @@ export class Installer {
       const managedWorkerOrigin = validateManagedWorkerOrigin(workerUrl);
       state = writeState(this.rootDir, { ...state, managedWorkerOrigin, phase: 'worker-ready' });
 
-      this.ui.info(`官方 Worker 已部署：${workerUrl}`);
+      this.ui.info(`兼容 Worker 已部署：${workerUrl}`);
       const frontendResult = await this.run(
         { ...input, workerUrl },
         { authenticatedAccount: account, workerVerified: true, installMode: 'new-worker' },

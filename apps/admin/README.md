@@ -1,6 +1,6 @@
 # 管理后台 PWA（apps/admin）
 
-这是 Loven7 Mail Cloudflare Suite 的管理员后台前端，基于 Cloudflare Temp Mail / `cloudflare_temp_email` 上游 Worker 管理接口。
+这是 Loven7 Mail 的管理员后台前端，通过兼容邮件 Worker 的管理接口提供地址、用户、收发件和系统维护能力。
 
 ## 功能
 

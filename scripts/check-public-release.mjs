@@ -13,6 +13,8 @@ const requiredPublicFiles = [
   "SECURITY.md",
   "deployment/upstream-lock.json",
   "docs/AGENT_DEPLOY_PROMPT.md",
+  "docs/BEGINNER_GUIDE.md",
+  "docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md",
   "docs/INSTALLER.md",
   "docs/CONFIGURATION_BOUNDARY.md",
   "docs/DEPLOYMENT_QUICKSTART.md",
@@ -183,6 +185,9 @@ for (const absolutePath of files) {
 const rootPackagePath = resolve(repoRoot, "package.json");
 if (existsSync(rootPackagePath)) {
   const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8"));
+  if (rootPackage.name !== "loven7-mail") {
+    errors.push("Root package name must use the independent Loven7 Mail project name.");
+  }
   if (rootPackage.scripts?.["check:public"] !== "node scripts/check-public-release.mjs") {
     errors.push("package.json must expose check:public.");
   }
@@ -241,6 +246,15 @@ if (existsSync(screenshotSourcePath)) {
 const readmePath = resolve(repoRoot, "README.md");
 if (existsSync(readmePath)) {
   const readme = readFileSync(readmePath, "utf8");
+  if (!readme.includes("# Loven7 Mail")) {
+    errors.push("README must present Loven7 Mail as the independent project name.");
+  }
+  for (const guide of [
+    "docs/BEGINNER_GUIDE.md",
+    "docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md",
+  ]) {
+    if (!readme.includes(guide)) errors.push(`README is missing beginner guide link: ${guide}`);
+  }
   for (const heading of [
     "## 界面预览",
     "## 一条命令部署",
@@ -302,6 +316,29 @@ if (existsSync(promptPath)) {
     if (!prompt.includes(requirement)) {
       errors.push(`Agent deployment prompt is missing one-pass workflow requirement: ${requirement}`);
     }
+  }
+}
+
+for (const [file, markers] of [
+  ["docs/BEGINNER_GUIDE.md", [
+    "```mermaid",
+    "screenshots/admin-dashboard.png",
+    "screenshots/webmail-login.png",
+    "什么才算部署完成",
+  ]],
+  ["docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md", [
+    "把域名托管到 Cloudflare",
+    "Compute → Email Service → Email Routing",
+    "Send to a Worker",
+    "```mermaid",
+    "developers.cloudflare.com",
+  ]],
+]) {
+  const path = resolve(repoRoot, file);
+  if (!existsSync(path)) continue;
+  const guide = readFileSync(path, "utf8");
+  for (const marker of markers) {
+    if (!guide.includes(marker)) errors.push(`${file} is missing required beginner-guide content: ${marker}`);
   }
 }
 

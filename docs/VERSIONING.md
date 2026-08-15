@@ -2,7 +2,7 @@
 
 ## 版本号
 
-Loven7 Mail Cloudflare Suite 使用 `MAJOR.MINOR.PATCH`：
+Loven7 Mail 使用 `MAJOR.MINOR.PATCH`：
 
 - `PATCH`：向后兼容的 Bug、安全和性能修复。
 - `MINOR`：向后兼容的新功能、新配置或 UI 能力。

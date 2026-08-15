@@ -1,9 +1,9 @@
 {
-  "name": "loven7-mail-cloudflare-suite",
+  "name": "loven7-mail",
   "private": true,
   "type": "module",
   "version": "0.4.0",
-  "description": "Enhanced admin and webmail frontends for Cloudflare Temp Mail / cloudflare_temp_email.",
+  "description": "Open-source, self-hosted Cloudflare email system with Worker, Admin, Webmail and a guided installer.",
   "scripts": {
     "setup": "node scripts/installer/cli.mjs",
     "setup:plan": "node scripts/installer/cli.mjs --plan",

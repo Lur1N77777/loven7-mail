@@ -14,7 +14,7 @@
 ## 可复制 Prompt
 
 ```text
-你是本次 Cloudflare Pages 部署执行者。目标是把 <REPOSITORY_URL> 中的 Loven7 Mail Cloudflare Suite 安全部署成两个独立 Pages 项目：
+你是本次 Cloudflare Pages 部署执行者。目标是把 <REPOSITORY_URL> 中的 Loven7 Mail 安全部署成两个独立 Pages 项目：
 
 - apps/admin：管理后台
 - apps/webmail：用户邮箱与分享站

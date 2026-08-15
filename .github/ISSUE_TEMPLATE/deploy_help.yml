@@ -1,35 +1,36 @@
-name: Deployment help
-description: Ask for help deploying to Cloudflare Pages.
-title: "[Deploy]: "
+name: 部署求助
+description: 安装 Loven7 Mail、连接 Cloudflare 或配置 Email Routing 时遇到问题。
+title: "[部署]: "
 labels: ["deployment"]
 body:
   - type: checkboxes
     id: checklist
     attributes:
-      label: Pre-check
+      label: 提交前确认
       options:
-        - label: I already have a Cloudflare Temp Mail / cloudflare_temp_email upstream Worker.
-        - label: I have read docs/DEPLOYMENT_QUICKSTART.md.
-        - label: I will not paste tokens, passwords, JWTs, secrets, private domains/project names, or real Cloudflare resource IDs.
+        - label: 我已经阅读 docs/BEGINNER_GUIDE.md，并按自己的域名状态选择了正确入口。
+        - label: 我已经核对 docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md 中的 Active、邮件 DNS 和 Catch-all 步骤。
+        - label: 我不会粘贴 Token、密码、JWT、Secret、私人域名、项目名或真实 Cloudflare 资源 ID。
   - type: dropdown
     id: deploy_mode
     attributes:
-      label: Deployment mode
+      label: 部署方式
       options:
-        - AI Agent automatic deployment
-        - Cloudflare Pages manual deployment
-        - GitHub Actions automatic deployment
+        - Windows 单文件安装器
+        - 下载或克隆源码后运行 npm run setup
+        - 已有兼容 Worker，只部署 Admin 和 Webmail
+        - GitHub Actions 自动部署
     validations:
       required: true
   - type: textarea
     id: problem
     attributes:
-      label: Where are you stuck?
-      description: Include the visible error message. Redact domains or secrets if needed.
+      label: 卡在哪一步？
+      description: 请写出当前步骤和可见错误；域名、账号、项目名与敏感信息必须脱敏。
     validations:
       required: true
   - type: textarea
     id: runtime
     attributes:
-      label: Runtime check result
-      description: Paste the redacted output of npm run check:cloudflare or /api/runtime if available.
+      label: 运行时检查结果
+      description: 如果有，请粘贴已脱敏的 npm run check:cloudflare、/api/runtime 或 Worker Logs 结果。

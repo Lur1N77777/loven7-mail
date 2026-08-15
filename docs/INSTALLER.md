@@ -1,6 +1,8 @@
 # 新手安装器
 
-新手安装器用于把 Loven7 Mail 的 Admin、Webmail、分享 KV 和邮件状态 KV 部署到 Cloudflare。它支持接入已有兼容 Worker，也支持从锁定的官方 `cloudflare_temp_email` `v1.10.0` 开始创建 Worker、D1 和前端。
+新手安装器用于把 Loven7 Mail 的 Admin、Webmail、分享 KV 和邮件状态 KV 部署到 Cloudflare。它支持接入已有兼容 Worker，也支持从 `deployment/upstream-lock.json` 指定并校验的兼容后端 `v1.10.0` 开始创建 Worker、D1 和前端。
+
+第一次部署请优先阅读 [Loven7 Mail 小白完整部署教程](BEGINNER_GUIDE.md)。如果域名还没有托管到 Cloudflare，或不知道如何设置 Catch-all，请先阅读 [Cloudflare 域名与邮箱路由教程](CLOUDFLARE_DOMAIN_AND_EMAIL.md)。
 
 ## 安装器会做什么
 
@@ -54,7 +56,7 @@ npm run setup
 - 已托管到当前 Cloudflare 账号的完整邮箱域名，例如 `mail.example.net`。多个域名用逗号分隔，第一个是默认域名。
 - Worker 管理员口令、首个管理员登录邮箱和登录密码，以及可选站点密码。
 
-安装器会自动克隆并校验官方 `v1.10.0`、创建 D1、远程执行 `db/schema.sql`，先部署一个缺少 JWT 时会拒绝业务请求的 Worker，再通过 Wrangler `secret bulk` 从标准输入写入 `JWT_SECRET`/`ADMIN_PASSWORDS`/`PASSWORDS`，不在磁盘写 Secret 文件。随后检查 `/health_check`，通过受 Worker 管理口令保护的 HTTPS API 创建首个用户、验证密码、赋予 `admin` 角色并验证管理员令牌，最后部署两个 Pages 应用。该流程不依赖上游默认关闭的公开用户注册。修复安装时会保留已有 `JWT_SECRET`，避免现有用户登录令牌失效；若同邮箱已存在，安装器不会覆盖其登录密码，密码不匹配时也不会修改角色。
+安装器会自动获取并校验锁定的兼容后端 `v1.10.0`、创建 D1、远程执行 `db/schema.sql`，先部署一个缺少 JWT 时会拒绝业务请求的 Worker，再通过 Wrangler `secret bulk` 从标准输入写入 `JWT_SECRET`/`ADMIN_PASSWORDS`/`PASSWORDS`，不在磁盘写 Secret 文件。随后检查 `/health_check`，通过受 Worker 管理口令保护的 HTTPS API 创建首个用户、验证密码、赋予 `admin` 角色并验证管理员令牌，最后部署两个 Pages 应用。该流程不依赖兼容后端默认关闭的公开用户注册。修复安装时会保留已有 `JWT_SECRET`，避免现有用户登录令牌失效；若同邮箱已存在，安装器不会覆盖其登录密码，密码不匹配时也不会修改角色。
 
 也可以显式选择模式：
 
@@ -96,7 +98,7 @@ node scripts/installer/cli.mjs --plan --new-worker --prefix my-mail --domains ma
 
 ## 安装完成后的验收
 
-自动探针通过表示应用基础设施完成，不表示邮箱已经能从公网收件。先按 [Email Routing 收件配置](EMAIL_ROUTING.md) 为每个域名启用 Email Routing、确认 MX/TXT，并将 Catch-all 设置为 **Send to a Worker**，选择安装器输出的 `<项目名前缀>-worker`。
+自动探针通过表示应用基础设施完成，不表示邮箱已经能从公网收件。先按 [Email Routing 收件配置](EMAIL_ROUTING.md) 为每个域名接入 Email Routing、确认 MX/SPF/DKIM，并将 Catch-all 设置为 **Send to a Worker**，选择安装器输出的 `<项目名前缀>-worker`。
 
 然后人工完成：
 

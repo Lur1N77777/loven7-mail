@@ -127,7 +127,7 @@ export function createInstallPlan({ prefix = 'loven7-mail', workerUrl = 'https:/
       '检查 Admin 代理链路和 Webmail /api/runtime',
     ],
     manual: [
-      '上游 Worker、D1 和 Email Routing 必须已经部署完成',
+      '兼容 Worker、D1 和 Email Routing 必须已经部署完成',
       '使用真实管理员账号完成登录验收',
       '从外部邮箱发送测试邮件，确认 Catch-all 路由能够收件',
       '如需发件，另行配置 Resend、SMTP 或 Cloudflare Send Email',
@@ -152,7 +152,7 @@ export function createUpstreamInstallPlan({ prefix = 'loven7-mail', domain = 'ex
     },
     steps: [
       '检查 Node.js、npm/npx 和 Wrangler OAuth 登录状态',
-      '下载锁定版本的官方 Worker 源码并安装依赖',
+      '下载锁定版本的兼容 Worker 源码并安装依赖',
       `创建 D1 数据库 ${databaseName} 并远程执行 schema.sql`,
       `生成 Worker ${workerName} 配置并安全写入 Secret`,
       `部署 Worker ${workerName}`,

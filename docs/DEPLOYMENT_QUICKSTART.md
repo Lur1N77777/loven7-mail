@@ -1,5 +1,7 @@
 # 部署速查
 
+第一次部署不要只看速查表，请按 [Loven7 Mail 小白完整部署教程](BEGINNER_GUIDE.md) 操作。域名还没有托管到 Cloudflare 时，先完成 [Cloudflare 域名与邮箱路由教程](CLOUDFLARE_DOMAIN_AND_EMAIL.md)。
+
 ## 新手首选：一条命令
 
 Windows 用户可以直接下载并双击 [Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)，不需要先克隆 GitHub 仓库。启动器会自动获取校验过的正式版本、准备 Node.js 22，并在从零部署时按需下载官方 MinGit 便携版，然后进入 Cloudflare OAuth 登录。已有 Worker 接入不要求 Git。
@@ -10,7 +12,7 @@ Windows 用户可以直接下载并双击 [Install-Loven7-Mail.cmd](https://gith
 npm run setup
 ```
 
-选择已有 Worker 时，安装器会接入它；选择没有 Worker 时，可以输入一个或多个邮箱域名（逗号分隔，第一个为默认域名），安装器会从锁定的官方 `v1.10.0` 创建 Worker、D1、首个管理员、两个 Pages 项目和两个 KV。密码不落盘，失败后可运行同一命令安全续装。
+选择已有 Worker 时，安装器会接入它；选择没有 Worker 时，可以输入一个或多个邮箱域名（逗号分隔，第一个为默认域名），安装器会从锁定并校验的兼容后端 `v1.10.0` 创建 Worker、D1、首个管理员、两个 Pages 项目和两个 KV。密码不落盘，失败后可运行同一命令安全续装。
 
 只预览资源和步骤：
 

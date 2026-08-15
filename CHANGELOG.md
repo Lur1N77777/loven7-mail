@@ -8,6 +8,9 @@
 
 - README 首屏改为“下载启动器 → Cloudflare 授权 → Email Routing → 真实收件验收”的新手路径，并补充部署前准备、能力边界和收件配置速查。
 - Release workflow 现在会为创建或更新的 Release 同步中文正文，明确下载入口、版本变更和安装后的 Email Routing 必做项。
+- 项目首页名称改为 `Loven7 Mail`，定位为开源、可自托管的 Cloudflare 邮箱系统，并明确部署后的运行资源完全位于用户自己的 Cloudflare 账号。
+- 新增从域名托管、名称服务器、Cloudflare OAuth、自动部署、Email Routing 到第一封真实邮件的小白完整教程，以及独立的 Cloudflare 域名与邮箱路由图文页面。
+- 教程按 Cloudflare 2026 年账号级 **Compute → Email Service → Email Routing** 入口更新，并补充 DNSSEC 切换、SPF/DKIM 与旧版控制台路径提示。
 
 ## [0.4.0] - 2026-08-13
 
