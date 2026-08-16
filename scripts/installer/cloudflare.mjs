@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { UPSTREAM_LOCK } from './upstream.mjs';
 
-export const WRANGLER_VERSION = '4.86.0';
 export const UPSTREAM_PNPM_VERSION = UPSTREAM_LOCK.workerPnpm;
 export const UPSTREAM_WRANGLER_VERSION = UPSTREAM_LOCK.workerWrangler;
+// Email Routing `addresses` and its OAuth scope are only available in the
+// pinned modern Wrangler. Keep every installer command on the same version.
+export const WRANGLER_VERSION = UPSTREAM_WRANGLER_VERSION;
 
 const WINDOWS_NODE_CLIS = {
   npm: ['node_modules', 'npm', 'bin', 'npm-cli.js'],
@@ -46,7 +48,17 @@ export class CommandError extends Error {
     super(message);
     this.name = 'CommandError';
     this.status = result?.status ?? 1;
+    this.stdout = String(result?.stdout || '');
+    this.stderr = String(result?.stderr || '');
+    this.output = [this.stdout, this.stderr].filter(Boolean).join('\n');
   }
+}
+
+export function isEmailRoutingConflictError(error) {
+  const output = [error?.message, error?.stdout, error?.stderr, error?.output]
+    .filter(Boolean)
+    .join('\n');
+  return /Email Routing has destructive changes|takeover conflict|邮件路由.*冲突|Catch-all.*冲突/i.test(output);
 }
 
 export class CommandRunner {
@@ -130,6 +142,18 @@ export class CloudflareAdapter {
 
   listD1Databases() {
     return parseJson(this.runner.upstreamWrangler(['d1', 'list', '--json'], { capture: true }), 'D1 database list');
+  }
+
+  checkEmailRoutingDomain(domain) {
+    return this.runner.upstreamWrangler(['email', 'routing', 'settings', domain], { capture: true });
+  }
+
+  enableEmailRouting(domain) {
+    return this.runner.upstreamWrangler(['email', 'routing', 'enable', domain], { capture: true });
+  }
+
+  getEmailRoutingRules(domain) {
+    return this.runner.upstreamWrangler(['email', 'routing', 'rules', 'list', domain], { capture: true });
   }
 
   workerExists(cwd, workerName) {
@@ -221,10 +245,10 @@ export class CloudflareAdapter {
     throw new Error(`Worker ${workerName} 已部署，但无法从 Wrangler 输出或部署元数据中确定公开地址。请在 Cloudflare Dashboard 查看地址后重新运行已有 Worker 模式。`);
   }
 
-  deployUpstreamWorker(cwd) {
-    return this.runner.run('npx', ['--yes', `pnpm@${UPSTREAM_PNPM_VERSION}`, 'exec', 'wrangler', 'deploy', '--minify', '--config', 'wrangler.toml'], {
+  deployUpstreamWorker(cwd, { interactive = false } = {}) {
+    return this.runner.upstreamWrangler(['deploy', '--minify', '--config', 'wrangler.toml'], {
       cwd: resolve(cwd, 'worker'),
-      capture: true,
+      capture: !interactive,
     });
   }
 

@@ -106,6 +106,7 @@ test('creates a locked upstream plan and worker config', () => {
   const config = renderUpstreamWorkerConfig({ ...plan.resources, domain: plan.domain, databaseId: 'db-id' });
   assert.match(config, /binding = "DB"/);
   assert.match(config, /workers_dev = true/);
+  assert.match(config, /^addresses = \["\*@mail\.example\.net"\]$/m);
   assert.match(config, /database_id = "db-id"/);
   assert.match(config, /USER_ROLES = \[\{ domains = \["mail\.example\.net"\], role = "admin", prefix = "" \}\]/);
   assert.doesNotMatch(config, /JWT_SECRET|ADMIN_PASSWORDS|PASSWORDS/);
@@ -121,7 +122,18 @@ test('keeps the first mail domain as default and renders every domain into the W
   const config = renderUpstreamWorkerConfig({ ...plan.resources, domains: plan.domains, databaseId: 'db-id' });
   assert.match(config, /DEFAULT_DOMAINS = \["primary\.example\.net", "backup\.example\.net"\]/);
   assert.match(config, /DOMAINS = \["primary\.example\.net", "backup\.example\.net"\]/);
+  assert.match(config, /^addresses = \["\*@primary\.example\.net", "\*@backup\.example\.net"\]$/m);
   assert.match(config, /USER_ROLES = \[\{ domains = \["primary\.example\.net", "backup\.example\.net"\]/);
+  assert.match(plan.steps.join('\n'), /自动启用 Email Routing/);
+  assert.match(plan.steps.join('\n'), /Catch-all/);
+  assert.doesNotMatch(plan.manual.join('\n'), /将 Catch-all 指向/);
+  const coreConfig = renderUpstreamWorkerConfig({
+    ...plan.resources,
+    domains: plan.domains,
+    databaseId: 'db-id',
+    includeEmailRouting: false,
+  });
+  assert.doesNotMatch(coreConfig, /^addresses\s*=/m);
 });
 
 test('keeps a validated managed Worker origin but redacts private Worker URLs and secrets', () => {
@@ -134,6 +146,8 @@ test('keeps a validated managed Worker origin but redacts private Worker URLs an
     databaseName: 'mail-db',
     databaseId: 'database-id',
     upstreamCommit: 'commit-id',
+    emailRoutingDomains: ['mail.example.net', 'second.example.net'],
+    emailRoutingWorker: 'mail-worker',
     workerUrl: 'https://mail-worker.example.workers.dev',
     managedWorkerOrigin: 'https://mail-worker.example.workers.dev/',
     jwtSecret: 'private',
@@ -147,6 +161,8 @@ test('keeps a validated managed Worker origin but redacts private Worker URLs an
     databaseName: 'mail-db',
     databaseId: 'database-id',
     upstreamCommit: 'commit-id',
+    emailRoutingDomains: ['mail.example.net', 'second.example.net'],
+    emailRoutingWorker: 'mail-worker',
     managedWorkerOrigin: 'https://mail-worker.example.workers.dev',
   });
   assert.deepEqual(redactInstallState({ managedWorkerOrigin: 'https://private.example.com' }), {});

@@ -99,4 +99,4 @@ npm run check:cloudflare:runtime
 3. 从对应版本的 `CHANGELOG.md` 提取更新内容，生成中文 Release 正文。
 4. 如果 Release 已存在，连同附件和正文一起更新，不会留下 `Source release for ...` 这类英文占位说明。
 
-Release 正文会明确说明：Windows 用户下载哪个文件、源码用户如何启动、安装器完成到哪一步，以及为什么还要手动配置 Email Routing 和真实收件测试。详细规则见 [版本策略](VERSIONING.md) 与 [脱敏检查](SECURITY_DESENSITIZATION.md)。
+Release 正文会明确说明：Windows 用户下载哪个文件、源码用户如何启动、全新 Worker 模式如何自动配置 Email Routing，以及为什么仍要完成真实收件测试。冲突或已有 Worker 模式的手动核验入口也会保留。详细规则见 [版本策略](VERSIONING.md) 与 [脱敏检查](SECURITY_DESENSITIZATION.md)。

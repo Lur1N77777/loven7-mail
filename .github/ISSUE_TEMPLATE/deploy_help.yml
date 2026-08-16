@@ -1,5 +1,5 @@
 name: 部署求助
-description: 安装 Loven7 Mail、连接 Cloudflare 或配置 Email Routing 时遇到问题。
+description: 安装 Loven7 Mail、连接 Cloudflare、自动 Email Routing 或真实收件时遇到问题。
 title: "[部署]: "
 labels: ["deployment"]
 body:
@@ -9,7 +9,7 @@ body:
       label: 提交前确认
       options:
         - label: 我已经阅读 docs/BEGINNER_GUIDE.md，并按自己的域名状态选择了正确入口。
-        - label: 我已经核对 docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md 中的 Active、邮件 DNS 和 Catch-all 步骤。
+        - label: 我已经核对域名为 Active，并按 docs/EMAIL_ROUTING.md 检查自动路由结果、邮件 DNS 和 Catch-all。
         - label: 我不会粘贴 Token、密码、JWT、Secret、私人域名、项目名或真实 Cloudflare 资源 ID。
   - type: dropdown
     id: deploy_mode

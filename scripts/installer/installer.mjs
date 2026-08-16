@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isEmailRoutingConflictError } from './cloudflare.mjs';
 import { createInstallPlan, projectOrigin, renderPagesConfig } from './domain.mjs';
 import { createUpstreamInstallPlan, renderUpstreamWorkerConfig, validateAdminEmail, validateMailDomains, validateManagedWorkerOrigin } from './domain.mjs';
 import { readState, writeState } from './state.mjs';
@@ -31,6 +32,14 @@ function stateDomains(state) {
 
 function sameDomains(left, right) {
   return left.length === right.length && left.every((domain, index) => domain === right[index]);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripAnsi(value) {
+  return String(value || '').replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
 }
 
 function probeFailure(error, label) {
@@ -182,6 +191,91 @@ export class Installer {
     return account;
   }
 
+  async verifyEmailRoutingDomains(domains) {
+    this.ui.step('核对邮箱域名归属');
+    for (const domain of domains) {
+      try {
+        if (typeof this.cloudflare.checkEmailRoutingDomain === 'function') {
+          try {
+            this.cloudflare.checkEmailRoutingDomain(domain);
+          } catch (error) {
+            const detail = String(error?.message || error);
+            if (!/403|401|unauthori[sz]ed|authentication|permission|scope|code\s*10000/i.test(detail) || typeof this.cloudflare.login !== 'function') throw error;
+            this.ui.info('当前 Wrangler 授权缺少 Email Routing 权限，正在重新打开 Cloudflare 官方授权页面。');
+            this.cloudflare.login();
+            this.cloudflare.checkEmailRoutingDomain(domain);
+          }
+        }
+        this.ui.info(`已确认域名可用于当前 Cloudflare 账号：${domain}`);
+      } catch (error) {
+        throw new Error(
+          `域名 ${domain} 无法在当前 Cloudflare 账号启用 Email Routing。请确认它已托管到此账号且状态为 Active，再重新运行。${error instanceof Error ? ` 原因：${error.message}` : ''}`,
+          { cause: error },
+        );
+      }
+    }
+  }
+
+  async obtainEmailRoutingConsent(domains, input) {
+    if (input.emailRoutingConsent === true) return;
+    const confirmed = await this.ui.confirm(
+      `即将为 ${domains.join('、')} 接管邮件接收：启用 Email Routing、更新必要 MX，并把 Catch-all 交给安装器 Worker。已有邮件服务可能中断，是否继续？`,
+      false,
+    );
+    if (!confirmed) throw new Error('未授权安装器配置 Email Routing。未修改邮件 MX，也未创建部署资源。');
+  }
+
+  async enableEmailRouting(domains) {
+    this.ui.step('启用 Cloudflare Email Routing');
+    for (const domain of domains) {
+      try {
+        if (typeof this.cloudflare.enableEmailRouting === 'function') {
+          this.cloudflare.enableEmailRouting(domain);
+        }
+        this.ui.info(`Email Routing 已启用：${domain}`);
+      } catch (error) {
+        throw new Error(
+          `域名 ${domain} 的 Email Routing 启用失败。核心 Worker 不受影响，安装器没有继续接管邮件；请检查域名 Active 状态和现有 MX 后重试。${error instanceof Error ? ` 原因：${error.message}` : ''}`,
+          { cause: error },
+        );
+      }
+    }
+  }
+
+  async verifyEmailRoutingBindings(domains, workerName) {
+    if (typeof this.cloudflare.getEmailRoutingRules !== 'function') return;
+    this.ui.step('在线核验 Email Routing Catch-all');
+    const expected = new RegExp(
+      `Catch-all rule:\\s*enabled,\\s*action:\\s*worker:${escapeRegExp(workerName)}(?:\\s|,|$)`,
+      'i',
+    );
+    for (const domain of domains) {
+      const output = stripAnsi(this.cloudflare.getEmailRoutingRules(domain));
+      if (!expected.test(output)) {
+        throw new Error(
+          `域名 ${domain} 的 Catch-all 在线验收失败：没有确认它已启用并指向 ${workerName}。请打开 Cloudflare Email Routing 核对规则后重试。`,
+        );
+      }
+      this.ui.info(`Catch-all 已确认：${domain} → ${workerName}`);
+    }
+  }
+
+  async deployWorkerWithRouting(upstreamDir, workerName) {
+    try {
+      return this.cloudflare.deployUpstreamWorker(upstreamDir, { routing: true });
+    } catch (error) {
+      if (!isEmailRoutingConflictError(error)) throw error;
+      const confirmed = await this.ui.confirm(
+        `检测到 ${workerName} 的 Email Routing 已有 Catch-all 或其他规则。继续会接管这些冲突规则，是否确认？`,
+        false,
+      );
+      if (!confirmed) throw new Error('未确认接管已有 Catch-all。Worker 可能已上传，但邮件路由没有被修改；重新运行时可再次确认。', { cause: error });
+      this.ui.info('已确认接管冲突规则，正在以交互方式重试 Email Routing 部署；请在 Wrangler 提示中再次确认。');
+      const retryOutput = this.cloudflare.deployUpstreamWorker(upstreamDir, { routing: true, interactive: true });
+      return [error?.output, error?.stdout, error?.stderr, error?.message, retryOutput].filter(Boolean).join('\n');
+    }
+  }
+
   async ensureProject(name, existingState) {
     const projects = this.cloudflare.listProjects();
     const existing = findProject(projects, name);
@@ -223,7 +317,7 @@ export class Installer {
     return this.cloudflare.createKvNamespace(title);
   }
 
-  async reuseVerifiedWorker({ previous, plan, input }) {
+  async reuseVerifiedWorker({ previous, plan, input, requireEmailRouting = true }) {
     if (
       previous?.workerDeploymentConfirmed !== true
       || previous?.workerProject !== plan.resources.workerName
@@ -288,6 +382,9 @@ export class Installer {
       this.ui.info(`已保存的 Worker 域名配置未通过验收，将重新部署修复：${error instanceof Error ? error.message : error}`);
       return null;
     }
+    if (requireEmailRouting) {
+      await this.verifyEmailRoutingBindings(plan.domains, plan.resources.workerName);
+    }
     await this.bootstrapAdminUser({
       workerUrl,
       adminPassword: input.adminPassword,
@@ -295,7 +392,9 @@ export class Installer {
       password: input.adminUserPassword,
       sitePassword: input.sitePassword,
     });
-    this.ui.info(`复用已验证的 Worker：${plan.resources.workerName}；不会覆盖后来手工增加的发件或其他 binding。`);
+    this.ui.info(requireEmailRouting
+      ? `复用已验证的 Worker：${plan.resources.workerName}；不会覆盖后来手工增加的发件或其他 binding。`
+      : `核心 Worker ${plan.resources.workerName} 已重新验收，将从 Email Routing 阶段继续。`);
     return {
       workerUrl,
       database: {
@@ -428,10 +527,11 @@ export class Installer {
     return { state, runtime, plan };
   }
 
-  async runNewWorker(input) {
+  async runNewWorker(input, { authenticatedAccount } = {}) {
     const plan = createUpstreamInstallPlan(input);
     const saved = readState(this.rootDir);
-    const account = await this.ensureAuthentication();
+    const account = authenticatedAccount || await this.ensureAuthentication();
+    if (authenticatedAccount) this.cloudflare.useAccount(account.id);
     const previous = saved?.accountId === account.id && saved?.prefix === plan.resources.prefix ? saved : null;
     const previousDomains = stateDomains(previous);
     if (previousDomains.length && !sameDomains(previousDomains, plan.domains)) {
@@ -448,6 +548,15 @@ export class Installer {
       );
       if (!confirmed) throw new Error('未确认升级现有 Worker。请保留原锁定版本或换一个项目名称前缀后重试。');
     }
+    await this.verifyEmailRoutingDomains(plan.domains);
+    await this.obtainEmailRoutingConsent(plan.domains, input);
+    const sameCheckpointPlan = Boolean(previous)
+      && sameDomains(previousDomains, plan.domains)
+      && previous?.upstreamCommit === plan.upstream.commit;
+    const previousRoutingDomains = stateDomains({ domains: previous?.emailRoutingDomains });
+    const keepRoutingCheckpoint = sameCheckpointPlan
+      && sameDomains(previousRoutingDomains, plan.domains)
+      && previous?.emailRoutingWorker === plan.resources.workerName;
     let state = writeState(this.rootDir, {
       ...previous,
       accountId: account.id,
@@ -455,10 +564,21 @@ export class Installer {
       installMode: 'new-worker',
       domain: plan.domain,
       domains: plan.domains,
-      phase: 'authenticated',
+      ...(keepRoutingCheckpoint ? {} : { emailRoutingDomains: undefined, emailRoutingWorker: undefined }),
+      ...(!sameCheckpointPlan ? {
+        workerProject: undefined,
+        workerDeploymentConfirmed: undefined,
+        managedWorkerOrigin: undefined,
+      } : {}),
+      phase: sameCheckpointPlan && previous?.phase ? previous.phase : 'authenticated',
     });
 
-    const reusableWorker = await this.reuseVerifiedWorker({ previous, plan, input });
+    const coreResumePhases = ['worker-core-ready', 'email-routing-ready'];
+    const reusableWorker = sameCheckpointPlan
+      && !coreResumePhases.includes(previous?.phase)
+      && (['worker-ready', 'complete'].includes(previous?.phase) || keepRoutingCheckpoint)
+      ? await this.reuseVerifiedWorker({ previous, plan, input })
+      : null;
     if (reusableWorker) {
       const frontendResult = await this.run(
         { ...input, workerUrl: reusableWorker.workerUrl },
@@ -472,6 +592,8 @@ export class Installer {
           domains: plan.domains,
           workerProject: plan.resources.workerName,
           workerDeploymentConfirmed: true,
+          emailRoutingDomains: plan.domains,
+          emailRoutingWorker: plan.resources.workerName,
           databaseName: reusableWorker.database.name,
           databaseId: reusableWorker.database.id,
           upstreamCommit: plan.upstream.commit,
@@ -480,6 +602,10 @@ export class Installer {
         plan,
       };
     }
+
+    const resumableCore = sameCheckpointPlan && coreResumePhases.includes(previous?.phase)
+      ? await this.reuseVerifiedWorker({ previous, plan, input, requireEmailRouting: false })
+      : null;
 
     const scratch = mkdtempSync(join(this.rootDir, '.loven7-installer-'));
     const upstreamDir = join(scratch, 'upstream');
@@ -492,75 +618,128 @@ export class Installer {
       });
       if (commit !== plan.upstream.commit) throw new Error(`兼容 Worker 版本校验失败：期望 ${plan.upstream.commit}，实际 ${commit}。`);
       this.cloudflare.installUpstreamDependencies(upstreamDir);
-      state = writeState(this.rootDir, { ...state, upstreamCommit: commit, phase: 'upstream-ready' });
-
-      this.ui.step('创建或复用 D1 并初始化数据库');
-      const database = await this.ensureD1(plan.resources.databaseName, {
-        knownId: previous?.databaseId,
-        knownName: previous?.databaseName,
+      state = writeState(this.rootDir, {
+        ...state,
+        upstreamCommit: commit,
+        phase: resumableCore ? previous.phase : 'upstream-ready',
       });
-      this.cloudflare.executeD1Schema(database.name, join(upstreamDir, 'db', 'schema.sql'), upstreamDir);
-      state = writeState(this.rootDir, { ...state, databaseName: database.name, databaseId: database.id, phase: 'database-ready' });
 
-      this.ui.step('配置并部署兼容 Worker');
+      let database;
+      let workerUrl;
+      let managedWorkerOrigin;
+
+      if (resumableCore) {
+        database = resumableCore.database;
+        workerUrl = resumableCore.workerUrl;
+        managedWorkerOrigin = validateManagedWorkerOrigin(workerUrl);
+        state = writeState(this.rootDir, {
+          ...state,
+          workerProject: plan.resources.workerName,
+          workerDeploymentConfirmed: true,
+          databaseName: database.name,
+          databaseId: database.id,
+          managedWorkerOrigin,
+          phase: previous.phase,
+        });
+      } else {
+        this.ui.step('创建或复用 D1 并初始化数据库');
+        database = await this.ensureD1(plan.resources.databaseName, {
+          knownId: previous?.databaseId,
+          knownName: previous?.databaseName,
+        });
+        this.cloudflare.executeD1Schema(database.name, join(upstreamDir, 'db', 'schema.sql'), upstreamDir);
+        state = writeState(this.rootDir, { ...state, databaseName: database.name, databaseId: database.id, phase: 'database-ready' });
+
+        this.ui.step('部署不接管邮件的核心 Worker');
+        this.cloudflare.writeUpstreamConfig(upstreamDir, renderUpstreamWorkerConfig({
+          workerName: plan.resources.workerName,
+          domains: plan.domains,
+          databaseName: database.name,
+          databaseId: database.id,
+          includeEmailRouting: false,
+        }));
+        const workerExists = typeof this.cloudflare.workerExists === 'function'
+          ? this.cloudflare.workerExists(upstreamDir, plan.resources.workerName)
+          : false;
+        const knownWorker = previous?.workerProject === plan.resources.workerName
+          && previous?.workerDeploymentConfirmed === true;
+        if (workerExists && !knownWorker && !await this.ui.confirm(`Worker ${plan.resources.workerName} 已存在，继续会更新它，是否复用？`, false)) {
+          throw new Error(`未复用已有 Worker ${plan.resources.workerName}。请换一个项目名称前缀后重试。`);
+        }
+        const existingWorkerSecrets = typeof this.cloudflare.listWorkerSecrets === 'function'
+          ? this.cloudflare.listWorkerSecrets(upstreamDir, plan.resources.workerName)
+          : new Set();
+        if (existingWorkerSecrets.has('PASSWORDS') && !input.sitePassword) {
+          throw new Error('现有 Worker 已配置站点密码。为安全续装，请重新运行并输入当前 Worker 站点密码；安装器不会读取、移除或猜测现有 PASSWORDS Secret。');
+        }
+        const secrets = {
+          ADMIN_PASSWORDS: JSON.stringify([input.adminPassword]),
+        };
+        if (!existingWorkerSecrets.has('JWT_SECRET')) secrets.JWT_SECRET = randomBytes(32).toString('hex');
+        if (input.sitePassword) secrets.PASSWORDS = JSON.stringify([input.sitePassword]);
+
+        const deployOutput = this.cloudflare.deployUpstreamWorker(upstreamDir);
+        this.cloudflare.putWorkerSecrets(upstreamDir, plan.resources.workerName, secrets);
+        workerUrl = typeof this.cloudflare.getWorkerUrl === 'function'
+          ? this.cloudflare.getWorkerUrl(plan.resources.workerName, deployOutput)
+          : extractWorkerUrl(deployOutput, plan.resources.workerName);
+        await this.verifyWorkerAccess({
+          workerUrl,
+          adminPassword: input.adminPassword,
+          sitePassword: input.sitePassword,
+        });
+        await this.verifyManagedWorkerDomains({
+          workerUrl,
+          adminPassword: input.adminPassword,
+          sitePassword: input.sitePassword,
+          domains: plan.domains,
+        });
+        await this.bootstrapAdminUser({
+          workerUrl,
+          adminPassword: input.adminPassword,
+          email: input.adminEmail,
+          password: input.adminUserPassword,
+          sitePassword: input.sitePassword,
+        });
+        managedWorkerOrigin = validateManagedWorkerOrigin(workerUrl);
+        state = writeState(this.rootDir, {
+          ...state,
+          workerProject: plan.resources.workerName,
+          workerDeploymentConfirmed: true,
+          managedWorkerOrigin,
+          phase: 'worker-core-ready',
+        });
+        this.ui.info(`核心 Worker 已验收：${workerUrl}；尚未修改邮件 MX 或 Catch-all。`);
+      }
+
+      if (!(resumableCore && previous?.phase === 'email-routing-ready')) {
+        await this.enableEmailRouting(plan.domains);
+        state = writeState(this.rootDir, { ...state, phase: 'email-routing-ready' });
+      } else {
+        this.ui.info('断点显示 Email Routing 已启用，将直接继续应用 Catch-all。');
+      }
+
+      this.ui.step('应用并核验 Email Routing Catch-all');
       this.cloudflare.writeUpstreamConfig(upstreamDir, renderUpstreamWorkerConfig({
         workerName: plan.resources.workerName,
         domains: plan.domains,
         databaseName: database.name,
         databaseId: database.id,
+        includeEmailRouting: true,
       }));
-      const workerExists = typeof this.cloudflare.workerExists === 'function'
-        ? this.cloudflare.workerExists(upstreamDir, plan.resources.workerName)
-        : false;
-      const knownWorker = previous?.workerProject === plan.resources.workerName
-        && previous?.workerDeploymentConfirmed === true;
-      if (workerExists && !knownWorker && !await this.ui.confirm(`Worker ${plan.resources.workerName} 已存在，继续会更新它，是否复用？`, false)) {
-        throw new Error(`未复用已有 Worker ${plan.resources.workerName}。请换一个项目名称前缀后重试。`);
-      }
-      const existingWorkerSecrets = typeof this.cloudflare.listWorkerSecrets === 'function'
-        ? this.cloudflare.listWorkerSecrets(upstreamDir, plan.resources.workerName)
-        : new Set();
-      if (existingWorkerSecrets.has('PASSWORDS') && !input.sitePassword) {
-        throw new Error('现有 Worker 已配置站点密码。为安全续装，请重新运行并输入当前 Worker 站点密码；安装器不会读取、移除或猜测现有 PASSWORDS Secret。');
-      }
-      const secrets = {
-        ADMIN_PASSWORDS: JSON.stringify([input.adminPassword]),
-      };
-      if (!existingWorkerSecrets.has('JWT_SECRET')) secrets.JWT_SECRET = randomBytes(32).toString('hex');
-      if (input.sitePassword) secrets.PASSWORDS = JSON.stringify([input.sitePassword]);
-      const deployOutput = this.cloudflare.deployUpstreamWorker(upstreamDir);
+      await this.deployWorkerWithRouting(upstreamDir, plan.resources.workerName);
+      await this.verifyEmailRoutingBindings(plan.domains, plan.resources.workerName);
       state = writeState(this.rootDir, {
         ...state,
         workerProject: plan.resources.workerName,
         workerDeploymentConfirmed: true,
-        phase: 'worker-deployed',
+        emailRoutingDomains: plan.domains,
+        emailRoutingWorker: plan.resources.workerName,
+        managedWorkerOrigin,
+        phase: 'worker-ready',
       });
-      this.cloudflare.putWorkerSecrets(upstreamDir, plan.resources.workerName, secrets);
-      const workerUrl = typeof this.cloudflare.getWorkerUrl === 'function'
-        ? this.cloudflare.getWorkerUrl(plan.resources.workerName, deployOutput)
-        : extractWorkerUrl(deployOutput, plan.resources.workerName);
-      await this.verifyWorkerAccess({
-        workerUrl,
-        adminPassword: input.adminPassword,
-        sitePassword: input.sitePassword,
-      });
-      await this.verifyManagedWorkerDomains({
-        workerUrl,
-        adminPassword: input.adminPassword,
-        sitePassword: input.sitePassword,
-        domains: plan.domains,
-      });
-      await this.bootstrapAdminUser({
-        workerUrl,
-        adminPassword: input.adminPassword,
-        email: input.adminEmail,
-        password: input.adminUserPassword,
-        sitePassword: input.sitePassword,
-      });
-      const managedWorkerOrigin = validateManagedWorkerOrigin(workerUrl);
-      state = writeState(this.rootDir, { ...state, managedWorkerOrigin, phase: 'worker-ready' });
 
-      this.ui.info(`兼容 Worker 已部署：${workerUrl}`);
+      this.ui.info(`Worker 与 Email Routing 已完成在线验收：${workerUrl}`);
       const frontendResult = await this.run(
         { ...input, workerUrl },
         { authenticatedAccount: account, workerVerified: true, installMode: 'new-worker' },
@@ -575,6 +754,9 @@ export class Installer {
           databaseName: database.name,
           databaseId: database.id,
           workerProject: plan.resources.workerName,
+          workerDeploymentConfirmed: true,
+          emailRoutingDomains: plan.domains,
+          emailRoutingWorker: plan.resources.workerName,
           upstreamCommit: commit,
           phase: 'complete',
         }),

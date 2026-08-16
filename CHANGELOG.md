@@ -4,6 +4,36 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-16
+
+### Added
+
+- 全新 Worker 安装现在会在 Cloudflare OAuth 和账号选择后再询问邮箱域名，逐域名核验归属与 Active 状态，并自动启用 Email Routing。
+- Worker 配置使用锁定版 Wrangler `4.116.0` 的 `addresses` 能力，将每个 `*@域名` Catch-all 自动绑定到安装器创建的 Worker。
+
+### Changed
+
+- 全新安装改为两阶段 Worker 部署：先用不含 `addresses` 的配置部署并验收核心 Worker，取得 `workers.dev` 地址后才启用 Email Routing，再通过第二次声明式部署应用 Catch-all。
+- 新手流程不再要求用户部署完成后手工寻找 Worker 并配置 Catch-all；正常完成后只需登录 Admin 并发送真实外部测试邮件。
+- 安装模式第一问改为“是否从零部署完整邮箱系统”，默认选择完整新安装，避免新手一路回车误入已有 Worker 高级模式。
+- README、Release 中文说明和部署教程改为“OAuth → 选择 Active 域名 → 自动部署与邮件路由 → 真实验收”，并解释 Email Routing 绑定 Worker 名称而非 `workers.dev` URL。
+
+### Security
+
+- D1、Worker Secret、健康状态、域名配置和首个管理员会在任何 MX/Catch-all 变更之前完成验收；核心阶段失败不会接管邮件。
+- 启用邮件路由和修改必要 MX 前必须得到明确确认；检测到已有 Catch-all、删除或接管冲突时，安装器停止并要求中文确认，再交由 Wrangler 展示变更计划，不会静默覆盖现有邮件服务。
+
+### Fixed
+
+- Windows PowerShell 引导脚本现在通过 npm 的 `--` 分隔符正确透传 `--new-worker`、`--plan` 等安装器参数。
+- Windows 单文件启动器会在系统缺少 Git 时统一准备官方 MinGit，修复双击后临时选择“从零部署”却无法克隆锁定 Worker 源码的问题。
+
+### Compatibility
+
+- 新安装器继续锁定兼容 Worker `v1.10.0`、提交 `116ddc732431afd6f4154a74669804473b373baa`，并统一使用 Wrangler `4.116.0`。
+- 本版本不新增 Pages 变量、Secret、KV binding 或数据格式迁移；已经完成部署的 `v0.4.1` 用户无需重建资源。
+- 只有重新运行全新 Worker 安装流程时才会进入自动 Email Routing；任何 MX/Catch-all 变更仍需明确授权，旧版安装器可回退但不会自动撤销已经确认的 Cloudflare 路由变更。
+
 ## [0.4.1] - 2026-08-16
 
 ### Changed
@@ -103,7 +133,8 @@
 - Loven7 Mail Admin 与 Webmail 双应用结构。
 - Cloudflare Pages Functions、分享 KV、PWA 和基础 CI/发布脚本。
 
-[Unreleased]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Lur1N77777/loven7-mail/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.2.0...v0.3.0

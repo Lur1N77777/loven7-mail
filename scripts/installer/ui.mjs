@@ -39,7 +39,7 @@ export class ConsoleUi {
   }
 
   async mode() {
-    return (await this.confirm('是否已经有兼容的邮件 Worker？选择“否”将自动部署锁定的兼容 Worker v1.10.0。', true)) ? 'existing-worker' : 'new-worker';
+    return (await this.confirm('是否从零部署完整邮箱系统？已有兼容邮件 Worker 的高级用户请选择“否”。', true)) ? 'new-worker' : 'existing-worker';
   }
 
   async secret(label, { optional = false } = {}) {

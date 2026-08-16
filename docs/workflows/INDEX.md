@@ -1,9 +1,10 @@
 # 开发工作流索引
 
-最后更新：2026-08-12
+最后更新：2026-08-16
 
 ## 反思报告
 
+- [2026-08-16：把新手安装器改造成两阶段自动 Email Routing](2026-08/16_reflection_feature_automatic-email-routing.md)
 - [2026-08-12：为新手建立可续装的一条命令 Cloudflare 安装器](2026-08/12_reflection_feature_newcomer-installer.md)
 - [2026-08-12：重构 Admin 邮件基础架构并收紧发布门禁](2026-08/12_reflection_refactor_admin-mail-foundation.md)
 - [2026-07-28：修复沙箱邮件中的本地品牌图片](2026-07/28_reflection_bugfix_sandboxed-mail-assets.md)
@@ -20,7 +21,7 @@
 
 ## 统计
 
-- 报告总数：13
+- 报告总数：14
 - Bugfix：9
 - Refactor：2
-- Feature：2
+- Feature：3

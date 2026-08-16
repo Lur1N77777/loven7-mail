@@ -17,7 +17,9 @@ class FakeUi {
   step(message) { this.messages.push(message); }
   async confirm(message) {
     this.confirmations.push(message);
-    return typeof this.confirmResult === 'function' ? this.confirmResult(message) : this.confirmResult;
+    if (typeof this.confirmResult === 'function') return this.confirmResult(message);
+    if (message.includes('接管邮件接收')) return true;
+    return this.confirmResult;
   }
   async select(_label, items) { return items[0]; }
 }
@@ -34,6 +36,7 @@ class FakeCloudflare {
     this.existingSiteSecret = existingSiteSecret;
     this.upstreamSecrets = [];
     this.upstreamConfig = '';
+    this.upstreamConfigs = [];
     this.upstreamDeploys = 0;
     this.existingWorkerSecrets = new Set();
     this.hasExistingWorker = false;
@@ -43,11 +46,17 @@ class FakeCloudflare {
     this.whoamiCalls = 0;
     this.cloneCalls = 0;
     this.workerUrlCalls = 0;
+    this.loginCalls = 0;
+    this.emailRoutingChecks = [];
+    this.emailRoutingEnables = [];
+    this.emailRoutingRuleChecks = [];
+    this.events = [];
   }
   whoami() {
     this.whoamiCalls += 1;
     return { loggedIn: true, accounts: [{ id: 'account-test', name: 'Test Account' }] };
   }
+  login() { this.loginCalls += 1; }
   useAccount(id) { this.accountId = id; }
   listProjects() { return this.projects; }
   createProject(name) { this.projects.push({ 'Project Name': name, 'Project Domains': `${name}.example.pages.dev` }); }
@@ -74,14 +83,34 @@ class FakeCloudflare {
   }
   installUpstreamDependencies() {}
   executeD1Schema(databaseName, schemaPath, cwd) { this.schemaExecutions.push({ databaseName, schemaPath, cwd }); }
-  writeUpstreamConfig(_cwd, config) { this.upstreamConfig = config; }
+  checkEmailRoutingDomain(domain) {
+    this.emailRoutingChecks.push(domain);
+    this.events.push(`routing-check:${domain}`);
+  }
+  enableEmailRouting(domain) {
+    this.emailRoutingEnables.push(domain);
+    this.events.push(`routing-enable:${domain}`);
+  }
+  getEmailRoutingRules(domain) {
+    this.emailRoutingRuleChecks.push(domain);
+    return 'Catch-all rule: enabled, action: worker:test-mail-worker';
+  }
+  writeUpstreamConfig(_cwd, config) {
+    this.upstreamConfig = config;
+    this.upstreamConfigs.push(config);
+  }
   listWorkerSecrets() { return this.existingWorkerSecrets; }
   listWorkerSecretsByName() { return this.existingWorkerSecrets; }
   workerExists() { return this.hasExistingWorker; }
   workerExistsByName() { return this.hasExistingWorker; }
   putWorkerSecrets(_cwd, _workerName, secrets) { this.upstreamSecrets.push(secrets); }
-  deployUpstreamWorker() {
+  deployUpstreamWorker(_cwd, options = {}) {
     this.upstreamDeploys += 1;
+    this.events.push(options.interactive
+      ? 'worker-deploy:routing-interactive'
+      : options.routing
+        ? 'worker-deploy:routing'
+        : 'worker-deploy:core');
     return 'Published https://mail-worker.example.workers.dev';
   }
   getWorkerUrl() {
@@ -134,6 +163,21 @@ function successfulFetch(url) {
   }
   return Promise.resolve(new Response('<html>Admin</html>', { status: 200 }));
 }
+
+test('reauthorizes Cloudflare once when the saved OAuth session lacks Email Routing scope', async () => {
+  const cloudflare = new FakeCloudflare();
+  let checks = 0;
+  cloudflare.checkEmailRoutingDomain = (domain) => {
+    checks += 1;
+    if (checks === 1) throw new Error(`403 permission denied for ${domain}`);
+    cloudflare.emailRoutingChecks.push(domain);
+  };
+  const installer = new Installer({ rootDir: 'unused', cloudflare, ui: new FakeUi() });
+  await installer.verifyEmailRoutingDomains(['mail.example.net']);
+  assert.equal(cloudflare.loginCalls, 1);
+  assert.equal(checks, 2);
+  assert.deepEqual(cloudflare.emailRoutingChecks, ['mail.example.net']);
+});
 
 test('runs a fresh existing-worker install without persisting input secrets', async () => {
   const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
@@ -352,9 +396,22 @@ test('runs a new-worker install with locked upstream and cleans scratch files', 
       sitePassword: 'site-private',
     });
     assert.equal(result.state.phase, 'complete');
-    assert.equal(cloudflare.upstreamDeploys, 1);
+    assert.equal(cloudflare.upstreamDeploys, 2);
     assert.equal(cloudflare.whoamiCalls, 1);
+    assert.deepEqual(cloudflare.emailRoutingChecks, ['mail.example.net']);
+    assert.deepEqual(cloudflare.emailRoutingEnables, ['mail.example.net']);
+    assert.deepEqual(cloudflare.emailRoutingRuleChecks, ['mail.example.net']);
+    assert.deepEqual(cloudflare.events.slice(0, 4), [
+      'routing-check:mail.example.net',
+      'worker-deploy:core',
+      'routing-enable:mail.example.net',
+      'worker-deploy:routing',
+    ]);
+    assert.doesNotMatch(cloudflare.upstreamConfigs[0], /^addresses\s*=/m);
     assert.match(cloudflare.upstreamConfig, /binding = "DB"/);
+    assert.match(cloudflare.upstreamConfig, /^addresses = \["\*@mail\.example\.net"\]$/m);
+    assert.deepEqual(result.state.emailRoutingDomains, ['mail.example.net']);
+    assert.equal(result.state.emailRoutingWorker, 'test-mail-worker');
     assert.deepEqual(Object.keys(cloudflare.upstreamSecrets[0]).sort(), ['ADMIN_PASSWORDS', 'JWT_SECRET', 'PASSWORDS']);
     assert.equal(readdirSync(rootDir).filter((name) => name.startsWith('.loven7-installer-')).length, 0);
   } finally {
@@ -382,7 +439,100 @@ test('deploys every configured mail domain and persists the ordered list', async
     });
     assert.equal(result.state.domain, 'primary.example.net');
     assert.deepEqual(result.state.domains, ['primary.example.net', 'second.example.net']);
+    assert.deepEqual(cloudflare.emailRoutingChecks, ['primary.example.net', 'second.example.net']);
+    assert.deepEqual(cloudflare.emailRoutingEnables, ['primary.example.net', 'second.example.net']);
+    assert.deepEqual(cloudflare.emailRoutingRuleChecks, ['primary.example.net', 'second.example.net']);
     assert.match(cloudflare.upstreamConfig, /DOMAINS = \["primary\.example\.net", "second\.example\.net"\]/);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('does not change MX or create resources until Email Routing takeover is approved', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  const ui = new FakeUi({ confirm: (message) => !message.includes('接管邮件接收') });
+  try {
+    await assert.rejects(
+      () => new Installer({ rootDir, cloudflare, ui }).runNewWorker({
+        prefix: 'test-mail',
+        domain: 'mail.example.net',
+        adminPassword: 'admin-private',
+        adminEmail: 'owner@example.net',
+        adminUserPassword: 'owner-private',
+      }),
+      /未授权安装器配置 Email Routing/,
+    );
+    assert.deepEqual(cloudflare.emailRoutingChecks, ['mail.example.net']);
+    assert.equal(cloudflare.emailRoutingEnables.length, 0);
+    assert.equal(cloudflare.cloneCalls, 0);
+    assert.equal(cloudflare.d1Creates.length, 0);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('requires explicit consent before interactively taking over an existing Catch-all', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  let attempts = 0;
+  cloudflare.deployUpstreamWorker = (_cwd, options = {}) => {
+    attempts += 1;
+    cloudflare.upstreamDeploys += 1;
+    cloudflare.events.push(options.interactive
+      ? 'worker-deploy:routing-interactive'
+      : options.routing
+        ? 'worker-deploy:routing'
+        : 'worker-deploy:core');
+    if (options.routing && !options.interactive) {
+      const error = new Error('Worker 已上传，但邮件路由存在冲突。');
+      error.stdout = 'The Worker is deployed, but Email Routing has destructive changes (deletes or takeover conflicts) that need confirmation. Published https://mail-worker.example.workers.dev';
+      throw error;
+    }
+    return '';
+  };
+  globalThis.fetch = successfulFetch;
+  const ui = new FakeUi({ confirm: (message) => message.includes('接管邮件接收') || message.includes('已有 Catch-all') });
+  try {
+    const result = await new Installer({ rootDir, cloudflare, ui }).runNewWorker({
+      prefix: 'test-mail',
+      domain: 'mail.example.net',
+      adminPassword: 'admin-private',
+      adminEmail: 'owner@example.net',
+      adminUserPassword: 'owner-private',
+    });
+    assert.equal(result.state.phase, 'complete');
+    assert.equal(attempts, 3);
+    assert.deepEqual(cloudflare.events, [
+      'routing-check:mail.example.net',
+      'worker-deploy:core',
+      'routing-enable:mail.example.net',
+      'worker-deploy:routing',
+      'worker-deploy:routing-interactive',
+    ]);
+    assert(ui.confirmations.some((message) => message.includes('已有 Catch-all')));
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('stops before frontend deployment when the live Catch-all is not bound to the installed Worker', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  cloudflare.getEmailRoutingRules = () => 'Catch-all rule: enabled, action: worker:another-worker';
+  globalThis.fetch = successfulFetch;
+  try {
+    await assert.rejects(
+      () => new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+        prefix: 'test-mail',
+        domain: 'mail.example.net',
+        adminPassword: 'admin-private',
+        adminEmail: 'owner@example.net',
+        adminUserPassword: 'owner-private',
+      }),
+      /Catch-all 在线验收失败/,
+    );
+    assert.equal(cloudflare.deploys.length, 0);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
@@ -644,6 +794,140 @@ test('reuses a verified Worker after a frontend interruption without overwriting
   }
 });
 
+test('reuses a fully routed Worker after the frontend deployment itself is interrupted', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  let interruptFrontend = true;
+  cloudflare.deployWithConfig = (value) => {
+    if (interruptFrontend) {
+      interruptFrontend = false;
+      throw new Error('Pages deployment interrupted');
+    }
+    cloudflare.deploys.push(value);
+  };
+  globalThis.fetch = successfulFetch;
+  try {
+    await assert.rejects(
+      () => new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+        prefix: 'test-mail',
+        domain: 'mail.example.net',
+        adminPassword: 'admin-private',
+        adminEmail: 'owner@example.net',
+        adminUserPassword: 'owner-private',
+        sitePassword: '',
+      }),
+      /Pages deployment interrupted/,
+    );
+    assert.equal(cloudflare.upstreamDeploys, 2);
+
+    cloudflare.hasExistingWorker = true;
+    cloudflare.existingWorkerSecrets.add('JWT_SECRET');
+    cloudflare.existingWorkerSecrets.add('ADMIN_PASSWORDS');
+    const result = await new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+      prefix: 'test-mail',
+      domain: 'mail.example.net',
+      adminPassword: 'admin-private',
+      adminEmail: 'owner@example.net',
+      adminUserPassword: 'owner-private',
+      sitePassword: '',
+    });
+    assert.equal(result.state.phase, 'complete');
+    assert.equal(cloudflare.upstreamDeploys, 2);
+    assert.equal(cloudflare.cloneCalls, 1);
+    assert.equal(cloudflare.deploys.length, 2);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('resumes a worker-core-ready checkpoint from Email Routing without redeploying the core Worker', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  cloudflare.hasExistingWorker = true;
+  cloudflare.databases.push({ name: 'test-mail-db', uuid: 'test-mail-db-id' });
+  cloudflare.existingWorkerSecrets.add('JWT_SECRET');
+  cloudflare.existingWorkerSecrets.add('ADMIN_PASSWORDS');
+  globalThis.fetch = successfulFetch;
+  writeState(rootDir, {
+    accountId: 'account-test',
+    prefix: 'test-mail',
+    domain: 'mail.example.net',
+    domains: ['mail.example.net'],
+    workerProject: 'test-mail-worker',
+    workerDeploymentConfirmed: true,
+    databaseName: 'test-mail-db',
+    databaseId: 'test-mail-db-id',
+    upstreamCommit: '116ddc732431afd6f4154a74669804473b373baa',
+    managedWorkerOrigin: 'https://mail-worker.example.workers.dev',
+    phase: 'worker-core-ready',
+  });
+  try {
+    const result = await new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+      prefix: 'test-mail',
+      domain: 'mail.example.net',
+      adminPassword: 'admin-private',
+      adminEmail: 'owner@example.net',
+      adminUserPassword: 'owner-private',
+      sitePassword: '',
+    });
+    assert.equal(result.state.phase, 'complete');
+    assert.equal(cloudflare.cloneCalls, 1);
+    assert.equal(cloudflare.schemaExecutions.length, 0);
+    assert.equal(cloudflare.upstreamDeploys, 1);
+    assert.deepEqual(cloudflare.events, [
+      'routing-check:mail.example.net',
+      'routing-enable:mail.example.net',
+      'worker-deploy:routing',
+    ]);
+    assert.deepEqual(result.state.emailRoutingDomains, ['mail.example.net']);
+    assert.equal(result.state.emailRoutingWorker, 'test-mail-worker');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('resumes an email-routing-ready checkpoint without enabling Email Routing again', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  cloudflare.hasExistingWorker = true;
+  cloudflare.databases.push({ name: 'test-mail-db', uuid: 'test-mail-db-id' });
+  cloudflare.existingWorkerSecrets.add('JWT_SECRET');
+  cloudflare.existingWorkerSecrets.add('ADMIN_PASSWORDS');
+  globalThis.fetch = successfulFetch;
+  writeState(rootDir, {
+    accountId: 'account-test',
+    prefix: 'test-mail',
+    domain: 'mail.example.net',
+    domains: ['mail.example.net'],
+    workerProject: 'test-mail-worker',
+    workerDeploymentConfirmed: true,
+    databaseName: 'test-mail-db',
+    databaseId: 'test-mail-db-id',
+    upstreamCommit: '116ddc732431afd6f4154a74669804473b373baa',
+    managedWorkerOrigin: 'https://mail-worker.example.workers.dev',
+    phase: 'email-routing-ready',
+  });
+  try {
+    const result = await new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+      prefix: 'test-mail',
+      domain: 'mail.example.net',
+      adminPassword: 'admin-private',
+      adminEmail: 'owner@example.net',
+      adminUserPassword: 'owner-private',
+      sitePassword: '',
+    });
+    assert.equal(result.state.phase, 'complete');
+    assert.equal(cloudflare.emailRoutingEnables.length, 0);
+    assert.equal(cloudflare.upstreamDeploys, 1);
+    assert.deepEqual(cloudflare.events, [
+      'routing-check:mail.example.net',
+      'worker-deploy:routing',
+    ]);
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('migrates an old single-domain checkpoint and reuses its verified Worker', async () => {
   const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
   const cloudflare = new FakeCloudflare();
@@ -675,6 +959,51 @@ test('migrates an old single-domain checkpoint and reuses its verified Worker', 
     });
     assert.deepEqual(result.state.domains, ['mail.example.net']);
     assert.equal(cloudflare.upstreamDeploys, 0);
+    assert.deepEqual(cloudflare.emailRoutingRuleChecks, ['mail.example.net']);
+    assert.deepEqual(result.state.emailRoutingDomains, ['mail.example.net']);
+    assert.equal(result.state.emailRoutingWorker, 'test-mail-worker');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('does not overwrite a mismatched live Catch-all while migrating an old checkpoint', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'loven7-installer-test-'));
+  const cloudflare = new FakeCloudflare();
+  cloudflare.hasExistingWorker = true;
+  cloudflare.databases.push({ name: 'test-mail-db', uuid: 'test-mail-db-id' });
+  cloudflare.existingWorkerSecrets.add('JWT_SECRET');
+  cloudflare.existingWorkerSecrets.add('ADMIN_PASSWORDS');
+  cloudflare.getEmailRoutingRules = () => 'Catch-all rule: enabled, action: worker:another-worker';
+  globalThis.fetch = successfulFetch;
+  writeState(rootDir, {
+    accountId: 'account-test',
+    prefix: 'test-mail',
+    domain: 'mail.example.net',
+    workerProject: 'test-mail-worker',
+    workerDeploymentConfirmed: true,
+    databaseName: 'test-mail-db',
+    databaseId: 'test-mail-db-id',
+    upstreamCommit: '116ddc732431afd6f4154a74669804473b373baa',
+    managedWorkerOrigin: 'https://mail-worker.example.workers.dev',
+    phase: 'worker-ready',
+  });
+  try {
+    await assert.rejects(
+      () => new Installer({ rootDir, cloudflare, ui: new FakeUi() }).runNewWorker({
+        prefix: 'test-mail',
+        domain: 'mail.example.net',
+        adminPassword: 'admin-private',
+        adminEmail: 'owner@example.net',
+        adminUserPassword: 'owner-private',
+        sitePassword: '',
+      }),
+      /Catch-all 在线验收失败/,
+    );
+    assert.equal(cloudflare.cloneCalls, 0);
+    assert.equal(cloudflare.emailRoutingEnables.length, 0);
+    assert.equal(cloudflare.upstreamDeploys, 0);
+    assert.equal(cloudflare.deploys.length, 0);
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

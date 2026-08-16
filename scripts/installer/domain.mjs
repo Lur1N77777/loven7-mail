@@ -152,35 +152,48 @@ export function createUpstreamInstallPlan({ prefix = 'loven7-mail', domain = 'ex
     },
     steps: [
       '检查 Node.js、npm/npx 和 Wrangler OAuth 登录状态',
+      '验证邮箱域名属于当前 Cloudflare 账号且状态为 Active',
       '下载锁定版本的兼容 Worker 源码并安装依赖',
       `创建 D1 数据库 ${databaseName} 并远程执行 schema.sql`,
-      `生成 Worker ${workerName} 配置并安全写入 Secret`,
-      `部署 Worker ${workerName}`,
-      '验证 Worker 健康状态和管理员 API',
+      `先部署不接管邮件的核心 Worker ${workerName}，安全写入 Secret 并取得 workers.dev 地址`,
+      '验证 Worker 健康状态、域名配置和首个管理员账号',
+      '再自动启用 Email Routing（必要时更新邮件 MX）',
+      `第二次声明式部署，把每个域名的 Catch-all 绑定到 ${workerName}`,
+      '在线读取规则并确认 Catch-all 指向正确 Worker',
       '部署 Admin、Webmail、分享 KV 和邮件状态 KV',
-      '检查三个运行单元并等待 Email Routing 确认',
+      '检查 Worker、Admin、Webmail 和 Email Routing 闭环',
     ],
     manual: [
-      '确认每个邮箱域名都在即将登录的 Cloudflare 账号中为 Active，并允许配置邮件 MX 和 Catch-all',
+      '确认每个邮箱域名没有正在使用的企业邮箱或其他收件服务；安装器会在确认后更新邮件 MX',
       '已有企业邮箱或其他收件服务的域名必须先规划迁移，避免直接替换 MX 导致原邮箱中断',
-      `在 Cloudflare Email Routing 中为每个邮箱域名配置 DNS 记录，并将 Catch-all 指向 ${workerName}`,
       '使用安装时创建的首个管理员账号登录 Admin',
-      '从外部邮箱发送测试邮件并创建分享链接',
+      '从外部邮箱发送测试邮件，确认自动配置的 Catch-all 收件正常，并创建分享链接',
       '如需发件，另行配置 Resend、SMTP 或 Cloudflare Send Email',
     ],
   };
 }
 
-export function renderUpstreamWorkerConfig({ workerName, domain, domains, databaseName, databaseId }) {
+export function renderUpstreamWorkerConfig({
+  workerName,
+  domain,
+  domains,
+  databaseName,
+  databaseId,
+  includeEmailRouting = true,
+}) {
   const mailDomains = validateMailDomains(domains ?? domain);
   const domainList = mailDomains.map((item) => JSON.stringify(item)).join(', ');
-  return [
+  const addressList = mailDomains.map((item) => JSON.stringify(`*@${item}`)).join(', ');
+  const lines = [
     `name = ${JSON.stringify(workerName)}`,
     'main = "src/worker.ts"',
     'workers_dev = true',
     'compatibility_date = "2025-04-01"',
     'compatibility_flags = ["nodejs_compat"]',
     'keep_vars = true',
+  ];
+  if (includeEmailRouting) lines.push(`addresses = [${addressList}]`);
+  lines.push(
     '',
     '[vars]',
     'PREFIX = "tmp"',
@@ -196,7 +209,8 @@ export function renderUpstreamWorkerConfig({ workerName, domain, domains, databa
     `database_name = ${JSON.stringify(databaseName)}`,
     `database_id = ${JSON.stringify(databaseId)}`,
     '',
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 export function renderPagesConfig({ name, app, adminOrigin, shareKvId, mailStateKvId }) {
@@ -218,6 +232,7 @@ export function redactInstallState(state) {
     'version', 'accountId', 'prefix', 'installMode', 'domain', 'domains', 'adminProject', 'webmailProject',
     'workerProject', 'workerDeploymentConfirmed', 'databaseName', 'databaseId', 'upstreamCommit',
     'shareKvId', 'mailStateKvId', 'adminOrigin', 'webmailOrigin', 'phase', 'updatedAt',
+    'emailRoutingDomains', 'emailRoutingWorker',
   ];
   const redacted = Object.fromEntries(allowed.filter((key) => state[key] !== undefined).map((key) => [key, state[key]]));
   if (state.managedWorkerOrigin !== undefined) {

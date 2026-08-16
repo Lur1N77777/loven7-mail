@@ -44,8 +44,8 @@ Worker · D1 · Admin · Webmail · 邮件分享 · 多域名 · Windows 一键�
     </td>
     <td width="33%" valign="top">
       <strong>③ 接通真实邮件</strong><br /><br />
-      部署完成后，为每个域名开启 Email Routing，将 Catch-all 指向安装器创建的 Worker。<br /><br />
-      <sub>最后发送一封真实邮件完成验收。</sub>
+      安装器先部署并验收核心 Worker，再启用 Email Routing，将 Catch-all 绑定到它。<br /><br />
+      <sub>你只需发送一封真实邮件完成验收。</sub>
     </td>
   </tr>
 </table>
@@ -53,20 +53,20 @@ Worker · D1 · Admin · Webmail · 邮件分享 · 多域名 · Windows 一键�
 ```mermaid
 flowchart LR
   accTitle: Loven7 Mail 新手部署流程
-  accDescr: Windows 用户下载单文件安装器，通过 Cloudflare 官方授权自动部署基础设施，再手动配置 Email Routing Catch-all 并完成真实收件测试。
+  accDescr: Windows 用户下载单文件安装器，通过 Cloudflare 官方授权选择账号与域名，自动部署基础设施并接通 Email Routing Catch-all，最后完成真实收件测试。
 
-  A["下载安装器"] --> B["Cloudflare OAuth"] --> C["自动部署 Worker、D1、Pages 与 KV"] --> D["开启 Email Routing Catch-all"] --> E["收到第一封真实邮件"]
+  A["下载安装器"] --> B["Cloudflare OAuth"] --> C["选择 Active 域名"] --> D["部署并验收核心 Worker"] --> F["自动接通 Catch-all"] --> E["收到第一封真实邮件"]
 
   classDef entry fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
   classDef deploy fill:#fff7ed,stroke:#ea580c,color:#7c2d12
   classDef finish fill:#f0fdf4,stroke:#16a34a,color:#14532d
   class A,B entry
-  class C,D deploy
+  class C,D,F deploy
   class E finish
 ```
 
 > [!IMPORTANT]
-> 安装器会部署基础设施，但 Cloudflare 出于安全限制，不允许它替你修改域名的 MX、DNS 和 Catch-all。真正收信前，仍需按教程完成一次 Email Routing 设置。
+> 全新 Worker 模式会在你明确确认后修改必要的邮件 MX，并自动把 Catch-all 绑定到安装器 Worker。若域名已有 Catch-all、企业邮箱或其他冲突规则，安装器会停止并要求确认，绝不会静默覆盖。
 
 ## 🎯 选择你的入口
 
@@ -139,11 +139,11 @@ flowchart LR
 | 自动完成 | 仍需你手动完成 |
 | --- | --- |
 | 准备 Node.js 22 和必要的便携工具 | 将域名托管到 Cloudflare，并等待状态变为 Active |
-| 通过 Wrangler 官方 OAuth 登录 Cloudflare | 确认 Cloudflare 要求的 MX、SPF、DKIM 等 DNS 记录 |
-| 创建或复用 Worker、D1、Pages 与 KV | 为每个邮箱域名开启 Email Routing |
-| 初始化数据库、写入 Worker Secret | 将 Catch-all 设置为 **Send to a Worker** |
-| 部署 Admin 与 Webmail | 选择安装器创建的 Worker 并保存规则 |
-| 检查 Admin、Webmail 和 `/api/runtime` | 从 Gmail、Outlook 或 QQ 邮箱发送真实测试邮件 |
+| 通过 Wrangler 官方 OAuth 登录并核验域名归属 | 确认域名没有正在使用的企业邮箱或其他收件服务 |
+| 先创建并验收不接管邮件的核心 Worker、D1 | 在安装器风险提示中明确同意邮件接管 |
+| 自动启用 Email Routing 和必要邮件 DNS | 冲突时决定是否接管已有 Catch-all |
+| 将每个域名的 Catch-all 绑定到安装器 Worker | 从 Gmail、Outlook 或 QQ 邮箱发送真实测试邮件 |
+| 创建 Pages 与 KV，并检查 Admin、Webmail 和 `/api/runtime` | 如需发件，另行配置发件服务 |
 
 <div align="center">
 
@@ -172,10 +172,10 @@ flowchart LR
 | 文档 | 适合什么时候看 |
 | --- | --- |
 | [小白完整部署教程](docs/BEGINNER_GUIDE.md) | 第一次部署，从零开始直到收到真实邮件 |
-| [Cloudflare 域名与邮箱路由](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) | 域名未托管，或不知道如何设置 MX 与 Catch-all |
+| [Cloudflare 域名与邮箱路由](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) | 域名未托管，或自动路由失败、发生冲突 |
 | [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 已了解 Cloudflare，只需要最短操作清单 |
 | [新手安装器说明](docs/INSTALLER.md) | 查看安装器行为、断点重试和安全边界 |
-| [Email Routing 速查](docs/EMAIL_ROUTING.md) | 基础设施已部署，但还收不到真实邮件 |
+| [Email Routing 速查](docs/EMAIL_ROUTING.md) | 核验自动配置结果，或手动排查收不到邮件 |
 | [Cloudflare Pages 配置](docs/CLOUDFLARE_PAGES.md) | 手动维护变量、KV、Preview 或排查运行时 |
 | [配置边界](docs/CONFIGURATION_BOUNDARY.md) | 区分公开源码与自己的生产配置 |
 | [版本策略](docs/VERSIONING.md) · [CHANGELOG](CHANGELOG.md) | 升级或发版前确认兼容变化 |
@@ -186,7 +186,18 @@ flowchart LR
 <details>
 <summary><strong>安装完成后为什么还收不到邮件？</strong></summary>
 
-页面能打开只代表 Worker、D1、Pages 和 KV 已部署。你还需要为每个邮箱域名启用 Cloudflare Email Routing，把 Catch-all 设置为 **Send to a Worker**，并选择安装器创建的 Worker。完整步骤见[域名与邮箱路由教程](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md)。
+全新 Worker 安装器正常完成时，Email Routing 和 Catch-all 已经自动配置；先发送一封来自外部邮箱的真实测试邮件。如果仍收不到，按[Email Routing 速查](docs/EMAIL_ROUTING.md)核对 MX、Catch-all 和 Worker Logs。已有 Worker 模式仍要求后端原本就具备可用的邮件路由。
+
+</details>
+
+---
+
+<details>
+<summary><strong>为什么不需要先拿到 Worker 地址再配置域名？</strong></summary>
+
+Cloudflare Email Routing 绑定的是 **Worker 服务名称**，不是 `*.workers.dev` URL。域名仍需在 OAuth 后填写，因为 Worker 的可用域名、默认域名和管理员权限都依赖它；`workers.dev` 地址主要供 Admin 和 Webmail 调用后端。
+
+现在的实际顺序更保守：输入域名时只生成 `DOMAINS`、默认域名和管理员角色配置，不会立即修改 DNS。安装器会先使用**不含 `addresses`** 的配置部署核心 Worker、写入 Secret、取得 `workers.dev` 地址并完成健康与管理员验收；这些都成功后，才启用 Email Routing/MX，再使用含 `addresses = ["*@域名"]` 的配置进行第二次部署并在线确认 Catch-all。
 
 </details>
 

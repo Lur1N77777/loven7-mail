@@ -19,7 +19,7 @@ Loven7 Mail 是独立维护和发布的开源 Cloudflare 邮箱系统。品牌�
 - 兼容后端源码负责：邮件收发、地址、用户、管理员 API、数据库 schema 和 Worker 逻辑。
 - 安装器负责：接入已有兼容 Worker，或获取 `deployment/upstream-lock.json` 锁定的源码版本，创建 D1、写入部署配置与 Secret，并完成基础在线验收。
 
-安装器生成的 Worker 配置会针对 Loven7 Mail 启用必要的用户地址能力并设置管理员角色域名。它不会修改来源仓库内容；配置只存在于临时目录中，部署结束即清理。Email Routing、DNS 和真实邮件投递仍由部署者确认。
+安装器生成的 Worker 配置会针对 Loven7 Mail 启用必要的用户地址能力并设置管理员角色域名。第一次核心部署不含 `addresses`；核心 Worker、Secret、公开地址和管理员链路验收成功后，第二次配置才加入顶层 `addresses`，自动绑定 Email Routing Catch-all。安装器不会修改来源仓库内容；配置只存在于临时目录中，部署结束即清理。邮件 DNS 变更必须由部署者明确授权，冲突规则不会静默覆盖，真实邮件投递仍由部署者验收。
 
 ## 兼容假设
 

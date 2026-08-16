@@ -29,6 +29,25 @@ test('keeps --domain as a backwards-compatible single-domain option', () => {
   assert.match(result.stdout, /邮箱域名：mail\.example\.net/);
 });
 
+test('authenticates a new installation before asking for its Cloudflare mail domains', () => {
+  const source = readFileSync(resolve(rootDir, 'scripts/installer/cli.mjs'), 'utf8');
+  const authentication = source.indexOf('installer.ensureAuthentication()');
+  const domainPrompt = source.indexOf("ui.text('邮箱域名");
+  assert(authentication >= 0, 'new-worker flow must authenticate explicitly');
+  assert(domainPrompt > authentication, 'domain prompt must happen after Cloudflare authentication');
+});
+
+test('makes the complete new-worker installation the beginner default', () => {
+  const source = readFileSync(resolve(rootDir, 'scripts/installer/ui.mjs'), 'utf8');
+  assert.match(source, /是否从零部署完整邮箱系统/);
+  assert.match(source, /是否从零部署完整邮箱系统[\s\S]*?, true\)/);
+});
+
+test('requires an explicit yes before a new installation can change mail MX', () => {
+  const source = readFileSync(resolve(rootDir, 'scripts/installer/cli.mjs'), 'utf8');
+  assert.match(source, /ui\.confirm\(confirmation, mode !== 'new-worker'\)/);
+});
+
 test('runs installer regression tests in the main CI workflow', () => {
   const workflow = readFileSync(resolve(rootDir, '.github', 'workflows', 'ci.yml'), 'utf8');
   assert.match(workflow, /run:\s*npm run test:installer/);

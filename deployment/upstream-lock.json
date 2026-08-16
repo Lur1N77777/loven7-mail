@@ -6,5 +6,5 @@
   "installerSupport": "existing-worker-and-new-worker",
   "workerPnpm": "10.10.0",
   "workerWrangler": "4.116.0",
-  "emailRouting": "manual-final-step"
+  "emailRouting": "automatic-with-confirmed-takeover"
 }

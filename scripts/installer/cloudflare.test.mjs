@@ -3,7 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
-import { CloudflareAdapter, CommandRunner, UPSTREAM_PNPM_VERSION, UPSTREAM_WRANGLER_VERSION, resolveInvocation } from './cloudflare.mjs';
+import {
+  CloudflareAdapter,
+  CommandRunner,
+  UPSTREAM_PNPM_VERSION,
+  UPSTREAM_WRANGLER_VERSION,
+  WRANGLER_VERSION,
+  isEmailRoutingConflictError,
+  resolveInvocation,
+} from './cloudflare.mjs';
 import { UPSTREAM_LOCK } from './upstream.mjs';
 
 const rootDir = resolve('installer-test-root');
@@ -51,6 +59,7 @@ test('runs Windows package CLIs through Node and keeps native executables direct
 test('uses Worker tool versions from the single upstream lock file', () => {
   assert.equal(UPSTREAM_PNPM_VERSION, UPSTREAM_LOCK.workerPnpm);
   assert.equal(UPSTREAM_WRANGLER_VERSION, UPSTREAM_LOCK.workerWrangler);
+  assert.equal(WRANGLER_VERSION, UPSTREAM_LOCK.workerWrangler);
 });
 
 test('starts npm, npx and Git through the real command runner', () => {
@@ -69,6 +78,39 @@ test('uploads Worker secrets as JSON through stdin', () => {
   assert.equal(runner.calls[0].options.input, '{"JWT_SECRET":"test-value"}\n');
   assert.equal(runner.calls[0].options.capture, true);
   assert(!runner.calls[0].args.includes('test-value'));
+});
+
+test('checks and enables Email Routing with the pinned Worker Wrangler', () => {
+  const runner = new RecordingRunner();
+  const adapter = new CloudflareAdapter({ rootDir, runner });
+  adapter.checkEmailRoutingDomain('mail.example.net');
+  adapter.enableEmailRouting('mail.example.net');
+  adapter.getEmailRoutingRules('mail.example.net');
+  assert.deepEqual(runner.calls, [
+    {
+      method: 'upstreamWrangler',
+      args: ['email', 'routing', 'settings', 'mail.example.net'],
+      options: { capture: true },
+    },
+    {
+      method: 'upstreamWrangler',
+      args: ['email', 'routing', 'enable', 'mail.example.net'],
+      options: { capture: true },
+    },
+    {
+      method: 'upstreamWrangler',
+      args: ['email', 'routing', 'rules', 'list', 'mail.example.net'],
+      options: { capture: true },
+    },
+  ]);
+});
+
+test('recognizes only Wrangler destructive Email Routing plans as takeover conflicts', () => {
+  assert.equal(isEmailRoutingConflictError({
+    message: 'deploy failed',
+    stdout: 'Email Routing has destructive changes (deletes or takeover conflicts) that need confirmation.',
+  }), true);
+  assert.equal(isEmailRoutingConflictError(new Error('network timeout')), false);
 });
 
 test('checks Worker existence with an explicit Worker name', () => {
@@ -108,18 +150,27 @@ test('prefers the just-finished deploy URL over deployment history metadata', ()
 
 test('deploys the cloned Worker with its temporary wrangler.toml explicitly selected', () => {
   const runner = new RecordingRunner();
-  runner.runOutput = 'Published https://mail-worker.example.workers.dev';
+  runner.upstreamOutput = 'Published https://mail-worker.example.workers.dev';
   const adapter = new CloudflareAdapter({ rootDir, runner });
   const output = adapter.deployUpstreamWorker(upstreamDir);
-  assert.equal(output, runner.runOutput);
+  assert.equal(output, runner.upstreamOutput);
   assert.deepEqual(runner.calls[0], {
-    method: 'run',
-    command: 'npx',
-    args: ['--yes', `pnpm@${UPSTREAM_PNPM_VERSION}`, 'exec', 'wrangler', 'deploy', '--minify', '--config', 'wrangler.toml'],
+    method: 'upstreamWrangler',
+    args: ['deploy', '--minify', '--config', 'wrangler.toml'],
     options: {
       cwd: resolve(upstreamDir, 'worker'),
       capture: true,
     },
+  });
+});
+
+test('can rerun Worker deployment interactively after explicit takeover consent', () => {
+  const runner = new RecordingRunner();
+  const adapter = new CloudflareAdapter({ rootDir, runner });
+  adapter.deployUpstreamWorker(upstreamDir, { interactive: true });
+  assert.deepEqual(runner.calls[0].options, {
+    cwd: resolve(upstreamDir, 'worker'),
+    capture: false,
   });
 });
 

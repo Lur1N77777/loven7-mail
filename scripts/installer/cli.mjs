@@ -59,8 +59,14 @@ if (planOnly) {
     const mode = args.includes('--new-worker') ? 'new-worker' : args.includes('--existing-worker') ? 'existing-worker' : await ui.mode();
     const prefix = await ui.text('项目名称前缀', argValue('--prefix') || 'loven7-mail');
     const workerUrl = mode === 'existing-worker' ? await ui.text('已有邮件 Worker 根地址', argValue('--worker-url')) : '';
+    const runner = new CommandRunner({ cwd: rootDir });
+    const cloudflare = new CloudflareAdapter({ rootDir, runner });
+    const installer = new Installer({ rootDir, cloudflare, ui });
+    const authenticatedAccount = mode === 'new-worker'
+      ? await installer.ensureAuthentication()
+      : undefined;
     const domains = mode === 'new-worker'
-      ? await ui.text('邮箱域名（多个用逗号分隔，第一个为默认域名；必须已托管到当前 Cloudflare 账号）', argValue('--domains') || argValue('--domain'))
+      ? await ui.text('邮箱域名（多个用逗号分隔，第一个为默认域名；请输入刚才账号中已 Active 的域名）', argValue('--domains') || argValue('--domain'))
       : '';
     const adminPassword = await ui.secret('Worker 管理员口令');
     if (!adminPassword) throw new Error('Worker 管理员口令不能为空。');
@@ -73,15 +79,20 @@ if (planOnly) {
       : createInstallPlan({ prefix, workerUrl });
     printPlan(plan);
     const confirmation = mode === 'new-worker'
-      ? '确认上述域名都在即将登录的 Cloudflare 账号中为 Active，并理解安装器不会自动修改 MX/Email Routing；按此计划开始部署？'
+      ? '确认这些域名没有正在使用的其他邮箱，并允许安装器启用 Email Routing、更新必要 MX、自动接管 Catch-all？已有冲突规则不会被静默覆盖。'
       : '按此计划开始部署？';
-    if (!await ui.confirm(confirmation, true)) throw new Error('安装已取消。');
+    if (!await ui.confirm(confirmation, mode !== 'new-worker')) throw new Error('安装已取消。');
 
-    const runner = new CommandRunner({ cwd: rootDir });
-    const cloudflare = new CloudflareAdapter({ rootDir, runner });
-    const installer = new Installer({ rootDir, cloudflare, ui });
     const result = mode === 'new-worker'
-      ? await installer.runNewWorker({ prefix, domains, adminPassword, adminEmail, adminUserPassword, sitePassword })
+      ? await installer.runNewWorker({
+        prefix,
+        domains,
+        adminPassword,
+        adminEmail,
+        adminUserPassword,
+        sitePassword,
+        emailRoutingConsent: true,
+      }, { authenticatedAccount })
       : await installer.run({ prefix, workerUrl, adminPassword, sitePassword });
 
     console.log('\n应用基础设施部署完成');
@@ -89,18 +100,20 @@ if (planOnly) {
     console.log(`Webmail：${result.state.webmailOrigin}`);
     console.log('运行时：Webmail /api/runtime 已通过');
     if (mode === 'new-worker') {
-      console.log(`Worker 域名：已在线核对 ${result.plan.domains.join('、')}`);
-      console.log('\n邮箱收件尚未完成。请为下面每个域名配置 Cloudflare Email Routing：');
-      result.plan.domains.forEach((mailDomain) => {
-        console.log(`  - ${mailDomain}：进入 Compute → Email Service → Email Routing，接入域名并确认 MX/SPF/DKIM，再把 Catch-all 设置为 Send to a Worker → ${result.plan.resources.workerName}`);
-      });
-      console.log('详细步骤：docs/EMAIL_ROUTING.md');
+      console.log(`邮件 Worker：${result.state.managedWorkerOrigin}`);
+      const routingDomains = Array.isArray(result.state.emailRoutingDomains) ? result.state.emailRoutingDomains : [];
+      const routingConfigured = routingDomains.length === result.plan.domains.length
+        && routingDomains.every((domain, index) => domain === result.plan.domains[index])
+        && result.state.emailRoutingWorker === result.plan.resources.workerName;
+      console.log(routingConfigured
+        ? `Email Routing：已自动启用 ${result.plan.domains.join('、')}，Catch-all 已绑定到 ${result.plan.resources.workerName}`
+        : `Email Routing：本次续装保留了已有 Worker 配置；请按 docs/EMAIL_ROUTING.md 核对 Catch-all 是否指向 ${result.plan.resources.workerName}`);
     }
     console.log('\n最后请完成真实验收：');
     console.log(mode === 'new-worker'
       ? '  1. 使用刚创建的首个管理员账号登录 Admin。'
       : '  1. 使用已有的管理员角色账号登录 Admin。');
-    console.log('  2. 从外部邮箱发送测试邮件，确认 Email Routing Catch-all 正常。');
+    console.log('  2. 从外部邮箱发送测试邮件，确认自动配置的 Email Routing Catch-all 正常。');
     console.log('  3. 创建分享并在无痕窗口打开。');
     console.log('  4. 如需发件，再按兼容后端文档配置 Resend、SMTP 或 Cloudflare Send Email；安装器未自动开启发件服务。');
   } catch (error) {

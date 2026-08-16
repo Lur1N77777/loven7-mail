@@ -161,14 +161,12 @@ try {
   Write-Host 'It downloads a SHA-256 verified release and uses Wrangler official OAuth for Cloudflare.'
   $release = Get-Release
   $node = Get-NodeCommand
-  if ($SetupArgs -contains '--new-worker') {
-    Ensure-Git | Out-Null
-  }
+  Ensure-Git | Out-Null
   $sourceRoot = Get-SourceRoot $release
   Write-Step 'Starting Cloudflare installer'
   Push-Location $sourceRoot
   try {
-    & $node.Npm run setup @SetupArgs
+    & $node.Npm run setup -- @SetupArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   } finally {
     Pop-Location

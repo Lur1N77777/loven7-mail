@@ -41,7 +41,9 @@ test('bootstrap verifies the source archive before extraction and starts npm set
   assert.match(bootstrap, /loven7-mail-cloudflare-suite-\$tag-source\.zip/);
   assert.match(bootstrap, /Get-FileHash -Algorithm SHA256/);
   assert.match(bootstrap, /Expand-Archive/);
+  assert.match(bootstrap, /\$node = Get-NodeCommand\s+Ensure-Git \| Out-Null\s+\$sourceRoot = Get-SourceRoot/s);
   assert.match(bootstrap, /run setup/);
+  assert.match(bootstrap, /run setup -- @SetupArgs/);
   assert.match(bootstrap, /wrangler official OAuth/i);
   assert.doesNotMatch(bootstrap, /ADMIN_PASSWORD|SITE_PASSWORD|CLOUDFLARE_API_TOKEN/);
 });
