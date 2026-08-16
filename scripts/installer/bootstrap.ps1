@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$Repository = 'Lur1N77777/loven7-mail-cloudflare-suite'
+$Repository = 'Lur1N77777/loven7-mail'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'Loven7Mail\installer'
 $MinimumNodeMajor = 22
 
@@ -106,13 +106,21 @@ function Get-SourceRoot($release) {
   Write-Step 'Preparing Loven7 Mail files'
   New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
   $tag = [string]$release.tag_name
-  $assetName = "loven7-mail-cloudflare-suite-$tag-source.zip"
-  $asset = @($release.assets | Where-Object { $_.name -eq $assetName })[0]
+  $assetNames = @(
+    "loven7-mail-$tag-source.zip",
+    "loven7-mail-cloudflare-suite-$tag-source.zip"
+  )
+  $asset = $null
+  foreach ($candidateName in $assetNames) {
+    $asset = @($release.assets | Where-Object { $_.name -eq $candidateName })[0]
+    if ($asset) { break }
+  }
   $checksums = @($release.assets | Where-Object { $_.name -eq 'SHA256SUMS.txt' })[0]
   if (-not $asset -or -not $checksums) { throw "Release $tag is missing the verified installer assets." }
+  $assetName = [string]$asset.name
 
   $versionRoot = Join-Path $InstallRoot $tag
-  $sourceRoot = Join-Path $versionRoot "loven7-mail-cloudflare-suite-$tag"
+  $sourceRoot = Join-Path $versionRoot "loven7-mail-$tag"
   $marker = Join-Path $versionRoot 'source.sha256'
   $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "loven7-source-$([guid]::NewGuid().ToString('N'))"
   New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null

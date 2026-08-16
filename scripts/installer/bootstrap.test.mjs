@@ -10,6 +10,7 @@ const launcher = readFileSync(resolve(rootDir, 'scripts/installer/Install-Loven7
 const workflow = readFileSync(resolve(rootDir, '.github/workflows/release-assets.yml'), 'utf8');
 
 test('Windows launcher downloads the signed bootstrap from the latest release', () => {
+  assert.match(launcher, /github\.com\/Lur1N77777\/loven7-mail\/releases\/latest/);
   assert.match(launcher, /releases\/latest\/download\/loven7-mail-bootstrap\.ps1/);
   assert.match(launcher, /Get-FileHash -Algorithm SHA256/);
   assert.match(launcher, /SHA256SUMS\.txt/);
@@ -18,6 +19,9 @@ test('Windows launcher downloads the signed bootstrap from the latest release', 
 });
 
 test('bootstrap verifies the source archive before extraction and starts npm setup', () => {
+  assert.match(bootstrap, /Lur1N77777\/loven7-mail/);
+  assert.match(bootstrap, /loven7-mail-\$tag-source\.zip/);
+  assert.match(bootstrap, /loven7-mail-cloudflare-suite-\$tag-source\.zip/);
   assert.match(bootstrap, /Get-FileHash -Algorithm SHA256/);
   assert.match(bootstrap, /Expand-Archive/);
   assert.match(bootstrap, /run setup/);
@@ -26,6 +30,7 @@ test('bootstrap verifies the source archive before extraction and starts npm set
 });
 
 test('release workflow publishes the launcher, bootstrap and checksums', () => {
+  assert.match(workflow, /loven7-mail-\$\{tag\}-source\.zip/);
   assert.match(workflow, /loven7-mail-bootstrap\.ps1/);
   assert.match(workflow, /Install-Loven7-Mail\.cmd/);
   assert.match(workflow, /SHA256SUMS\.txt/);

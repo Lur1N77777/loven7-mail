@@ -63,14 +63,14 @@ flowchart LR
 
 ## 📥 第二步：下载 Windows 单文件启动器
 
-1. 打开 [Loven7 Mail 最新 Release](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest)。
+1. 打开 [Loven7 Mail 最新 Release](https://github.com/Lur1N77777/loven7-mail/releases/latest)。
 2. 在 Assets 中下载 **`Install-Loven7-Mail.cmd`**。
 3. 把文件放到下载目录或桌面。
 4. 双击运行。
 
 也可以直接使用这个下载入口：
 
-> [下载 Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)
+> [下载 Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail/releases/latest/download/Install-Loven7-Mail.cmd)
 
 启动器会先下载 PowerShell 引导脚本和 `SHA256SUMS.txt`，校验 SHA-256 后再运行。没有 Node.js 22 时会准备便携版本；从零部署 Worker 且电脑没有 Git 时，会准备官方 MinGit。
 

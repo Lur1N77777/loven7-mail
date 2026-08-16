@@ -1,103 +1,114 @@
 <div align="center">
 
-<img src="docs/assets/loven7-mail-logo.svg" alt="Loven7 Mail logo" width="96" height="96" />
+<img src="docs/assets/loven7-mail-logo.svg" alt="Loven7 Mail logo" width="104" height="104" />
 
 # Loven7 Mail
 
-一套开源、可自托管的 Cloudflare 邮箱系统：包含邮件 Worker、D1、管理后台、用户邮箱、分享链接、Pages Functions 与新手安装器。
+**开源、自托管、对新手友好的 Cloudflare 邮箱系统**
+
+Worker · D1 · Admin · Webmail · 邮件分享 · 多域名 · Windows 一键安装器
 
 <p>
-  <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/Lur1N77777/loven7-mail-cloudflare-suite?style=flat-square" /></a>
-  <img alt="React" src="https://img.shields.io/badge/React-19-555?style=flat-square&logo=react&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-555?style=flat-square&logo=typescript&logoColor=white" />
-  <img alt="Cloudflare Pages" src="https://img.shields.io/badge/Cloudflare-Pages-555?style=flat-square&logo=cloudflarepages&logoColor=white" />
-  <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml"><img alt="Build" src="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://github.com/Lur1N77777/loven7-mail/releases/latest/download/Install-Loven7-Mail.cmd"><img alt="下载 Windows 一键安装器" src="https://img.shields.io/badge/Windows_Installer-Download_Now-2563EB?style=for-the-badge&logo=windows11&logoColor=white" /></a>
+  <a href="docs/BEGINNER_GUIDE.md"><img alt="查看小白完整教程" src="https://img.shields.io/badge/Beginner_Guide-Start_Here-EA580C?style=for-the-badge&logo=readthedocs&logoColor=white" /></a>
 </p>
 
-[小白完整教程](docs/BEGINNER_GUIDE.md) · [域名与邮箱路由](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) · [界面预览](#界面预览) · [功能](#功能) · [文档](#文档)
+<p>
+  <a href="https://github.com/Lur1N77777/loven7-mail/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/Lur1N77777/loven7-mail?style=flat-square&color=16a34a" /></a>
+  <a href="https://github.com/Lur1N77777/loven7-mail/actions/workflows/ci.yml"><img alt="Build status" src="https://github.com/Lur1N77777/loven7-mail/actions/workflows/ci.yml/badge.svg" /></a>
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white" />
+  <img alt="Cloudflare" src="https://img.shields.io/badge/Cloudflare-Workers_%26_Pages-F38020?style=flat-square&logo=cloudflare&logoColor=white" />
+</p>
+
+[三步开始](#-三步开始) · [界面预览](#%EF%B8%8F-界面预览) · [安装边界](#-安装器会自动完成什么) · [完整文档](#-文档导航) · [常见问题](#-常见问题)
 
 </div>
 
-> Loven7 Mail 作为独立开源项目维护自己的品牌、Admin、Webmail、Pages Functions、安装器、发行包和部署文档。部署完成后，所有运行资源都在部署者自己的 Cloudflare 账号内，不依赖任何第三方托管实例。
+> [!NOTE]
+> Loven7 Mail 是一个独立维护和发布的开源项目。部署后的 Worker、D1、Pages 与 KV 全部运行在你自己的 Cloudflare 账号中，不依赖作者提供的托管实例。
 
-## 快速开始
-
-第一次部署时，先根据域名状态选择入口：
-
-| 你的情况 | 从这里开始 | 完成目标 |
-| --- | --- | --- |
-| 已经购买域名，但还没托管到 Cloudflare | [域名托管与 Email Routing 教程](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) | 域名变为 Active，知道如何配置 Catch-all |
-| 域名已经在 Cloudflare 中显示 Active | [Loven7 Mail 小白完整部署教程](docs/BEGINNER_GUIDE.md) | 下载启动器、自动部署并收到第一封真实邮件 |
+## 🚀 三步开始
 
 <table>
   <tr>
     <td width="33%" valign="top">
-      <strong>1. 下载启动器</strong><br />
-      Windows 用户下载并双击 <a href="https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd"><code>Install-Loven7-Mail.cmd</code></a>。
+      <strong>① 下载一个文件</strong><br /><br />
+      Windows 用户下载并双击 <a href="https://github.com/Lur1N77777/loven7-mail/releases/latest/download/Install-Loven7-Mail.cmd"><code>Install-Loven7-Mail.cmd</code></a>。<br /><br />
+      <sub>无需 Git、无需克隆源码、无需预装 Node.js。</sub>
     </td>
     <td width="33%" valign="top">
-      <strong>2. 授权 Cloudflare</strong><br />
-      在浏览器完成 Wrangler OAuth，选择 Cloudflare 账号并按提示输入域名和管理员信息。
+      <strong>② 登录 Cloudflare</strong><br /><br />
+      安装器会打开 Cloudflare 官方 OAuth。按提示选择账号，填写域名和首个管理员信息。<br /><br />
+      <sub>密码不会显示，也不会写入仓库。</sub>
     </td>
     <td width="33%" valign="top">
-      <strong>3. 接通真实收件</strong><br />
-      为每个域名开启 Email Routing，将 Catch-all 指向安装器创建的 Worker。
+      <strong>③ 接通真实邮件</strong><br /><br />
+      部署完成后，为每个域名开启 Email Routing，将 Catch-all 指向安装器创建的 Worker。<br /><br />
+      <sub>最后发送一封真实邮件完成验收。</sub>
     </td>
   </tr>
 </table>
 
-> **最短路径：** 只想部署并使用项目时，直接下载 [Windows 单文件安装器](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)。不需要 Git，不需要克隆仓库，也不需要先安装 Node.js。
+```mermaid
+flowchart LR
+  accTitle: Loven7 Mail 新手部署流程
+  accDescr: Windows 用户下载单文件安装器，通过 Cloudflare 官方授权自动部署基础设施，再手动配置 Email Routing Catch-all 并完成真实收件测试。
 
-### 部署前准备
+  A["下载安装器"] --> B["Cloudflare OAuth"] --> C["自动部署 Worker、D1、Pages 与 KV"] --> D["开启 Email Routing Catch-all"] --> E["收到第一封真实邮件"]
 
-| 需要准备 | 说明 |
-| --- | --- |
-| Cloudflare 账号 | 需要能管理目标域名，并允许 Wrangler OAuth 创建资源 |
-| 已托管域名 | 域名状态为 Active，并使用 Cloudflare 权威 DNS；可一次填写多个域名 |
-| 管理员信息 | 安装时输入首个管理员邮箱和密码，密码不会显示或写入仓库 |
+  classDef entry fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
+  classDef deploy fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+  classDef finish fill:#f0fdf4,stroke:#16a34a,color:#14532d
+  class A,B entry
+  class C,D deploy
+  class E finish
+```
 
-> **重要边界：** 安装器可以部署 Worker、D1、Pages 和 KV，但不会替你修改 DNS、MX 或 Catch-all。完成部署后，必须按 [Cloudflare 域名与邮箱路由教程](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) 完成最后一步，并发送真实测试邮件。
+> [!IMPORTANT]
+> 安装器会部署基础设施，但 Cloudflare 出于安全限制，不允许它替你修改域名的 MX、DNS 和 Catch-all。真正收信前，仍需按教程完成一次 Email Routing 设置。
 
-## v0.4.0 · 一键部署与多域名支持
+## 🎯 选择你的入口
 
-这一版把“从源码到可用邮箱”的路径收拢到一个安装器中，同时保留已有 Worker 接入能力。管理后台继续采用 **Paper, Ink & Sealing Wax** 设计语言：暖灰纸面、墨黑主操作与陶土红强调色贯穿仪表盘、统计、地址、用户、收发件、系统设置和维护页面。
+| 你现在的情况 | 最适合的入口 | 你会完成什么 |
+| --- | --- | --- |
+| 域名还没有托管到 Cloudflare | [域名托管与邮箱路由教程](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) | 添加域名、修改 Nameserver、等待状态变为 Active |
+| 域名已经在 Cloudflare 中显示 Active | [小白完整部署教程](docs/BEGINNER_GUIDE.md) | 从下载安装器到收到第一封真实邮件 |
+| 已经有兼容的邮件 Worker | [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 复用后端，只部署 Admin 与 Webmail |
+| 熟悉 Node.js，想从源码运行 | [安装器说明](docs/INSTALLER.md) | 克隆仓库后运行 `npm run setup` |
 
-- Windows 用户可以下载一个 `.cmd` 文件完成安装器引导，失败后再次打开会从断点继续。
-- 新 Worker 模式支持一次配置多个邮箱域名，第一个域名作为默认域名。
-- 安装器会校验远端资源、保护 Secret、复用健康后端，并对 Admin、Webmail 和 `/api/runtime` 做有限重试验收。
-- 默认能力覆盖收件、Admin、Webmail、分享和已读/星标同步；发件仍需要额外配置 Resend、SMTP 或 Cloudflare Send Email。
+**开始前只需要：** 一个 Cloudflare 账号、至少一个已托管域名，以及可以管理该域名的权限。
 
-## 界面预览
+## ✨ 你会得到什么
 
-### Admin · Paper, Ink & Sealing Wax
+<table>
+  <tr>
+    <td width="33%" valign="top"><strong>📨 真实邮件接收</strong><br /><br />通过 Cloudflare Email Routing 接收公网邮件，支持多个邮箱域名。</td>
+    <td width="33%" valign="top"><strong>🧭 管理后台</strong><br /><br />统一管理地址、用户、收件箱、未知邮件、发件箱、分享与系统设置。</td>
+    <td width="33%" valign="top"><strong>💌 用户邮箱</strong><br /><br />独立 Webmail、密码登录、自动刷新、验证码识别、已读与星标同步。</td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top"><strong>🔗 邮件分享</strong><br /><br />创建单邮箱、多邮箱和聚合分享，支持过期、撤回与访客隐藏。</td>
+    <td width="33%" valign="top"><strong>🛡️ 安全默认值</strong><br /><br />HTML 沙箱、远程图片保护、Secret 隔离、发行包 SHA-256 校验。</td>
+    <td width="33%" valign="top"><strong>🪄 新手安装器</strong><br /><br />自动准备 Node.js、创建 Cloudflare 资源、写入 Secret，并执行在线验收。</td>
+  </tr>
+</table>
+
+## 🖼️ 界面预览
+
+### Admin · 管理与运营
 
 <table>
   <tr>
     <td width="50%" valign="top">
       <strong>运营概览</strong><br />
-      <sub>邮件流量、地址活跃、站点规模与能力状态。</sub><br /><br />
-      <img src="docs/screenshots/admin-dashboard.png" alt="Admin 运营概览" />
+      <sub>邮件流量、地址活跃、站点规模与运行能力一目了然。</sub><br /><br />
+      <a href="docs/screenshots/admin-dashboard.png"><img src="docs/screenshots/admin-dashboard.png" alt="Loven7 Mail Admin 运营概览" /></a>
     </td>
     <td width="50%" valign="top">
       <strong>收件箱工作区</strong><br />
-      <sub>高密度邮件列表、阅读器与快捷操作。</sub><br /><br />
-      <img src="docs/screenshots/admin-inbox.png" alt="Admin 收件箱工作区" />
-    </td>
-  </tr>
-</table>
-
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>系统设置</strong><br />
-      <sub>界面、连接、邮件规则和账户策略分区管理。</sub><br /><br />
-      <img src="docs/screenshots/admin-connection-settings.png" alt="Admin 系统设置" />
-    </td>
-    <td width="50%" valign="top">
-      <strong>移动端地址管理</strong><br />
-      <sub>完整保留地址列表、底部导航和快捷操作菜单；点击截图可查看原图。</sub><br /><br />
-      <a href="docs/screenshots/mobile-address-list.png"><img src="docs/screenshots/mobile-address-list.png" alt="Admin 移动端地址列表完整截图" height="360" /></a>
-      <a href="docs/screenshots/mobile-address-actions.png"><img src="docs/screenshots/mobile-address-actions.png" alt="Admin 移动端快捷操作完整截图" height="360" /></a>
+      <sub>高密度邮件列表、阅读器和常用操作集中在一个页面。</sub><br /><br />
+      <a href="docs/screenshots/admin-inbox.png"><img src="docs/screenshots/admin-inbox.png" alt="Loven7 Mail Admin 收件箱" /></a>
     </td>
   </tr>
 </table>
@@ -106,145 +117,142 @@
 
 <table>
   <tr>
-    <td width="50%" valign="top"><img src="docs/screenshots/webmail-login.png" alt="Webmail 邮箱登录" /></td>
-    <td width="50%" valign="top"><img src="docs/screenshots/webmail-share.png" alt="Webmail 多邮箱分享" /></td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/webmail-login.png"><img src="docs/screenshots/webmail-login.png" alt="Loven7 Mail Webmail 登录页" /></a>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/screenshots/webmail-share.png"><img src="docs/screenshots/webmail-share.png" alt="Loven7 Mail Webmail 多邮箱分享" /></a>
+    </td>
   </tr>
 </table>
 
-## 项目组成
+### 移动端 · 完整功能不缩水
 
-| 应用 | 目录 | 作用 |
+<p align="center">
+  <a href="docs/screenshots/mobile-address-list.png"><img src="docs/screenshots/mobile-address-list.png" alt="Admin 移动端地址列表完整截图" height="360" /></a>
+  &nbsp;&nbsp;
+  <a href="docs/screenshots/mobile-address-actions.png"><img src="docs/screenshots/mobile-address-actions.png" alt="Admin 移动端快捷操作完整截图" height="360" /></a>
+</p>
+
+## 📦 安装器会自动完成什么
+
+| 自动完成 | 仍需你手动完成 |
+| --- | --- |
+| 准备 Node.js 22 和必要的便携工具 | 将域名托管到 Cloudflare，并等待状态变为 Active |
+| 通过 Wrangler 官方 OAuth 登录 Cloudflare | 确认 Cloudflare 要求的 MX、SPF、DKIM 等 DNS 记录 |
+| 创建或复用 Worker、D1、Pages 与 KV | 为每个邮箱域名开启 Email Routing |
+| 初始化数据库、写入 Worker Secret | 将 Catch-all 设置为 **Send to a Worker** |
+| 部署 Admin 与 Webmail | 选择安装器创建的 Worker 并保存规则 |
+| 检查 Admin、Webmail 和 `/api/runtime` | 从 Gmail、Outlook 或 QQ 邮箱发送真实测试邮件 |
+
+<div align="center">
+
+### 准备开始？
+
+[![下载 Windows 一键安装器](https://img.shields.io/badge/Windows_Installer-Download_Now-2563EB?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/Lur1N77777/loven7-mail/releases/latest/download/Install-Loven7-Mail.cmd)
+
+遇到任何不确定的页面，按[小白完整部署教程](docs/BEGINNER_GUIDE.md)逐步操作即可。
+
+</div>
+
+## 🧩 系统组成
+
+| 组件 | 作用 | 部署位置 |
 | --- | --- | --- |
-| Admin | `apps/admin` | 地址、用户、收发件、分享、系统设置与维护工具 |
-| Webmail | `apps/webmail` | 用户登录、邮箱阅读、单/多邮箱分享与 Pages Functions |
-| 安装器 | `scripts/installer` | Cloudflare OAuth、Worker、D1、Pages、KV、Secret 与在线验收 |
-| 邮件后端 | 部署到用户 Cloudflare 账号 | Email Routing 收件、用户、地址、邮件和管理员 API |
+| Mail Worker | 收件、地址、用户、邮件与管理员 API | 你的 Cloudflare Workers |
+| D1 | 保存邮件与业务数据 | 你的 Cloudflare D1 |
+| Admin | 管理地址、用户、邮件、分享和系统设置 | 你的 Cloudflare Pages |
+| Webmail | 用户登录、阅读邮件和打开分享链接 | 你的 Cloudflare Pages |
+| KV | 保存分享数据，以及可选的已读/星标状态 | 你的 Cloudflare KV |
 
-Loven7 Mail 是独立的产品与发行入口。全新部署会获取并校验锁定的兼容 Worker 源码版本，再把它部署到用户自己的 Cloudflare 账号；部署后的 Worker、D1、Pages 和 KV 不请求上游托管服务。后端源码来源和兼容边界见[产品边界与后端来源](docs/UPSTREAM.md)。
+全新部署会下载并校验锁定的兼容 Worker 源码，再部署到用户自己的 Cloudflare 账号。后端来源、版本锁定和独立项目边界见[产品边界与后端来源](docs/UPSTREAM.md)。
 
-## 功能
+## 📚 文档导航
 
-- 管理后台：仪表盘、地址/用户管理、收件箱、未知邮件、发件箱、分享管理与维护入口。
-- 用户邮箱：邮箱密码/JWT 登录、自动刷新、验证码识别与复制、移动端自适应。
-- 分享能力：单邮箱、多邮箱、聚合分享、仅新增邮件、撤回、过期与访客隐藏。
-- 邮件安全：HTML 沙箱、远程图片保护、附件处理、品牌头像代理与请求预算。
-- 工程能力：TypeScript、PWA、双 Pages 构建、运行时诊断、CI、脱敏门禁和发布检查。
+| 文档 | 适合什么时候看 |
+| --- | --- |
+| [小白完整部署教程](docs/BEGINNER_GUIDE.md) | 第一次部署，从零开始直到收到真实邮件 |
+| [Cloudflare 域名与邮箱路由](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) | 域名未托管，或不知道如何设置 MX 与 Catch-all |
+| [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 已了解 Cloudflare，只需要最短操作清单 |
+| [新手安装器说明](docs/INSTALLER.md) | 查看安装器行为、断点重试和安全边界 |
+| [Email Routing 速查](docs/EMAIL_ROUTING.md) | 基础设施已部署，但还收不到真实邮件 |
+| [Cloudflare Pages 配置](docs/CLOUDFLARE_PAGES.md) | 手动维护变量、KV、Preview 或排查运行时 |
+| [配置边界](docs/CONFIGURATION_BOUNDARY.md) | 区分公开源码与自己的生产配置 |
+| [版本策略](docs/VERSIONING.md) · [CHANGELOG](CHANGELOG.md) | 升级或发版前确认兼容变化 |
+| [项目结构](docs/PROJECT_STRUCTURE.md) | 准备参与开发或理解模块职责 |
 
-## 一条命令部署
+## 🔍 常见问题
 
-### Windows：下载一个文件启动
+<details>
+<summary><strong>安装完成后为什么还收不到邮件？</strong></summary>
 
-直接在 [GitHub Releases](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest) 下载并双击 [`Install-Loven7-Mail.cmd`](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)。启动器会自动下载经过 SHA-256 校验的正式安装包，准备 Node.js 22，打开 Wrangler 的 Cloudflare 官方 OAuth 授权，并启动同一套新手安装器。安装文件会保存在当前 Windows 用户的 `%LOCALAPPDATA%\Loven7Mail\installer`，失败后再次双击会从断点继续。
+页面能打开只代表 Worker、D1、Pages 和 KV 已部署。你还需要为每个邮箱域名启用 Cloudflare Email Routing，把 Catch-all 设置为 **Send to a Worker**，并选择安装器创建的 Worker。完整步骤见[域名与邮箱路由教程](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md)。
 
-首次从零部署兼容 Worker 时，启动器会在缺少 Git 时自动下载官方 MinGit 便携版到用户目录；已有兼容 Worker 的接入不需要 Git。Git 只用于临时下载锁定、校验过的后端源码，安装结束后临时目录会自动删除。
+</details>
 
-克隆或 Fork 本仓库后运行：
+---
+
+<details>
+<summary><strong>它能直接发送邮件吗？</strong></summary>
+
+默认完整覆盖收件、Admin、Webmail、分享和已读/星标同步。发件需要你另外选择并配置 Resend、SMTP 或 Cloudflare Send Email；安装器不会自动创建第三方发件账号，也不会猜测或写入发件凭据。
+
+</details>
+
+---
+
+<details>
+<summary><strong>macOS 或 Linux 能一键安装吗？</strong></summary>
+
+当前“下载后双击”的单文件入口面向 Windows。macOS 与 Linux 用户可以安装 Node.js 22，克隆仓库后运行 `npm run setup`，使用的是同一套安装流程。
+
+</details>
+
+---
+
+<details>
+<summary><strong>域名已经有企业邮箱，还能使用吗？</strong></summary>
+
+需要谨慎。修改 MX 记录可能影响现有邮箱服务。建议使用一个独立域名或专门的子域方案进行部署，并在修改前确认当前邮件服务商的路由要求。
+
+</details>
+
+---
+
+<details>
+<summary><strong>这个项目是否依赖原项目在线运行？</strong></summary>
+
+不依赖任何上游托管实例。Loven7 Mail 独立维护品牌、Admin、Webmail、Pages Functions、安装器、发行包和文档；首次创建新 Worker 时，会下载并校验锁定版本的兼容后端源码，然后将全部运行资源部署到你自己的 Cloudflare 账号。详情见[产品边界与后端来源](docs/UPSTREAM.md)。
+
+</details>
+
+---
+
+## 🛠️ 维护者与开发者
+
+<details>
+<summary><strong>从源码运行安装器</strong></summary>
+
+要求 Node.js 22+：
 
 ```bash
+git clone https://github.com/Lur1N77777/loven7-mail.git
+cd loven7-mail
 npm run setup
 ```
 
-安装器会先询问是否已有兼容 Worker。选择“是”时，它会只读验证 Worker、站点密码和管理员口令，再接入现有 Worker；选择“否”时，可以输入一个或多个邮箱域名（逗号分隔），安装器会获取并校验锁定的兼容后端 `v1.10.0`、创建 D1、初始化 schema、写入 Worker Secret，再自动创建或复用两个 Pages 项目、分享 KV 和邮件状态 KV，完成 Admin 代理和 `/api/runtime` 验收。
-
-密码不会显示，也不会保存到仓库或安装状态文件。失败后再次运行相同命令会复用已创建资源，并保留已有分享密钥。
-
-一条命令默认覆盖收件、Admin、Webmail、分享和已读/星标同步。发件需要部署者另行选择并配置 Resend、SMTP 或 Cloudflare Send Email；安装器不会自动创建外部发件账号或写入发件凭据。
+只查看安装计划、不连接 Cloudflare：
 
 ```bash
 npm run setup:plan
 ```
 
-上述命令只显示安装计划，不连接 Cloudflare。第一次部署请阅读 [Loven7 Mail 小白完整部署教程](docs/BEGINNER_GUIDE.md)；安装后必须按 [Cloudflare 域名与邮箱路由教程](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) 为每个域名接通真实邮件。
+</details>
 
-首次完整部署优先使用本地交互式终端运行 `npm run setup`，因为密码需要在不回显的 TTY 中安全输入。无法使用交互式终端时，[AI Agent Pages-only 部署指令](docs/AGENT_DEPLOY_PROMPT.md) 和下面的人工步骤只适用于已有兼容 Worker 的前端接入，不会替你创建 Worker、D1 或 Email Routing。
+---
 
-## 收件配置
-
-基础设施部署完成后，对每个邮箱域名执行一次：
-
-1. 打开 Cloudflare 账号级的 **Compute → Email Service → Email Routing**，选择并接入目标域名；旧版界面可能仍显示为域名内的 **Email → Email Routing**。
-2. 确认 Cloudflare 建议的 MX、SPF 和 DKIM 记录已添加，再进入 **Routing Rules → Catch-all rule**。
-3. 将 Catch-all 的 Action 设为 **Send to a Worker**。
-4. 选择安装器输出的 Worker，例如 `<项目名前缀>-worker`，保存并启用规则。
-5. 在 Admin 创建一个该域名的邮箱，用 Gmail、Outlook 或 QQ 邮箱发送真实测试邮件。
-
-> 页面能打开或 `/api/runtime` 返回 `ok: true`，只代表应用基础设施正常；收到真实外部邮件，才代表收件链路完整。
-
-详见 [Cloudflare 域名与邮箱路由教程](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md)。
-
-## 手动部署（已有 Worker）
-
-### 1. 准备
-
-- 一个可用的 Cloudflare 账号。
-- 一个已部署且 API 兼容的邮件 Worker。
-- 将本仓库 Fork 到你自己的 GitHub 账号。
-
-这一节只讲“已有 Worker”的人工接入。没有 Worker 的新手请优先运行 `npm run setup`；安装器会从锁定的兼容后端版本创建 Worker 和 D1，人工流程仍需你自行准备兼容后端。
-
-### 2. 创建 Admin Pages
-
-在 Cloudflare Dashboard 打开 **Workers & Pages → Create → Pages → Connect to Git**，选择你的 Fork：
-
-| 设置 | 值 |
-| --- | --- |
-| Project name | `loven7-mail-admin`（可自定义） |
-| Root directory | `apps/admin` |
-| Build command | `npm ci && npm run build` |
-| Build output directory | `dist` |
-
-然后在 Admin Pages 的 **Settings → Variables and Secrets → Production** 设置：
-
-| 名称 | 类型 | 说明 |
-| --- | --- | --- |
-| `MAIL_WORKER_BASE_URL` | Secret | 你的邮件 Worker 根地址，例如 `https://worker.example.com` |
-| `ADMIN_PASSWORD` | Secret | Worker 的管理员密码，仅由 Pages Functions 使用 |
-| `SITE_PASSWORD` | Secret，可选 | Worker 开启站点密码时填写 |
-
-不要设置 `VITE_API_BASE`。默认同域 Pages Functions 代理能避免把管理员密码打进浏览器构建产物。
-
-### 3. 创建 Webmail Pages
-
-先等待 Admin 的 Production 部署完成并记录实际 origin；Webmail 的 CORS 配置必须使用这个地址，不能提前猜测，也不能填写 Webmail 自己的 origin。
-
-再次导入同一个 Fork：
-
-| 设置 | 值 |
-| --- | --- |
-| Project name | `loven7-mail-webmail`（可自定义） |
-| Root directory | `apps/webmail` |
-| Build command | `npm ci && npm run build` |
-| Build output directory | `dist` |
-
-在 Webmail Pages 的 **Production** 运行时设置中添加：
-
-| 名称 | 类型 | 说明 |
-| --- | --- | --- |
-| `MAIL_WORKER_BASE_URL` | Secret | 与 Admin 相同的 Worker 根地址 |
-| `SITE_PASSWORD` | Secret，可选 | Worker 开启站点密码时填写 |
-| `SHARE_ENCRYPTION_SECRET_V2` | Secret | 至少 32 字节的高熵随机值；新部署推荐只写 V2 |
-| `SHARE_ADMIN_CORS_ORIGINS` | Variable | Admin 的完整 origin，例如 `https://admin.example.com`；禁止 `*` |
-
-在 **Settings → Bindings → KV namespace bindings** 创建或选择一个 KV Namespace，绑定名必须是 `SHARE_KV`。如需 Admin 与 Webmail 跨设备共享已读/星标状态，再给两个项目绑定同一个 KV，绑定名均为 `MAIL_READ_STATE_KV`。
-
-Preview 与 Production 的变量、Secret 和 KV 绑定相互独立。需要预览完整功能时，请在 Preview 环境重复配置；否则只使用 Production。
-
-使用直接上传脚本复用已有项目时，显式设置 `ADMIN_PAGES_PROJECT_NAME` 和 `WEBMAIL_PAGES_PROJECT_NAME`。只有确认 Preview 已配置完整运行时后，才设置本地确认标记 `WEBMAIL_PREVIEW_RUNTIME_CONFIRMED=1`。
-
-### 4. 验收
-
-如果 Pages 项目在运行时配置完成前已经自动构建，先各触发一次新的 Production 部署。随后依次检查：
-
-1. 打开 Webmail 的 `/api/runtime`，确认 `ok: true`；接口只报告配置状态，不返回 Secret。
-2. 使用具备管理员角色的邮箱账号登录 Admin，确认仪表盘和收件箱可加载。
-3. 在 Admin 的“系统设置 → 前端登录链接前缀”填写 Webmail URL，例如 `https://webmail.example.com`。
-4. 新建一条分享链接并在无痕窗口打开，确认邮件列表正常。
-
-如 `/api/runtime` 不完整，按返回的 `missing` 和 `hints` 补配置后重新部署。
-
-## 本地开发
-
-要求 Node.js 22+。两个应用独立安装依赖：
+<details>
+<summary><strong>本地开发与发布检查</strong></summary>
 
 ```bash
 npm --prefix apps/admin ci
@@ -258,58 +266,30 @@ npm --prefix apps/admin run dev
 npm --prefix apps/webmail run dev
 ```
 
-提交前运行完整检查：
+提交前运行：
 
 ```bash
 npm run check:public
 npm run check:release
 ```
 
-部署后可执行只读运行时探针：
+</details>
 
-```bash
-WEBMAIL_RUNTIME_URL=https://webmail.example.com npm run check:cloudflare:runtime
-```
+---
 
-## 公开版与自用配置边界
+<details>
+<summary><strong>手动接入已有 Worker</strong></summary>
 
-公开仓库只保存通用代码、示例占位符和可复用文档；自用信息只存在于 Cloudflare/GitHub Secret、部署平台变量或本机 ignored 文件。
+已有兼容 Worker 时，可以只部署两个 Pages 前端。Production 环境需要配置 `MAIL_WORKER_BASE_URL`、`SHARE_ENCRYPTION_SECRET_V2`（旧记录可继续使用 `SHARE_ENCRYPTION_SECRET`）、`SHARE_ADMIN_CORS_ORIGINS` 与 `SHARE_KV`，并让 Admin 通过同域 Pages Functions 代理访问 Worker。
 
-| 可以提交 | 不得提交 |
-| --- | --- |
-| `*.example`、`.dev.vars.example`、注释掉的 KV 占位符 | `.env`、`.dev.vars`、真实 Worker/站点域名 |
-| 通用 Pages 项目名和构建说明 | Cloudflare Account ID、KV/D1/R2 ID |
-| Loven7 品牌、通用截图和示例数据 | 密码、Token、JWT、Cookie、分享密钥 |
-| 通用排错与升级说明 | 自用生产清单、内部审计报告、客户或真实邮箱数据 |
+复用已有 Pages 项目时，请显式设置 `ADMIN_PAGES_PROJECT_NAME` 和 `WEBMAIL_PAGES_PROJECT_NAME`。Preview 环境的变量、Secret 与 KV 绑定需要单独配置；确认完整后再设置 `WEBMAIL_PREVIEW_RUNTIME_CONFIRMED=1`。部署后可运行 `npm run check:cloudflare:runtime` 做只读探测。完整变量表和验收步骤见[部署速查](docs/DEPLOYMENT_QUICKSTART.md)与[Cloudflare Pages 文档](docs/CLOUDFLARE_PAGES.md)。
 
-边界、同步方法和私有 overlay 建议见 [公开版与私有配置边界](docs/CONFIGURATION_BOUNDARY.md)。`npm run check:public` 会在 CI 中阻止常见私人域名、本机路径和生产材料重新进入公开仓库。
+</details>
 
-## 版本与升级
+---
 
-项目遵循 Semantic Versioning：修复用 PATCH，向后兼容功能用 MINOR，破坏性配置/API 变化用 MAJOR。每次升级先阅读 [CHANGELOG](CHANGELOG.md)，在 Preview 环境验证，再升级 Production。
+## 🤝 开源与安全
 
-公开代码与自用配置分离后，升级只同步源码；不要把生产变量反向复制到公开分支。完整策略见 [版本策略](docs/VERSIONING.md)。
-
-## 文档
-
-| 文档 | 用途 |
-| --- | --- |
-| [小白完整部署教程](docs/BEGINNER_GUIDE.md) | 从域名、下载启动器到收到第一封真实邮件 |
-| [Cloudflare 域名与邮箱路由](docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md) | 把域名托管到 Cloudflare，配置邮件 DNS 和 Catch-all Worker |
-| [部署速查](docs/DEPLOYMENT_QUICKSTART.md) | 最短的人工部署清单 |
-| [新手安装器](docs/INSTALLER.md) | 一条命令部署、重试与安全边界 |
-| [Email Routing 速查](docs/EMAIL_ROUTING.md) | 已托管域名的精简收件检查表 |
-| [AI Agent Pages-only 部署指令](docs/AGENT_DEPLOY_PROMPT.md) | 已有 Worker 时部署两个前端的安全提示词 |
-| [Cloudflare Pages](docs/CLOUDFLARE_PAGES.md) | 变量、KV、Preview、探针与排错 |
-| [GitHub Actions](docs/GITHUB_ACTIONS.md) | CI 与可选自动部署 |
-| [配置边界](docs/CONFIGURATION_BOUNDARY.md) | 公开源码和自用配置如何长期分离 |
-| [版本策略](docs/VERSIONING.md) | 发版、升级与兼容约定 |
-| [项目结构](docs/PROJECT_STRUCTURE.md) | 模块职责和维护入口 |
-| [安全脱敏](docs/SECURITY_DESENSITIZATION.md) | 发布前检查与响应流程 |
-| [产品边界与后端来源](docs/UPSTREAM.md) | 独立项目范围、兼容 Worker 来源和更新规则 |
-
-## 开源与安全
-
-MIT License。欢迎 Issue 和 PR；贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请不要公开披露，按 [SECURITY.md](SECURITY.md) 的方式报告。
+Loven7 Mail 使用 [MIT License](LICENSE)。欢迎提交 Issue 和 PR；参与贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请不要公开披露，请按 [SECURITY.md](SECURITY.md) 中的方式报告。
 
 感谢 [LinuxDo 社区](https://linux.do/) 对开源交流和开发者协作的支持。

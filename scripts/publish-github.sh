@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_NAME="${1:-loven7-mail-cloudflare-suite}"
+REPO_NAME="${1:-loven7-mail}"
 VISIBILITY="${VISIBILITY:---public}"
 
 if ! command -v gh >/dev/null 2>&1; then

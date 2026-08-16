@@ -83,6 +83,10 @@ const allowedExternalHosts = new Set([
   "www.w3.org",
 ]);
 
+const officialRepositoryUrl = "https://github.com/Lur1N77777/loven7-mail";
+const deprecatedRepositoryUrl =
+  "https://github.com/Lur1N77777/" + "loven7-mail-cloudflare-suite";
+
 function normalized(path) {
   return path.replaceAll("\\", "/");
 }
@@ -157,6 +161,10 @@ for (const absolutePath of files) {
   const text = readFileSync(absolutePath, "utf8");
   const pathScanText = text.replaceAll("\\\\", "\\");
   checked.push(file);
+
+  if (text.includes(deprecatedRepositoryUrl)) {
+    errors.push(`${file} still links to the deprecated GitHub repository name.`);
+  }
 
   if (/\b[A-Za-z]:[\\/](?!Program Files(?: \(x86\))?[\\/])/i.test(pathScanText)) {
     errors.push(`${file} contains a local absolute Windows path.`);
@@ -249,6 +257,12 @@ if (existsSync(readmePath)) {
   if (!readme.includes("# Loven7 Mail")) {
     errors.push("README must present Loven7 Mail as the independent project name.");
   }
+  if ((readme.match(/^# /gm) || []).length !== 1) {
+    errors.push("README must contain exactly one H1 heading.");
+  }
+  if (!readme.includes(officialRepositoryUrl)) {
+    errors.push("README must link to the official Loven7 Mail repository.");
+  }
   for (const guide of [
     "docs/BEGINNER_GUIDE.md",
     "docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md",
@@ -256,17 +270,23 @@ if (existsSync(readmePath)) {
     if (!readme.includes(guide)) errors.push(`README is missing beginner guide link: ${guide}`);
   }
   for (const heading of [
-    "## 界面预览",
-    "## 一条命令部署",
-    "## 手动部署（已有 Worker）",
-    "## 公开版与自用配置边界",
-    "## 版本与升级",
+    "## 🚀 三步开始",
+    "## 🎯 选择你的入口",
+    "## ✨ 你会得到什么",
+    "## 🖼️ 界面预览",
+    "## 📦 安装器会自动完成什么",
+    "## 📚 文档导航",
+    "## 🔍 常见问题",
   ]) {
     if (!readme.includes(heading)) errors.push(`README is missing section: ${heading}`);
   }
 
-  const previewIndex = readme.indexOf("## 界面预览");
-  const projectIndex = readme.indexOf("## 项目组成");
+  for (const marker of ["```mermaid", "accTitle:", "accDescr:"]) {
+    if (!readme.includes(marker)) errors.push(`README deployment flow is missing: ${marker}`);
+  }
+
+  const previewIndex = readme.indexOf("## 🖼️ 界面预览");
+  const projectIndex = readme.indexOf("## 🧩 系统组成");
   if (previewIndex !== -1 && projectIndex !== -1 && previewIndex > projectIndex) {
     errors.push("README interface preview must appear before the project and deployment details.");
   }

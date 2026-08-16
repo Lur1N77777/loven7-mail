@@ -33,7 +33,7 @@ const flatMenuItems = menuGroups.flat();
 export const mobilePrimaryMenus: MenuKey[] = ['stats', 'address', 'inbox', 'sent'];
 export const mobileSwipeMenus: MenuKey[] = [...mobilePrimaryMenus, 'dashboard'];
 const mobileMoreItems = flatMenuItems.filter((item) => !mobilePrimaryMenus.includes(item.key));
-const OFFICIAL_GITHUB_URL = 'https://github.com/Lur1N77777/loven7-mail-cloudflare-suite';
+const OFFICIAL_GITHUB_URL = 'https://github.com/Lur1N77777/loven7-mail';
 
 const adminAvatarPresets = [
   { id: 'aurora', src: '/loven7-designer-cover-01-silk-light.png', labelZh: '丝光', labelEn: 'Silk light' },

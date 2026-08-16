@@ -4,7 +4,7 @@
 
 ## 新手首选：一条命令
 
-Windows 用户可以直接下载并双击 [Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/latest/download/Install-Loven7-Mail.cmd)，不需要先克隆 GitHub 仓库。启动器会自动获取校验过的正式版本、准备 Node.js 22，并在从零部署时按需下载官方 MinGit 便携版，然后进入 Cloudflare OAuth 登录。已有 Worker 接入不要求 Git。
+Windows 用户可以直接下载并双击 [Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail/releases/latest/download/Install-Loven7-Mail.cmd)，不需要先克隆 GitHub 仓库。启动器会自动获取校验过的正式版本、准备 Node.js 22，并在从零部署时按需下载官方 MinGit 便携版，然后进入 Cloudflare OAuth 登录。已有 Worker 接入不要求 Git。
 
 准备 Node.js 22+，克隆或 Fork 仓库后运行：
 

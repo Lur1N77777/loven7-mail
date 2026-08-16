@@ -1,5 +1,5 @@
 param(
-  [string]$RepoName = "loven7-mail-cloudflare-suite",
+  [string]$RepoName = "loven7-mail",
   [switch]$Private
 )
 

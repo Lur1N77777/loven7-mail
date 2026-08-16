@@ -18,7 +18,7 @@ import "./mailWorkspace.css";
 
 const PAGE_SIZE = 50;
 const AUTO_REFRESH_MS = 10_000;
-const OFFICIAL_GITHUB_URL = "https://github.com/Lur1N77777/loven7-mail-cloudflare-suite";
+const OFFICIAL_GITHUB_URL = "https://github.com/Lur1N77777/loven7-mail";
 const MAIL_READ_HISTORY_MAX = 5000;
 const MAIL_STATE_MODE = "inbox";
 const MAIL_DELETE_EXIT_MS = 260;

@@ -91,8 +91,8 @@
 - Loven7 Mail Admin 与 Webmail 双应用结构。
 - Cloudflare Pages Functions、分享 KV、PWA 和基础 CI/发布脚本。
 
-[Unreleased]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/Lur1N77777/loven7-mail-cloudflare-suite/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Lur1N77777/loven7-mail/releases/tag/v0.1.0

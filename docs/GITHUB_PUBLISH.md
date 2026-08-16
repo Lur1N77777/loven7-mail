@@ -20,13 +20,13 @@ git status --short
 确认只包含预期公开文件后，可使用仓库脚本：
 
 ```powershell
-.\scripts\publish-github.ps1 -RepoName loven7-mail-cloudflare-suite
+.\scripts\publish-github.ps1 -RepoName loven7-mail
 ```
 
 macOS / Linux / Git Bash：
 
 ```bash
-bash scripts/publish-github.sh loven7-mail-cloudflare-suite
+bash scripts/publish-github.sh loven7-mail
 ```
 
 脚本只负责创建/连接 GitHub 仓库并推送源码，不会配置 Cloudflare 或上传 Secret。
