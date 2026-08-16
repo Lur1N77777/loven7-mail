@@ -75,4 +75,6 @@ test('release workflow publishes the launcher, bootstrap and checksums', () => {
   assert.match(workflow, /部署完成后还要做什么/);
   assert.match(workflow, /Compute → Email Service → Email Routing/);
   assert.match(workflow, /--title "Loven7 Mail \$\{tag#v\}"/);
+  assert.ok(workflow.includes('$0 ~ "^## [[]" version'));
+  assert.match(workflow, /源码包\]\(\.\/%s\).*basename "\$asset"/);
 });

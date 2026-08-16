@@ -61,8 +61,8 @@ jobs:
           (cd release-assets && sha256sum "$(basename "$asset")" loven7-mail-bootstrap.ps1 Install-Loven7-Mail.cmd > SHA256SUMS.txt)
 
           version="${tag#v}"
-          awk -v heading="## [${version}]" '
-            $0 == heading { found=1; next }
+          awk -v version="$version" '
+            $0 ~ "^## [[]" version "[]]([[:space:]]|$)" { found=1; next }
             found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md > release-assets/RELEASE_NOTES.md
@@ -86,8 +86,8 @@ jobs:
             printf '> English documentation: [README](https://github.com/Lur1N77777/loven7-mail/blob/main/README_EN.md) · [Beginner guide](https://github.com/Lur1N77777/loven7-mail/blob/main/docs/BEGINNER_GUIDE_EN.md) · [Cloudflare domain and Email Routing](https://github.com/Lur1N77777/loven7-mail/blob/main/docs/CLOUDFLARE_DOMAIN_AND_EMAIL_EN.md).\n\n'
             printf '## 下载与安装\n\n'
             printf -- '- **Windows 新手**：下载并双击 [Install-Loven7-Mail.cmd](./Install-Loven7-Mail.cmd)，无需克隆仓库。\n'
-            printf -- '- **源码部署**：下载 [源码包](./%s) 后运行 `npm run setup`。\n'
-            printf -- '- **完整校验**：下载 [SHA256SUMS.txt](./SHA256SUMS.txt) 校验安装器和源码包。\n\n' "$(basename "$asset")"
+            printf -- '- **源码部署**：下载 [源码包](./%s) 后运行 `npm run setup`。\n' "$(basename "$asset")"
+            printf -- '- **完整校验**：下载 [SHA256SUMS.txt](./SHA256SUMS.txt) 校验安装器和源码包。\n\n'
             printf '## 更新内容\n\n'
             cat "$notes"
             printf '\n## 部署完成后还要做什么\n\n'
