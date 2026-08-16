@@ -52,6 +52,8 @@ Worker · D1 · Admin · Webmail · 邮件分享 · 多域名 · Windows 一键�
   </tr>
 </table>
 
+同一个 `Install-Loven7-Mail.cmd` 同时支持中文和 English。启动后选择语言，后续下载、授权、部署、错误提示和最终验收都会保持该语言；自动化或重跑时也可使用 `--lang zh-CN` 或 `--lang en`。
+
 ```mermaid
 flowchart LR
   accTitle: Loven7 Mail 新手部署流程

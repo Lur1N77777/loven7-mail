@@ -29,10 +29,20 @@ test('keeps --domain as a backwards-compatible single-domain option', () => {
   assert.match(result.stdout, /邮箱域名：mail\.example\.net/);
 });
 
+test('prints a fully English plan when --lang en is selected', () => {
+  const result = spawnSync(process.execPath, [
+    'scripts/installer/cli.mjs', '--plan', '--new-worker', '--lang=en', '--domains', 'mail.example.net',
+  ], { cwd: rootDir, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Loven7 Mail installation plan/);
+  assert.match(result.stdout, /Mail domains: mail\.example\.net/);
+  assert.doesNotMatch(result.stdout, /[\u4e00-\u9fff]/, 'English plan must not leak Chinese labels or prompts');
+});
+
 test('authenticates a new installation before asking for its Cloudflare mail domains', () => {
   const source = readFileSync(resolve(rootDir, 'scripts/installer/cli.mjs'), 'utf8');
   const authentication = source.indexOf('installer.ensureAuthentication()');
-  const domainPrompt = source.indexOf("ui.text('邮箱域名");
+  const domainPrompt = source.indexOf('Mail domains (comma-separated');
   assert(authentication >= 0, 'new-worker flow must authenticate explicitly');
   assert(domainPrompt > authentication, 'domain prompt must happen after Cloudflare authentication');
 });

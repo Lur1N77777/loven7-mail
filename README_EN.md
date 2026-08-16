@@ -52,6 +52,8 @@ Worker · D1 · Admin · Webmail · Mail sharing · Multiple domains · One-file
   </tr>
 </table>
 
+The same `Install-Loven7-Mail.cmd` supports both Chinese and English. Choose a language at startup and the download, authorization, deployment, errors, and final checks stay in that language. For automation or reruns, use `--lang zh-CN` or `--lang en`.
+
 ```mermaid
 flowchart LR
   accTitle: Loven7 Mail beginner deployment

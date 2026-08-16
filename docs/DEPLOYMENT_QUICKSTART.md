@@ -6,6 +6,8 @@
 
 Windows 用户可以直接下载并双击 [Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail/releases/latest/download/Install-Loven7-Mail.cmd)，不需要先克隆 GitHub 仓库。启动器会自动获取校验过的正式版本，并在系统缺少时准备 Node.js 22 与官方 MinGit 便携版，然后进入 Cloudflare OAuth 登录。
 
+这个单文件启动器同时支持中文和 English。启动时选择语言即可让后续下载、授权、部署和验收保持一致；命令行重跑也可传 `--lang zh-CN` 或 `--lang en`。
+
 准备 Node.js 22+，克隆或 Fork 仓库后运行：
 
 ```bash

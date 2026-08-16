@@ -4,9 +4,28 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 后续变更记录从 `0.5.1` 开始累积。
+
+## [0.5.1] - 2026-08-16
+
 ### Added
 
+- Windows 发布资产仍只有一个 `Install-Loven7-Mail.cmd`，启动后可选择中文或 English，不需要下载两个安装器。
+- 安装器支持 `--lang zh-CN`、`--lang en` 和 `--lang=en`，方便自动化与断点续装。
+- 新增语言上下文、菜单、CLI、bootstrap、Cloudflare 适配层和核心部署流程的双语回归测试。
+
+### Changed
+
+- 同一个语言选择会贯穿下载校验、Node/Git 准备、Cloudflare OAuth、域名与 MX 风险确认、部署进度、断点续装、错误信息和最终验收。
 - 新增完整英文 README、英文小白部署教程和英文 Cloudflare 域名 / Email Routing 教程，并为中英文入口加入双向语言切换。
+
+### Fixed
+
+- 修复 Windows 单文件安装器从英文入口进入后仍混用中文提示的问题。
+- bootstrap 会把选定语言显式透传到 Node 安装器，直接运行 bootstrap 或重跑时也保持一致语言。
+- 为 PowerShell bootstrap 保留 UTF-8 BOM，兼容 Windows PowerShell 5.1 的脚本解析。
 
 ## [0.5.0] - 2026-08-16
 
@@ -137,7 +156,8 @@
 - Loven7 Mail Admin 与 Webmail 双应用结构。
 - Cloudflare Pages Functions、分享 KV、PWA 和基础 CI/发布脚本。
 
-[Unreleased]: https://github.com/Lur1N77777/loven7-mail/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Lur1N77777/loven7-mail/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Lur1N77777/loven7-mail/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.3.0...v0.4.0

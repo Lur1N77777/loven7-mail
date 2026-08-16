@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
+import { msg } from './i18n.mjs';
 import { UPSTREAM_LOCK } from './upstream.mjs';
 
 export const UPSTREAM_PNPM_VERSION = UPSTREAM_LOCK.workerPnpm;
@@ -38,7 +39,10 @@ export function resolveInvocation(command, args, {
   if (platform !== 'win32' || !WINDOWS_NODE_CLIS[normalized]) return { command, args };
   const cliPath = nodeCliPaths[normalized] || findWindowsNodeCli(normalized, env, nodeExecutable);
   if (!cliPath) {
-    throw new Error(`Windows 环境无法找到 ${command} 的 Node.js CLI。请重新安装 Node.js 22+。`);
+    throw new Error(msg(
+      `Windows 环境无法找到 ${command} 的 Node.js CLI。请重新安装 Node.js 22+。`,
+      `The Node.js CLI for ${command} was not found on Windows. Reinstall Node.js 22 or later.`,
+    ));
   }
   return { command: nodeExecutable, args: [cliPath, ...args] };
 }
@@ -81,7 +85,7 @@ export class CommandRunner {
     });
     if (result.error || result.status !== 0) {
       const detail = String(result.stderr || result.stdout || result.error?.message || '').trim();
-      throw new CommandError(detail || `${command} 执行失败。`, result);
+      throw new CommandError(detail || msg(`${command} 执行失败。`, `${command} failed.`), result);
     }
     return String(result.stdout || '').trim();
   }
@@ -99,7 +103,10 @@ function parseJson(output, label) {
   try {
     return JSON.parse(output);
   } catch {
-    throw new Error(`${label} 返回了无法识别的数据。请升级安装器后重试。`);
+    throw new Error(msg(
+      `${label} 返回了无法识别的数据。请升级安装器后重试。`,
+      `${label} returned unrecognized data. Upgrade the installer and try again.`,
+    ));
   }
 }
 
@@ -136,7 +143,12 @@ export class CloudflareAdapter {
   createKvNamespace(title) {
     this.runner.wrangler(['kv', 'namespace', 'create', title]);
     const namespace = this.listKvNamespaces().find((item) => item.title === title);
-    if (!namespace?.id) throw new Error(`KV ${title} 已创建，但无法读取 Namespace ID。`);
+    if (!namespace?.id) {
+      throw new Error(msg(
+        `KV ${title} 已创建，但无法读取 Namespace ID。`,
+        `KV namespace ${title} was created, but its Namespace ID could not be read.`,
+      ));
+    }
     return namespace;
   }
 
@@ -180,7 +192,12 @@ export class CloudflareAdapter {
   createD1Database(name) {
     this.runner.upstreamWrangler(['d1', 'create', name]);
     const database = this.listD1Databases().find((item) => item.name === name);
-    if (!database?.uuid) throw new Error(`D1 ${name} 已创建，但无法读取 database_id。`);
+    if (!database?.uuid) {
+      throw new Error(msg(
+        `D1 ${name} 已创建，但无法读取 database_id。`,
+        `D1 database ${name} was created, but its database_id could not be read.`,
+      ));
+    }
     return { name, id: database.uuid };
   }
 
@@ -242,7 +259,10 @@ export class CloudflareAdapter {
     } catch {
       // Older Wrangler releases do not expose deployment metadata as JSON.
     }
-    throw new Error(`Worker ${workerName} 已部署，但无法从 Wrangler 输出或部署元数据中确定公开地址。请在 Cloudflare Dashboard 查看地址后重新运行已有 Worker 模式。`);
+    throw new Error(msg(
+      `Worker ${workerName} 已部署，但无法从 Wrangler 输出或部署元数据中确定公开地址。请在 Cloudflare Dashboard 查看地址后重新运行已有 Worker 模式。`,
+      `Worker ${workerName} was deployed, but its public URL could not be determined from Wrangler output or deployment metadata. Find the URL in the Cloudflare Dashboard, then rerun in existing Worker mode.`,
+    ));
   }
 
   deployUpstreamWorker(cwd, { interactive = false } = {}) {

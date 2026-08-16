@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const rootDir = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const bootstrap = readFileSync(resolve(rootDir, 'scripts/installer/bootstrap.ps1'), 'utf8');
+const bootstrapPath = resolve(rootDir, 'scripts/installer/bootstrap.ps1');
+const bootstrapBytes = readFileSync(bootstrapPath);
+const bootstrap = bootstrapBytes.toString('utf8');
 const launcher = readFileSync(resolve(rootDir, 'scripts/installer/Install-Loven7-Mail.cmd'), 'utf8');
 const workflow = readFileSync(resolve(rootDir, '.github/workflows/release-assets.yml'), 'utf8');
 
@@ -15,16 +17,28 @@ test('Windows launcher downloads the signed bootstrap from the latest release', 
   assert.match(launcher, /Get-FileHash -Algorithm SHA256/);
   assert.match(launcher, /SHA256SUMS\.txt/);
   assert.match(launcher, /ExecutionPolicy Bypass/);
+  assert.match(launcher, /1\. 中文/);
+  assert.match(launcher, /2\. English/);
+  assert.match(launcher, /-File "%BOOTSTRAP%" -InstallerLanguage "%INSTALLER_LANG%" %\*/);
+  assert.match(launcher, /LOVEN7_BOOTSTRAP_PATH/);
+  assert.match(launcher, /Write-Host \$_\.Exception\.Message/);
+  assert.match(launcher, /--lang=en/);
+  assert.match(launcher, /--lang=zh-CN/);
+  assert.doesNotMatch(launcher, /Install-Loven7-Mail-(?:EN|ZH)|installer-(?:en|zh)\.cmd/i);
   assert.doesNotMatch(launcher, /CLOUDFLARE_API_TOKEN|ADMIN_PASSWORD|SITE_PASSWORD/);
+});
+
+test('bootstrap keeps a UTF-8 BOM for Windows PowerShell 5.1', () => {
+  assert.deepEqual([...bootstrapBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
 });
 
 test('Windows launcher passes PowerShell variables without escaping their sigils', () => {
   assert.doesNotMatch(
     launcher,
-    /`\$(?:line|_|expected|actual|LASTEXITCODE)\b/,
+    /`\$(?:line|_|expected|actual)\b/,
     'cmd.exe does not expand PowerShell variables; a backtick here breaks PowerShell parsing',
   );
-  for (const variable of ['$line', '$_', '$expected', '$actual', '$LASTEXITCODE']) {
+  for (const variable of ['$line', '$_', '$expected', '$actual']) {
     assert.ok(launcher.includes(variable), `launcher is missing ${variable}`);
   }
 });
@@ -43,7 +57,10 @@ test('bootstrap verifies the source archive before extraction and starts npm set
   assert.match(bootstrap, /Expand-Archive/);
   assert.match(bootstrap, /\$node = Get-NodeCommand\s+Ensure-Git \| Out-Null\s+\$sourceRoot = Get-SourceRoot/s);
   assert.match(bootstrap, /run setup/);
-  assert.match(bootstrap, /run setup -- @SetupArgs/);
+  assert.match(bootstrap, /run setup -- --lang \$script:InstallerLanguage @ForwardedSetupArgs/);
+  assert.match(bootstrap, /\$argument -like '--lang=\*'/);
+  assert.match(bootstrap, /InstallerLanguage/);
+  assert.match(bootstrap, /LOVEN7_MAIL_LANG/);
   assert.match(bootstrap, /wrangler official OAuth/i);
   assert.doesNotMatch(bootstrap, /ADMIN_PASSWORD|SITE_PASSWORD|CLOUDFLARE_API_TOKEN/);
 });

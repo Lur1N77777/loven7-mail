@@ -76,6 +76,8 @@ flowchart LR
 
 启动器会先下载 PowerShell 引导脚本和 `SHA256SUMS.txt`，校验 SHA-256 后再运行。没有 Node.js 22 时会准备便携版本；电脑没有 Git 时会准备官方 MinGit，确保稍后选择从零部署也不会卡住。
 
+**同一个文件支持双语。** 启动后选择 `1. 中文` 或 `2. English`，之后的下载、Cloudflare 授权、部署进度、错误提示和最终验收会保持所选语言。自动化或重跑时可以把 `--lang zh-CN` 或 `--lang en` 作为参数传入。
+
 ### Windows 显示安全提醒
 
 `.cmd` 是脚本文件，Windows 或浏览器可能询问是否保留或运行。只从本项目 GitHub Release 下载，并确认文件名是 `Install-Loven7-Mail.cmd`。需要自行校验时，Release 同时提供 `SHA256SUMS.txt`。

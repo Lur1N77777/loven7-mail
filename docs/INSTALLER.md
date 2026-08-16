@@ -37,6 +37,8 @@
 
 Windows 用户可以从 GitHub Releases 下载并双击 [Install-Loven7-Mail.cmd](https://github.com/Lur1N77777/loven7-mail/releases/latest/download/Install-Loven7-Mail.cmd)。它会自动下载校验过的发行包，并在系统缺少时准备 Node.js 22 与官方 MinGit 便携版；不需要先克隆仓库。临时上游目录会在部署后删除。
 
+同一个 Windows 启动器同时支持中文和 English。启动后选择 `1. 中文` 或 `2. English`，选择会贯穿整个安装流程；无需下载两个版本。自动化或重跑时可使用 `--lang zh-CN` 或 `--lang en`。
+
 克隆或 Fork 本仓库后运行：
 
 ```bash

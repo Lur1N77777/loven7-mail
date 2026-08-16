@@ -79,6 +79,8 @@ Direct download:
 
 The launcher downloads the PowerShell bootstrap and `SHA256SUMS.txt`, verifies the SHA-256 checksum, and then starts the installer. It can prepare portable Node.js 22 and official MinGit when they are not installed.
 
+**One file supports both languages.** At startup choose `1. 中文` or `2. English`. The download, Cloudflare authorization, deployment progress, errors, and final checks then stay in the selected language. For automation or reruns, pass `--lang zh-CN` or `--lang en`.
+
 ### Windows security warnings
 
 Windows or your browser may ask whether to keep or run the script. Download it only from this project's GitHub Release and confirm the filename is `Install-Loven7-Mail.cmd`. The same Release contains `SHA256SUMS.txt` for independent verification.
