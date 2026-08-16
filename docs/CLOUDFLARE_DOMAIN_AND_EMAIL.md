@@ -1,3 +1,5 @@
+**简体中文** · [English](CLOUDFLARE_DOMAIN_AND_EMAIL_EN.md)
+
 # 把域名托管到 Cloudflare 并开启邮箱路由
 
 _面向第一次使用 Cloudflare 的部署者；先让域名变为 Active，再由安装器自动接通邮件路由。_

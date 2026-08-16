@@ -1,3 +1,5 @@
+**简体中文** · [English](BEGINNER_GUIDE_EN.md)
+
 # Loven7 Mail 小白完整部署教程
 
 _从一个已经购买的域名开始，完成 Cloudflare 授权、自动部署、邮箱路由和第一封真实邮件测试。_

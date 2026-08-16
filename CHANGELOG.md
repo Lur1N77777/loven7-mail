@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增完整英文 README、英文小白部署教程和英文 Cloudflare 域名 / Email Routing 教程，并为中英文入口加入双向语言切换。
+
 ## [0.5.0] - 2026-08-16
 
 ### Added

@@ -9,12 +9,15 @@ const checked = [];
 
 const requiredPublicFiles = [
   "README.md",
+  "README_EN.md",
   "CHANGELOG.md",
   "SECURITY.md",
   "deployment/upstream-lock.json",
   "docs/AGENT_DEPLOY_PROMPT.md",
   "docs/BEGINNER_GUIDE.md",
+  "docs/BEGINNER_GUIDE_EN.md",
   "docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md",
+  "docs/CLOUDFLARE_DOMAIN_AND_EMAIL_EN.md",
   "docs/INSTALLER.md",
   "docs/CONFIGURATION_BOUNDARY.md",
   "docs/DEPLOYMENT_QUICKSTART.md",
@@ -32,6 +35,7 @@ const privateOnlyNamePatterns = [
 
 const publicSurfaceRoots = [
   "README.md",
+  "README_EN.md",
   "CHANGELOG.md",
   "CONTRIBUTING.md",
   "SECURITY.md",
@@ -309,6 +313,37 @@ if (existsSync(readmePath)) {
   }
 }
 
+const englishReadmePath = resolve(repoRoot, "README_EN.md");
+if (existsSync(englishReadmePath)) {
+  const readme = readFileSync(englishReadmePath, "utf8");
+  if (!readme.includes("# Loven7 Mail")) {
+    errors.push("English README must present Loven7 Mail as the independent project name.");
+  }
+  if ((readme.match(/^# /gm) || []).length !== 1) {
+    errors.push("English README must contain exactly one H1 heading.");
+  }
+  if (!readme.includes(officialRepositoryUrl)) {
+    errors.push("English README must link to the official Loven7 Mail repository.");
+  }
+  for (const guide of [
+    "docs/BEGINNER_GUIDE_EN.md",
+    "docs/CLOUDFLARE_DOMAIN_AND_EMAIL_EN.md",
+  ]) {
+    if (!readme.includes(guide)) errors.push("English README is missing beginner guide link: " + guide);
+  }
+  for (const heading of [
+    "## 🚀 Quick start",
+    "## 🎯 Choose the right starting point",
+    "## ✨ What you get",
+    "## 🖼️ Interface preview",
+    "## 📦 What the installer automates",
+    "## 📚 Documentation",
+    "## 🔍 FAQ",
+  ]) {
+    if (!readme.includes(heading)) errors.push("English README is missing section: " + heading);
+  }
+}
+
 const promptPath = resolve(repoRoot, "docs/AGENT_DEPLOY_PROMPT.md");
 if (existsSync(promptPath)) {
   const prompt = readFileSync(promptPath, "utf8");
@@ -348,6 +383,19 @@ for (const [file, markers] of [
   ]],
   ["docs/CLOUDFLARE_DOMAIN_AND_EMAIL.md", [
     "把域名托管到 Cloudflare",
+    "Compute → Email Service → Email Routing",
+    "Send to a Worker",
+    "```mermaid",
+    "developers.cloudflare.com",
+  ]],
+  ["docs/BEGINNER_GUIDE_EN.md", [
+    "```mermaid",
+    "screenshots/admin-dashboard.png",
+    "screenshots/webmail-login.png",
+    "What counts as a complete deployment?",
+  ]],
+  ["docs/CLOUDFLARE_DOMAIN_AND_EMAIL_EN.md", [
+    "Host the domain on Cloudflare",
     "Compute → Email Service → Email Routing",
     "Send to a Worker",
     "```mermaid",

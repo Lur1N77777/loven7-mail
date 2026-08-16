@@ -83,6 +83,7 @@ jobs:
           {
             printf '# Loven7 Mail %s\n\n' "$tag"
             printf '> 中文发布说明：本页包含本版本变更、Windows 一键安装器和部署完成后的验收操作。\n\n'
+            printf '> English documentation: [README](https://github.com/Lur1N77777/loven7-mail/blob/main/README_EN.md) · [Beginner guide](https://github.com/Lur1N77777/loven7-mail/blob/main/docs/BEGINNER_GUIDE_EN.md) · [Cloudflare domain and Email Routing](https://github.com/Lur1N77777/loven7-mail/blob/main/docs/CLOUDFLARE_DOMAIN_AND_EMAIL_EN.md).\n\n'
             printf '## 下载与安装\n\n'
             printf -- '- **Windows 新手**：下载并双击 [Install-Loven7-Mail.cmd](./Install-Loven7-Mail.cmd)，无需克隆仓库。\n'
             printf -- '- **源码部署**：下载 [源码包](./%s) 后运行 `npm run setup`。\n'

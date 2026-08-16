@@ -1,5 +1,7 @@
 <div align="center">
 
+<p><strong>简体中文</strong> · <a href="README_EN.md">English</a></p>
+
 <img src="docs/assets/loven7-mail-logo.svg" alt="Loven7 Mail logo" width="104" height="104" />
 
 # Loven7 Mail
