@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-16
+
 ### Changed
 
 - README 首屏改为“下载启动器 → Cloudflare 授权 → Email Routing → 真实收件验收”的新手路径，并补充部署前准备、能力边界和收件配置速查。
@@ -11,6 +13,16 @@
 - 项目首页名称改为 `Loven7 Mail`，定位为开源、可自托管的 Cloudflare 邮箱系统，并明确部署后的运行资源完全位于用户自己的 Cloudflare 账号。
 - 新增从域名托管、名称服务器、Cloudflare OAuth、自动部署、Email Routing 到第一封真实邮件的小白完整教程，以及独立的 Cloudflare 域名与邮箱路由图文页面。
 - 教程按 Cloudflare 2026 年账号级 **Compute → Email Service → Email Routing** 入口更新，并补充 DNSSEC 切换、SPF/DKIM 与旧版控制台路径提示。
+
+### Fixed
+
+- 修复 Windows 单文件启动器把 PowerShell 变量错误写成转义文本，导致双击后在 `if (-not $line)` 处直接出现解析错误的问题。
+- 启动器与 PowerShell 引导脚本现在只从当前 PowerShell 主机加载内置模块，避免 PowerShell 7 模块路径污染 Windows PowerShell 后造成 `Get-FileHash` 不可用。
+
+### Compatibility
+
+- 本补丁不修改 Cloudflare Worker、D1、Pages、KV、Secret 或 Email Routing 配置；已经完成部署的 `v0.4.0` 用户无需重新部署。
+- 使用 Windows 单文件安装器的新用户应重新下载 `v0.4.1` 的 `Install-Loven7-Mail.cmd`，不要继续使用此前下载的 `v0.4.0` 文件。
 
 ## [0.4.0] - 2026-08-13
 
@@ -91,7 +103,8 @@
 - Loven7 Mail Admin 与 Webmail 双应用结构。
 - Cloudflare Pages Functions、分享 KV、PWA 和基础 CI/发布脚本。
 
-[Unreleased]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Lur1N77777/loven7-mail/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Lur1N77777/loven7-mail/compare/v0.1.0...v0.2.0

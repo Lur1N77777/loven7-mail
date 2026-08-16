@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$env:PSModulePath = Join-Path $PSHOME 'Modules'
 
 $Repository = 'Lur1N77777/loven7-mail'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'Loven7Mail\installer'

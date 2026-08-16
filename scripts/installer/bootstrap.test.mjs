@@ -18,6 +18,23 @@ test('Windows launcher downloads the signed bootstrap from the latest release', 
   assert.doesNotMatch(launcher, /CLOUDFLARE_API_TOKEN|ADMIN_PASSWORD|SITE_PASSWORD/);
 });
 
+test('Windows launcher passes PowerShell variables without escaping their sigils', () => {
+  assert.doesNotMatch(
+    launcher,
+    /`\$(?:line|_|expected|actual|LASTEXITCODE)\b/,
+    'cmd.exe does not expand PowerShell variables; a backtick here breaks PowerShell parsing',
+  );
+  for (const variable of ['$line', '$_', '$expected', '$actual', '$LASTEXITCODE']) {
+    assert.ok(launcher.includes(variable), `launcher is missing ${variable}`);
+  }
+});
+
+test('launcher and bootstrap isolate modules to the active PowerShell host', () => {
+  const modulePathIsolation = "$env:PSModulePath = Join-Path $PSHOME 'Modules'";
+  assert.ok(launcher.includes(modulePathIsolation));
+  assert.ok(bootstrap.includes(modulePathIsolation));
+});
+
 test('bootstrap verifies the source archive before extraction and starts npm setup', () => {
   assert.match(bootstrap, /Lur1N77777\/loven7-mail/);
   assert.match(bootstrap, /loven7-mail-\$tag-source\.zip/);

@@ -2,7 +2,7 @@
   "name": "loven7-mail",
   "private": true,
   "type": "module",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Open-source, self-hosted Cloudflare email system with Worker, Admin, Webmail and a guided installer.",
   "scripts": {
     "setup": "node scripts/installer/cli.mjs",
