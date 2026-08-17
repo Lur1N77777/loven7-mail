@@ -8,6 +8,10 @@ updates:
       time: "04:00"
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: npm
     directory: /apps/admin
@@ -17,6 +21,21 @@ updates:
       time: "04:10"
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+      vite-toolchain:
+        patterns:
+          - vite
+          - "@vitejs/plugin-react"
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: npm
     directory: /apps/webmail
@@ -26,3 +45,14 @@ updates:
       time: "04:20"
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+      vite-toolchain:
+        patterns:
+          - vite
+          - "@vitejs/plugin-react"
