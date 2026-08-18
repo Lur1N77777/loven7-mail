@@ -1060,8 +1060,14 @@ async function main() {
     assert(mailFrameText.includes('Your verification code is 123456'), `mail detail iframe should render decoded multipart body: ${mailFrameText || mobileMailDetail.bodySample}`);
     assert(!/Content-Transfer-Encoding|--smoke-boundary|Content-Type: multipart/i.test(mobileMailDetail.bodySample), `mail detail should not show raw MIME source: ${mobileMailDetail.bodySample}`);
     assert(!/Content-Transfer-Encoding|--smoke-boundary|Content-Type: multipart/i.test(mailFrameText), `mail detail iframe should not show raw MIME source: ${mailFrameText}`);
-    const mailFrameSrcdoc = await evaluate(mobile, `document.querySelector('.mail-frame')?.getAttribute('srcdoc') || ''`);
-    assert(mailFrameSrcdoc.includes('/api/image?url='), `admin remote mail image should use the same-origin proxy: ${mailFrameSrcdoc}`);
+    const blockedMailFrameSrcdoc = await evaluate(mobile, `document.querySelector('.mail-frame')?.getAttribute('srcdoc') || ''`);
+    assert(blockedMailFrameSrcdoc.includes('data-blocked-src='), `admin remote mail image should be blocked before consent: ${blockedMailFrameSrcdoc}`);
+    assert(!blockedMailFrameSrcdoc.includes('/api/image?url='), `admin must not request a remote image proxy before consent: ${blockedMailFrameSrcdoc}`);
+    assert(await evaluate(mobile, `document.body.innerText.includes('显示远程图片')`), 'remote image consent button should be visible for image-bearing mail');
+    await clickText(mobile, '显示远程图片');
+    await waitUntil(mobile, `document.querySelector('.mail-frame')?.getAttribute('srcdoc')?.includes('/api/image?url=')`);
+    const allowedMailFrameSrcdoc = await evaluate(mobile, `document.querySelector('.mail-frame')?.getAttribute('srcdoc') || ''`);
+    assert(allowedMailFrameSrcdoc.includes('/api/image?url='), `consented admin remote mail image should use the same-origin proxy: ${allowedMailFrameSrcdoc}`);
     const mailFrameRect = JSON.parse(await evaluate(mobile, `JSON.stringify((() => {
       const rect = document.querySelector('.mail-frame')?.getBoundingClientRect();
       return rect ? { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } : null;

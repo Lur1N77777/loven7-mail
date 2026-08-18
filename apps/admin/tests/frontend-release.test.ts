@@ -11,7 +11,7 @@ import { buildCacheScope, scopedStorageKey } from '../src/lib/cacheScope.ts';
 import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
 import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, loginAccountUser, registerAccountUser } from '../src/lib/userAuth.ts';
 import { readTrustedMailFrameMessage } from '../src/lib/mailFrameMessages.ts';
-import { parseRawMailListItem } from '../src/lib/mailParser.ts';
+import { hasExternalMailImages, parseRawMailListItem } from '../src/lib/mailParser.ts';
 import { adminMailStateEndpoint } from '../src/lib/mailStateEndpoint.ts';
 import { proxyMailImageSrcset, proxyMailImageUrl } from '../src/lib/mailImageProxy.ts';
 import { sanitizeMailHtmlWithoutDom } from '../src/lib/mailSanitizerFallback.ts';
@@ -190,6 +190,20 @@ test('admin routes remote mail images through its same-origin proxy', () => {
     ),
     'data:image/png;base64,AA== 1x, https://admin.example.test/api/image?url=https%3A%2F%2Fassets.example.com%2Fnotion-logo.png 2x',
   );
+});
+
+test('admin remote image consent is limited to image-bearing HTML and the active message', () => {
+  assert.equal(hasExternalMailImages('<img src="https://assets.example.test/pixel.png">'), true);
+  assert.equal(hasExternalMailImages('<img srcset="https://assets.example.test/a.png 1x, data:image/png;base64,AA== 2x">'), true);
+  assert.equal(hasExternalMailImages('<div style="background-image:url(//assets.example.test/banner.png)">Hello</div>'), true);
+  assert.equal(hasExternalMailImages('<a href="https://example.test">Link only</a><img src="data:image/png;base64,AA==">'), false);
+
+  const workspaceSource = readFileSync(new URL('../src/views/MailWorkspace.tsx', import.meta.url), 'utf8');
+  assert.equal((workspaceSource.match(/<MailDetail key=/g) || []).length, 2, 'desktop and mobile details must remount for each mail identity');
+  assert.match(workspaceSource, /key=\{`\$\{mode\}-\$\{selected\?\.id \?\? 'empty'\}`\}/, 'mail mode and id must scope remote-image permission');
+  assert.match(workspaceSource, /useState\(false\)/, 'external images must be blocked on every fresh mail detail');
+  assert.match(workspaceSource, /allowExternalImages \}\)/, 'the iframe document must receive the explicit permission');
+  assert.doesNotMatch(workspaceSource, /setAllowExternalImages\(false\)[\s\S]{0,80}\[mail\?\.id\]/, 'an after-paint effect can leak a new mail image before resetting permission');
 });
 
 test('verification extraction keeps the exact Notion code and removes a spaced numeric suffix', () => {
