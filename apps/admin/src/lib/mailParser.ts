@@ -465,8 +465,8 @@ export function parseRawMailListItem(item: RawMailRecord): ParsedMail {
 async function parseWithPostalMime(raw: string): Promise<any | null> {
   try {
     const mod = await import('postal-mime');
-    const PostalMime = mod.default;
-    return await PostalMime.parse(raw || '');
+    const parser = new mod.default({ attachmentEncoding: 'arraybuffer' });
+    return await parser.parse(raw || '');
   } catch (error) {
     console.warn('postal-mime unavailable, using simple parser', error);
     return null;
