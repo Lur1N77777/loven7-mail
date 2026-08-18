@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import ts from 'typescript';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { compileTypeScriptFiles } from './typescript-compile.mjs';
 
 const PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -12,17 +13,11 @@ const PNG_BYTES = Uint8Array.from([
 
 async function importRoute(sourceUrl, label) {
   const tempRoot = await mkdtemp(path.join(tmpdir(), `loven7-brand-${label}-`));
-  const source = await readFile(sourceUrl, 'utf8');
-  const output = ts.transpileModule(source, {
-    fileName: sourceUrl.pathname,
-    reportDiagnostics: true,
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  });
-  const diagnostics = output.diagnostics?.filter((item) => item.category === ts.DiagnosticCategory.Error) || [];
-  if (diagnostics.length) throw new Error(diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('\n'));
-  const routePath = path.join(tempRoot, 'brand-icon.mjs');
-  await writeFile(routePath, output.outputText, 'utf8');
-  return { tempRoot, route: await import(new URL(`file:///${routePath.replace(/\\/g, '/')}`).href) };
+  const sourcePath = fileURLToPath(sourceUrl);
+  const sourceRoot = fileURLToPath(new URL(label === 'webmail' ? '../functions/' : '../../admin/functions/', import.meta.url));
+  await compileTypeScriptFiles({ sourceRoot, rootFiles: [sourcePath], outDir: tempRoot });
+  const routePath = path.join(tempRoot, 'api', 'brand-icon.js');
+  return { tempRoot, route: await import(pathToFileURL(routePath).href) };
 }
 
 class MemoryCache {

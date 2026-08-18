@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import ts from 'typescript';
+import { compileTypeScriptFiles } from './typescript-compile.mjs';
 
 async function walk(root) {
   const result = [];
@@ -16,29 +16,7 @@ async function walk(root) {
 
 async function compileTree(sourceRoot, label) {
   const tempRoot = await mkdtemp(path.join(tmpdir(), `loven7-${label}-`));
-  for (const sourcePath of await walk(sourceRoot)) {
-    const relative = path.relative(sourceRoot, sourcePath);
-    const outputPath = path.join(tempRoot, relative.replace(/\.ts$/, '.mjs'));
-    await mkdir(path.dirname(outputPath), { recursive: true });
-    const source = await readFile(sourcePath, 'utf8');
-    const output = ts.transpileModule(source, {
-      fileName: sourcePath,
-      reportDiagnostics: true,
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-      },
-    });
-    const diagnostics = output.diagnostics?.filter((item) => item.category === ts.DiagnosticCategory.Error) || [];
-    if (diagnostics.length) {
-      throw new Error(diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('\n'));
-    }
-    const patched = output.outputText.replace(
-      /(from\s+["'])(\.{1,2}\/[^"']+?)(["'])/g,
-      (match, before, specifier, after) => `${before}${/\.[a-z]+$/i.test(specifier) ? specifier : `${specifier}.mjs`}${after}`,
-    );
-    await writeFile(outputPath, patched, 'utf8');
-  }
+  await compileTypeScriptFiles({ sourceRoot, rootFiles: await walk(sourceRoot), outDir: tempRoot });
   return tempRoot;
 }
 
@@ -125,18 +103,18 @@ try {
   webmailTemp = await compileTree(webmailFunctions, 'webmail-functions-check');
   adminTemp = await compileTree(adminFunctions, 'admin-functions-check');
 
-  const mailState = await import(moduleUrl(webmailTemp, 'api/mail-state.mjs'));
-  const shareLib = await import(moduleUrl(webmailTemp, '_lib/share.mjs'));
-  const shareUserLib = await import(moduleUrl(webmailTemp, '_lib/shareUser.mjs'));
-  const sharePatch = await import(moduleUrl(webmailTemp, 'api/share/admin/[token].mjs'));
-  const shareDelete = await import(moduleUrl(webmailTemp, 'api/share/[token]/mail/[id].mjs'));
-  const shareMails = await import(moduleUrl(webmailTemp, 'api/share/[token]/mails.mjs'));
-  const shareCreate = await import(moduleUrl(webmailTemp, 'api/share/index.mjs'));
-  const sessionRoute = await import(moduleUrl(webmailTemp, 'api/session.mjs'));
-  const registerRoute = await import(moduleUrl(webmailTemp, 'api/user/register.mjs'));
-  const loginRoute = await import(moduleUrl(webmailTemp, 'api/user/login.mjs'));
-  const adminProxy = await import(moduleUrl(adminTemp, '_lib/admin-proxy.mjs'));
-  const adminMailState = await import(moduleUrl(adminTemp, 'api/mail-state.mjs'));
+  const mailState = await import(moduleUrl(webmailTemp, 'api/mail-state.js'));
+  const shareLib = await import(moduleUrl(webmailTemp, '_lib/share.js'));
+  const shareUserLib = await import(moduleUrl(webmailTemp, '_lib/shareUser.js'));
+  const sharePatch = await import(moduleUrl(webmailTemp, 'api/share/admin/[token].js'));
+  const shareDelete = await import(moduleUrl(webmailTemp, 'api/share/[token]/mail/[id].js'));
+  const shareMails = await import(moduleUrl(webmailTemp, 'api/share/[token]/mails.js'));
+  const shareCreate = await import(moduleUrl(webmailTemp, 'api/share/index.js'));
+  const sessionRoute = await import(moduleUrl(webmailTemp, 'api/session.js'));
+  const registerRoute = await import(moduleUrl(webmailTemp, 'api/user/register.js'));
+  const loginRoute = await import(moduleUrl(webmailTemp, 'api/user/login.js'));
+  const adminProxy = await import(moduleUrl(adminTemp, '_lib/admin-proxy.js'));
+  const adminMailState = await import(moduleUrl(adminTemp, 'api/mail-state.js'));
 
   // A forged JWT must never be accepted as an identity when the Worker rejects it.
   {
