@@ -1,32 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import ts from 'typescript';
-
-async function importTsModule(relativePath) {
-  const sourceUrl = new URL(relativePath, import.meta.url);
-  const source = await readFile(sourceUrl, 'utf8');
-  const transpiled = ts.transpileModule(source, {
-    fileName: sourceUrl.pathname,
-    reportDiagnostics: true,
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-    },
-  });
-
-  const diagnostics = transpiled.diagnostics?.filter((item) => item.category === ts.DiagnosticCategory.Error) || [];
-  if (diagnostics.length) {
-    const messages = diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('\n');
-    throw new Error(`${relativePath}\n${messages}`);
-  }
-
-  const moduleUrl = `data:text/javascript;base64,${Buffer.from(transpiled.outputText, 'utf8').toString('base64')}`;
-  return import(moduleUrl);
-}
+import { importStandaloneTypeScriptModule } from './typescript-compile.mjs';
 
 const { errorJson, json, mapUpstreamError, RuntimeConfigError, runtimeConfigErrorJson, UpstreamError, withCors } =
-  await importTsModule('../functions/_lib/http.ts');
-const { runtimeDiagnostics } = await importTsModule('../functions/_lib/runtime.ts');
+  await importStandaloneTypeScriptModule(new URL('../functions/_lib/http.ts', import.meta.url));
+const { runtimeDiagnostics } = await importStandaloneTypeScriptModule(new URL('../functions/_lib/runtime.ts', import.meta.url));
 
 function assertNoStore(response, label) {
   assert.equal(response.headers.get('cache-control'), 'no-store, private, max-age=0', `${label}: Cache-Control`);

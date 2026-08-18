@@ -1,35 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import ts from 'typescript';
+import { fileURLToPath } from 'node:url';
+import { compileTypeScriptFiles } from './typescript-compile.mjs';
 
 async function transpileHttpToTemp() {
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'loven7-share-cors-check-'));
-  const libDir = path.join(tempRoot, '_lib');
-  await mkdir(libDir, { recursive: true });
-
-  for (const name of ['types', 'http']) {
-    const sourceUrl = new URL(`../functions/_lib/${name}.ts`, import.meta.url);
-    const source = await readFile(sourceUrl, 'utf8');
-    const output = ts.transpileModule(source, {
-      fileName: sourceUrl.pathname,
-      reportDiagnostics: true,
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-      },
-    });
-    const diagnostics = output.diagnostics?.filter((item) => item.category === ts.DiagnosticCategory.Error) || [];
-    if (diagnostics.length) {
-      const messages = diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('\n');
-      throw new Error(messages);
-    }
-    const patched = output.outputText.replace(/from\s+["']\.\/types["'];/g, 'from "./types.mjs";');
-    await writeFile(path.join(libDir, `${name}.mjs`), patched, 'utf8');
-  }
-
-  return { tempRoot, httpModulePath: path.join(libDir, 'http.mjs') };
+  const sourceRoot = fileURLToPath(new URL('../functions/', import.meta.url));
+  const rootFiles = ['types.ts', 'http.ts'].map((name) => path.join(sourceRoot, '_lib', name));
+  await compileTypeScriptFiles({ sourceRoot, rootFiles, outDir: tempRoot });
+  return { tempRoot, httpModulePath: path.join(tempRoot, '_lib', 'http.js') };
 }
 
 function req(url, origin, extra = {}) {

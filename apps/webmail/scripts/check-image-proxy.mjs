@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import ts from 'typescript';
+import { fileURLToPath } from 'node:url';
+import { compileTypeScriptFiles } from './typescript-compile.mjs';
 
 const PNG_BYTES = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -15,58 +16,18 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
 async function transpileToTemp() {
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'loven7-image-proxy-check-'));
-  const libDir = path.join(tempRoot, '_lib');
-  const apiDir = path.join(tempRoot, 'api');
-  await mkdir(libDir, { recursive: true });
-  await mkdir(apiDir, { recursive: true });
-
-  const files = [
-    {
-      from: new URL('../functions/_lib/http.ts', import.meta.url),
-      to: path.join(libDir, 'http.mjs'),
-      patch: (code) => code,
-    },
-    {
-      from: new URL('../functions/api/image.ts', import.meta.url),
-      to: path.join(apiDir, 'image.mjs'),
-      patch: (code) => code.replace(/from\s+["']\.\.\/_lib\/http["'];/g, 'from "../_lib/http.mjs";'),
-    },
-  ];
-
-  for (const file of files) {
-    const source = await readFile(file.from, 'utf8');
-    const output = ts.transpileModule(source, {
-      fileName: file.from.pathname,
-      reportDiagnostics: true,
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-      },
-    });
-    const diagnostics = output.diagnostics?.filter((item) => item.category === ts.DiagnosticCategory.Error) || [];
-    if (diagnostics.length) {
-      const messages = diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('\n');
-      throw new Error(messages);
-    }
-    await writeFile(file.to, file.patch(output.outputText), 'utf8');
-  }
-
-  return { tempRoot, imageModulePath: path.join(apiDir, 'image.mjs') };
+  const sourceRoot = fileURLToPath(new URL('../functions/', import.meta.url));
+  const imageSource = path.join(sourceRoot, 'api', 'image.ts');
+  await compileTypeScriptFiles({ sourceRoot, rootFiles: [imageSource], outDir: tempRoot });
+  return { tempRoot, imageModulePath: path.join(tempRoot, 'api', 'image.js') };
 }
 
 async function transpileAdminRouteToTemp() {
   const tempRoot = await mkdtemp(path.join(tmpdir(), 'loven7-admin-image-proxy-check-'));
-  const sourceUrl = new URL('../../admin/functions/api/image.ts', import.meta.url);
-  const source = await readFile(sourceUrl, 'utf8');
-  const output = ts.transpileModule(source, {
-    fileName: sourceUrl.pathname,
-    reportDiagnostics: true,
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-  });
-  const diagnostics = output.diagnostics?.filter((item) => item.category === ts.DiagnosticCategory.Error) || [];
-  if (diagnostics.length) throw new Error(diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('\n'));
-  const imageModulePath = path.join(tempRoot, 'image.mjs');
-  await writeFile(imageModulePath, output.outputText, 'utf8');
+  const sourcePath = fileURLToPath(new URL('../../admin/functions/api/image.ts', import.meta.url));
+  const sourceRoot = path.dirname(sourcePath);
+  await compileTypeScriptFiles({ sourceRoot, rootFiles: [sourcePath], outDir: tempRoot });
+  const imageModulePath = path.join(tempRoot, 'image.js');
   return { tempRoot, imageModulePath };
 }
 
