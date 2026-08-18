@@ -1,5 +1,5 @@
 import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type TouchEvent, type UIEvent } from 'react';
-import { Archive, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Download, MoreHorizontal, Paperclip, RefreshCw, Reply, Star, Trash2, X } from 'lucide-react';
+import { Archive, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Download, Image, MoreHorizontal, Paperclip, RefreshCw, Reply, Star, Trash2, X } from 'lucide-react';
 import { type Requester } from '../lib/api';
 import { ADDRESS_INPUT_DEBOUNCE_MS, COPY_HINT_MS, DEFAULT_PAGE_SIZE, NEW_MAIL_FLASH_MS, STORAGE_KEYS } from '../lib/constants';
 import { cls, formatShortDate, normalizeSearch } from '../lib/format';
@@ -8,7 +8,7 @@ import { copyText } from '../lib/clipboard';
 import { readStorage, writeLocalStorage } from '../lib/storage';
 import { preserveRowsBelowAuthoritativeHead } from '../lib/mailSync';
 import { readTrustedMailFrameMessage } from '../lib/mailFrameMessages';
-import { buildMailHtmlDocument, getDownloadEmlUrl, looksLikeMimeSource, parseRawMail, sanitizeMailHtml, sanitizeVerificationCode } from '../lib/mailParser';
+import { buildMailHtmlDocument, getDownloadEmlUrl, hasExternalMailImages, looksLikeMimeSource, parseRawMail, sanitizeVerificationCode } from '../lib/mailParser';
 import type { ComposePayload, ParsedMail, ParsedSendbox } from '../types/api';
 import { EmptyState, LoadingState, type Notify, useConfirm } from '../components/Common';
 import { BrandAvatar } from '../lib/brandIdentity';
@@ -1623,14 +1623,14 @@ export function MailWorkspace({ mode, active, visualActive = active, request, no
         </div>
       </div>
       <div className="mail-detail-pane hidden h-full min-w-0 flex-1 flex-col lg:flex">
-        {!compactViewport && <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} locale={locale} theme={theme} copiedKey={copiedKey} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} />}
+        {!compactViewport && <MailDetail key={`${mode}-${selected?.id ?? 'empty'}`} cacheScope={mailStateScope} mail={selected} mode={mode} locale={locale} theme={theme} copiedKey={copiedKey} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => setDetailClosed(true)} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} />}
       </div>
       {isMobileDetail && (
         <div
           className={cls('mobile-mail-detail absolute inset-0 z-40 flex h-full min-h-0 flex-col bg-white lg:hidden', mobileDetailSettling && 'mobile-detail-settling')}
           style={{ transform: `translate3d(${mobileDetailDragX}px, 0, 0)` }}
         >
-          <MailDetail cacheScope={mailStateScope} mail={selected} mode={mode} locale={locale} theme={theme} copiedKey={copiedKey} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} mobile />
+          <MailDetail key={`${mode}-${selected?.id ?? 'empty'}`} cacheScope={mailStateScope} mail={selected} mode={mode} locale={locale} theme={theme} copiedKey={copiedKey} deletingMailId={deletingMailId} onDelete={deleteMail} onReply={(mail) => composeFromMail(mail, 'reply')} onForward={(mail) => composeFromMail(mail, 'forward')} onCopy={copyValue} onToggleStar={toggleStar} onClose={() => { setDetailClosed(true); setIsMobileDetail(false); setMobileDetailDragX(0); }} onPrevious={() => navigateDetail(-1)} onNext={() => navigateDetail(1)} canPrevious={selectedIndex > 0} canNext={selectedIndex >= 0 && selectedIndex < filtered.length - 1} positionLabel={detailPositionLabel} onFrameWindowChange={(frameWindow) => { activeMailFrameWindowRef.current = frameWindow; }} mobile />
         </div>
       )}
     </div>
@@ -1937,9 +1937,11 @@ function MailDetail({
   const parsedForMemo = mail ? isParsed(mail) : false;
   const htmlForFrame = mail ? String(parsedForMemo ? mail.message : mail.is_html ? mail.content : '') : '';
   const rawForDownload = mail && parsedForMemo ? String(mail.raw || '') : '';
+  const [allowExternalImages, setAllowExternalImages] = useState(false);
+  const hasExternalImages = useMemo(() => hasExternalMailImages(htmlForFrame), [htmlForFrame]);
   const iframeDocument = useMemo(() => {
-    return htmlForFrame ? buildMailHtmlDocument(parsedForMemo ? htmlForFrame : sanitizeMailHtml(htmlForFrame)) : '';
-  }, [htmlForFrame, parsedForMemo]);
+    return htmlForFrame ? buildMailHtmlDocument(htmlForFrame, 'light', { allowExternalImages }) : '';
+  }, [allowExternalImages, htmlForFrame]);
   const emlUrl = useMemo(() => (rawForDownload ? getDownloadEmlUrl(rawForDownload) : ''), [rawForDownload]);
   useEffect(() => () => { if (emlUrl) URL.revokeObjectURL(emlUrl); }, [emlUrl]);
   if (!mail) return <div className="p-8"><EmptyState title={t('请选择一封邮件', 'Select a message')} /></div>;
@@ -2002,6 +2004,12 @@ function MailDetail({
             </div>
           </header>
           <div className="my-2 h-px shrink-0 bg-slate-100 md:my-2.5" />
+          {hasExternalImages && !allowExternalImages ? (
+            <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <span>{t('远程图片已阻止，以保护隐私。', 'Remote images are blocked to protect your privacy.')}</span>
+              <button type="button" className="btn-secondary compact shrink-0" onClick={() => setAllowExternalImages(true)}><Image size={15} /> {t('显示远程图片', 'Show remote images')}</button>
+            </div>
+          ) : null}
           {verificationCodes.length > 0 && (
             <div className="mail-detail-code-strip mb-2 flex shrink-0 flex-wrap items-center gap-2" aria-label={t('验证码快捷复制', 'Quick-copy verification codes')}>
               <span className="text-xs font-semibold text-slate-500">{t('验证码', 'Verification code')}</span>

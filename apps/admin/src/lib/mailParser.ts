@@ -55,6 +55,31 @@ function collectVerificationCodes(subject: string, text: string, html = ''): str
   return extractVerificationCodes(`${subject}\n${text}`, [html]);
 }
 
+const EXTERNAL_IMAGE_URL = /^\s*(?:https?:)?\/\//i;
+const EXTERNAL_CSS_IMAGE = /url\(\s*['"]?(?:https?:)?\/\//i;
+
+export function hasExternalMailImages(html: string): boolean {
+  if (!html) return false;
+  if (typeof window !== 'undefined' && window.DOMParser) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    for (const element of doc.querySelectorAll('img, [background], video[poster], input[type="image"]')) {
+      for (const name of ['src', 'srcset', 'background', 'poster']) {
+        const value = element.getAttribute(name);
+        if (value && value.split(',').some((candidate) => EXTERNAL_IMAGE_URL.test(candidate.trim()))) return true;
+      }
+    }
+    for (const element of doc.querySelectorAll<HTMLElement>('[style], style')) {
+      const css = element.getAttribute('style') || element.textContent || '';
+      if (EXTERNAL_CSS_IMAGE.test(css)) return true;
+    }
+    return false;
+  }
+
+  return /<(?:img|video|input)\b[^>]*\b(?:src|srcset|poster)\s*=\s*['"][^'"]*(?:https?:)?\/\//i.test(html)
+    || /<[^>]*\bbackground\s*=\s*['"][^'"]*(?:https?:)?\/\//i.test(html)
+    || /(?:\bstyle\s*=\s*['"][^'"]*|<style\b[^>]*>[\s\S]*?)url\(\s*['"]?(?:https?:)?\/\//i.test(html);
+}
+
 export function sanitizeMailHtml(html: string, options: { allowExternalImages?: boolean } = {}): string {
   if (!html) return '';
   if (typeof window === 'undefined' || !window.DOMParser) {
