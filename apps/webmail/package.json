@@ -18,8 +18,8 @@
     "smoke:local": "node scripts/smoke-local.mjs"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^5.0.4",
-    "vite": "^6.4.2",
+    "@vitejs/plugin-react": "^6.0.5",
+    "vite": "^8.2.1",
     "typescript": "~7.0.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
