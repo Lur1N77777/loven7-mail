@@ -11,7 +11,7 @@ import { buildCacheScope, scopedStorageKey } from '../src/lib/cacheScope.ts';
 import { buildAddressLoginUrl } from '../src/lib/clipboard.ts';
 import { UserApiError, addressMailEndpoint, changeAddressPassword, createUserShare, fetchUserProfile, isAuthenticationFailure, loginAccountUser, registerAccountUser } from '../src/lib/userAuth.ts';
 import { readTrustedMailFrameMessage } from '../src/lib/mailFrameMessages.ts';
-import { hasExternalMailImages, parseRawMailListItem } from '../src/lib/mailParser.ts';
+import { hasExternalMailImages, parseRawMail, parseRawMailListItem } from '../src/lib/mailParser.ts';
 import { adminMailStateEndpoint } from '../src/lib/mailStateEndpoint.ts';
 import { proxyMailImageSrcset, proxyMailImageUrl } from '../src/lib/mailImageProxy.ts';
 import { sanitizeMailHtmlWithoutDom } from '../src/lib/mailSanitizerFallback.ts';
@@ -166,6 +166,47 @@ test('sender display names drop MIME quoting artifacts', () => {
   assert.equal(unbalanced.senderName, 'Unbalanced');
   const backslash = parseRawMailListItem({ id: 5, raw: 'From: Back\\slash <c@x.test>\r\nSubject: Hi\r\n\r\nBody' } as never);
   assert.equal(backslash.senderName, 'Back\\slash');
+});
+
+test('admin parses a real MIME message through postal-mime', async () => {
+  const parsed = await parseRawMail({
+    id: 101,
+    address: 'inbox@example.test',
+    raw: [
+      'From: =?UTF-8?B?5rWL6K+V?= <sender@example.test>',
+      'To: first@example.test',
+      'To: second@example.test',
+      'Subject: =?UTF-8?B?5rWL6K+V5L2g5aW9?=',
+      'Subject: This duplicate must not win',
+      'MIME-Version: 1.0',
+      'Content-Type: multipart/mixed; boundary="mail-boundary"',
+      '',
+      '--mail-boundary',
+      'Content-Type: text/plain; charset=utf-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      '正文内容 472913',
+      '--mail-boundary',
+      'Content-Type: text/plain; name="note.txt"',
+      'Content-Disposition: attachment; filename="note.txt"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      'SGVsbG8=',
+      '--mail-boundary--',
+      '',
+    ].join('\r\n'),
+  } as never);
+
+  assert.equal(parsed.senderName, '测试');
+  assert.equal(parsed.senderAddress, 'sender@example.test');
+  assert.equal(parsed.subject, '测试你好');
+  assert.equal(parsed.to, 'first@example.test, second@example.test');
+  assert.match(parsed.text, /正文内容 472913/);
+  assert.match(parsed.message, /正文内容/);
+  assert.equal(parsed.attachments.length, 1);
+  assert.equal(parsed.attachments[0].filename, 'note.txt');
+  assert.equal(parsed.attachments[0].mimeType, 'text/plain');
+  assert.equal(parsed.attachments[0].bytes, 5);
 });
 
 test('admin mail sanitizer fails closed when DOMParser is unavailable', () => {
