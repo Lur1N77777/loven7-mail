@@ -2117,10 +2117,10 @@ input {
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   --font-brand: "Loven7 Brand Script", "Segoe Script", "Snell Roundhand", "Lucida Handwriting", "Brush Script MT", "Baskerville Italic", "Georgia", cursive;
   --fw-body: 400;
-  --fw-subtle: 450;
-  --fw-medium: 500;
-  --fw-strong: 600;
-  --fw-emphasis: 680;
+  --fw-subtle: 400;
+  --fw-medium: 450;
+  --fw-strong: 520;
+  --fw-emphasis: 600;
   --lm-font-ui: var(--font-ui);
 }
 :root[data-font-mode="en"] {

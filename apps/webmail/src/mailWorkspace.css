@@ -126,7 +126,7 @@
   border-radius: var(--lm-radius-control-sm);
   color: var(--lm-text);
   font-size: 13px;
-  font-weight: 550 !important;
+  font-weight: 450 !important;
 }
 
 .mail-list-header .address-copy-text {
@@ -191,7 +191,7 @@
   color: var(--lm-text-strong);
   font-family: var(--mail-ui-font, var(--font-ui)) !important;
   font-size: 22px;
-  font-weight: 600 !important;
+  font-weight: 540 !important;
   line-height: 1.2;
 }
 
@@ -369,7 +369,7 @@
   overflow: hidden;
   color: var(--lm-text-soft);
   font-size: 13.5px;
-  font-weight: 500 !important;
+  font-weight: 450 !important;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -424,7 +424,7 @@
   color: var(--lm-text-strong);
   font-family: var(--mail-ui-font, var(--font-ui)) !important;
   font-size: 14px;
-  font-weight: 600 !important;
+  font-weight: 500 !important;
   line-height: 1.38;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -483,7 +483,7 @@
   font-family: var(--font-code) !important;
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
-  font-weight: 600 !important;
+  font-weight: 500 !important;
   letter-spacing: 0;
   line-height: 1;
   cursor: pointer;
@@ -686,7 +686,7 @@
   color: var(--lm-text-strong);
   font-family: var(--font-display) !important;
   font-size: clamp(21px, 2vw, 26px);
-  font-weight: 550 !important;
+  font-weight: 500 !important;
   letter-spacing: 0;
   line-height: 1.32;
   overflow-wrap: anywhere;
@@ -719,7 +719,7 @@
   overflow: hidden;
   color: var(--lm-text);
   font-size: 14px;
-  font-weight: 550 !important;
+  font-weight: 500 !important;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

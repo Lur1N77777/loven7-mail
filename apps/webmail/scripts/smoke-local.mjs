@@ -448,6 +448,10 @@ async function run() {
     hasLoadingText: document.body.innerText.includes('正在优化') || document.body.innerText.includes('Loading images'),
     signedInBrandLogo: !!document.querySelector('.mail-list-header .brand-logo'),
     uiFontFamily: getComputedStyle(document.querySelector('.mail-title-heading')).fontFamily,
+    titleFontWeight: getComputedStyle(document.querySelector('.mail-title-heading')).fontWeight,
+    senderFontWeight: getComputedStyle(document.querySelector('.mail-sender')).fontWeight,
+    subjectFontWeight: getComputedStyle(document.querySelector('.mail-subject')).fontWeight,
+    detailSubjectFontWeight: getComputedStyle(document.querySelector('.mail-detail-subject')).fontWeight,
     codeFontFamily: getComputedStyle(document.querySelector('.verification-code-button')).fontFamily,
     addressText: address?.textContent || '',
     addressFits: !!address && address.scrollWidth <= address.clientWidth + 1,
@@ -466,6 +470,7 @@ async function run() {
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
   assert(!inboxMetrics.signedInBrandLogo, `登录后的邮箱左栏不应继续堆叠品牌 Logo: ${JSON.stringify(inboxMetrics)}`);
   assert(!inboxMetrics.uiFontFamily.includes('Maple Mono') && inboxMetrics.uiFontFamily.includes('Segoe UI'), `Webmail UI 应使用与 Admin 一致的系统无衬线字体栈: ${JSON.stringify(inboxMetrics)}`);
+  assert(inboxMetrics.titleFontWeight === '540' && inboxMetrics.senderFontWeight === '450' && inboxMetrics.subjectFontWeight === '500' && inboxMetrics.detailSubjectFontWeight === '500', `Webmail 标题与邮件列表应保持轻量字重层级: ${JSON.stringify(inboxMetrics)}`);
   assert(/SF Mono|SFMono-Regular|Menlo|Consolas|monospace/.test(inboxMetrics.codeFontFamily), `验证码应继续使用易辨认的等宽字体: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.addressText === 'rj6ckfgq8lb@c.loven.qzz.io' && inboxMetrics.addressFits && inboxMetrics.addressWhiteSpace === 'nowrap' && inboxMetrics.addressLines === 1, `常见长度邮箱必须完整单行显示: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.addressContentCenterDelta <= 1 && inboxMetrics.controlCenterDelta <= 1, `邮箱地址内容必须与右侧刷新控件垂直居中: ${JSON.stringify(inboxMetrics)}`);

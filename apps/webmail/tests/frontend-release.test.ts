@@ -279,10 +279,10 @@ test("webmail typography matches Admin while verification codes stay monospaced"
   assert.match(theme, /--font-code:\s*ui-monospace,[^;]*"SF Mono"[^;]*Consolas[^;]*monospace/);
   assert.match(theme, /:root\[data-font-mode="en"\][\s\S]*--mail-ui-font:\s*var\(--font-ui\)/);
   assert.match(workspace, /\.mail-workspace,[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important/);
-  assert.match(workspace, /\.mail-title-heading\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*600\s*!important/);
-  assert.match(workspace, /\.mail-subject\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*600\s*!important/);
+  assert.match(workspace, /\.mail-title-heading\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*540\s*!important/);
+  assert.match(workspace, /\.mail-subject\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*500\s*!important/);
   assert.match(workspace, /\.verification-code-button\s*\{[\s\S]*font-family:\s*var\(--font-code\)\s*!important/);
-  assert.match(workspace, /\.mail-detail-subject,[\s\S]*font-weight:\s*550\s*!important/);
+  assert.match(workspace, /\.mail-detail-subject,[\s\S]*font-weight:\s*500\s*!important/);
 });
 
 test("signed-in mail list uses calm hierarchy, visible row boundaries, and inline verification actions", () => {
