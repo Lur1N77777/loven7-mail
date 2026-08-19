@@ -448,7 +448,7 @@ async function run() {
     hasLoadingText: document.body.innerText.includes('正在优化') || document.body.innerText.includes('Loading images'),
     signedInBrandLogo: !!document.querySelector('.mail-list-header .brand-logo'),
     uiFontFamily: getComputedStyle(document.querySelector('.mail-title-heading')).fontFamily,
-    mapleFontReady: document.fonts.check('16px "Loven7 Maple Mono"'),
+    codeFontFamily: getComputedStyle(document.querySelector('.verification-code-button')).fontFamily,
     addressText: address?.textContent || '',
     addressFits: !!address && address.scrollWidth <= address.clientWidth + 1,
     addressWhiteSpace: addressStyle?.whiteSpace || '',
@@ -465,7 +465,8 @@ async function run() {
   assert(!inboxMetrics.hasRemoteImageButton, '远程邮件图片应自动通过代理加载，不应再要求手动允许');
   assert(!inboxMetrics.hasLoadingText, '切换/加载邮件时不应显示冗余图片优化文案');
   assert(!inboxMetrics.signedInBrandLogo, `登录后的邮箱左栏不应继续堆叠品牌 Logo: ${JSON.stringify(inboxMetrics)}`);
-  assert(inboxMetrics.mapleFontReady && inboxMetrics.uiFontFamily.includes('Loven7 Maple Mono'), `Webmail 应实际加载并使用 Maple Mono 中英文字体: ${JSON.stringify(inboxMetrics)}`);
+  assert(!inboxMetrics.uiFontFamily.includes('Maple Mono') && inboxMetrics.uiFontFamily.includes('Segoe UI'), `Webmail UI 应使用与 Admin 一致的系统无衬线字体栈: ${JSON.stringify(inboxMetrics)}`);
+  assert(/SF Mono|SFMono-Regular|Menlo|Consolas|monospace/.test(inboxMetrics.codeFontFamily), `验证码应继续使用易辨认的等宽字体: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.addressText === 'rj6ckfgq8lb@c.loven.qzz.io' && inboxMetrics.addressFits && inboxMetrics.addressWhiteSpace === 'nowrap' && inboxMetrics.addressLines === 1, `常见长度邮箱必须完整单行显示: ${JSON.stringify(inboxMetrics)}`);
   assert(inboxMetrics.addressContentCenterDelta <= 1 && inboxMetrics.controlCenterDelta <= 1, `邮箱地址内容必须与右侧刷新控件垂直居中: ${JSON.stringify(inboxMetrics)}`);
   const initialTheme = await evaluate(login, `document.documentElement.dataset.theme`);

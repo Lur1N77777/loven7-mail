@@ -269,13 +269,14 @@ test("signed-in webmail uses Admin mail workspace semantics and exposes no passw
   assert.doesNotMatch(app.slice(signedHeaderStart, signedAccountStart), /<BrandLogo/);
 });
 
-test("webmail uses one bundled Maple Mono family for Chinese, Latin, and verification codes", () => {
+test("webmail typography matches Admin while verification codes stay monospaced", () => {
   const theme = readWebmailSource("../src/theme.css");
   const workspace = readWebmailSource("../src/mailWorkspace.css");
 
-  assert.match(theme, /@font-face\s*\{[^}]*font-family:\s*"Loven7 Maple Mono";[^}]*local\("Maple Mono NF CN"\)[^}]*maple-mono-nf-cn-web\.woff2[^}]*font-display:\s*swap;/s);
-  assert.match(theme, /--apple-cn-font-ui:[^;]*"Loven7 Maple Mono"[^;]*"Maple Mono NF CN"[^;]*Noto Sans Mono CJK SC[^;]*Microsoft YaHei UI/s);
-  assert.match(theme, /--font-code:\s*var\(--apple-cn-font-ui\)/);
+  assert.doesNotMatch(theme, /Loven7 Maple Mono|maple-mono-nf-cn-web\.woff2/);
+  assert.match(theme, /--apple-cn-font-ui:[^;]*-apple-system[^;]*"SF Pro Text"[^;]*"Noto Sans SC"[^;]*"PingFang SC"[^;]*"Microsoft YaHei UI"[^;]*"Segoe UI Variable"/s);
+  assert.match(theme, /--apple-cn-font-display:[^;]*-apple-system[^;]*"SF Pro Display"[^;]*"Noto Sans SC"[^;]*"PingFang SC"[^;]*"Segoe UI Variable Display"/s);
+  assert.match(theme, /--font-code:\s*ui-monospace,[^;]*"SF Mono"[^;]*Consolas[^;]*monospace/);
   assert.match(theme, /:root\[data-font-mode="en"\][\s\S]*--mail-ui-font:\s*var\(--font-ui\)/);
   assert.match(workspace, /\.mail-workspace,[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important/);
   assert.match(workspace, /\.mail-title-heading\s*\{[\s\S]*font-family:\s*var\(--mail-ui-font, var\(--font-ui\)\)\s*!important[\s\S]*font-weight:\s*600\s*!important/);
