@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^6.0.5",
-    "vite": "^8.2.1",
+    "vite": "^8.3.4",
     "typescript": "~7.0.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
