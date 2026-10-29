@@ -16,7 +16,7 @@
   "dependencies": {
     "@vitejs/plugin-react": "^6.0.5",
     "lucide-react": "^0.546.0",
-    "postal-mime": "^3.0.0",
+    "postal-mime": "^4.0.8",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "vite": "^8.2.1",
